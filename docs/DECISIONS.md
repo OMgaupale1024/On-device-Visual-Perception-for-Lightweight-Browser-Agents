@@ -126,3 +126,35 @@ the message channel just to prove capture worked. Matches "keep it local, drop w
 **Why rejected:** Heavier payload and weaker privacy story for Phase 1. A small preview is an
 easy, optional future add if a phase needs it.
 **Consequences:** No in-popup screenshot preview in Phase 1 (proof is "Ready" + real resolution).
+
+## D11 — Local visual perception is CORE (Phase 4), not optional future work
+
+**Decision:** Promote on-device visual perception (OCR/CV over the locally-captured screenshot)
+from the old "optional Phase 9" to a **core Phase 4**. The roadmap renumbers accordingly:
+`2` detection → `3` redaction + guard → **`4` local visual perception (core)** → `5` sanitized
+structured UI state (DOM + visual merged) → `6` planner → `7` actions → `8` re-observe + verify →
+`9` metrics → `10` polish.
+**Reason:** The problem statement (SIH26171) is on-device *visual* perception. Framing vision as
+optional undercut the core contribution; it must be first-class and demonstrated, and it naturally
+consumes the Phase 1 capture pipeline before the final sanitized state is assembled.
+**Alternatives considered:** Keep vision as optional Phase 9; insert vision without renumbering.
+**Why rejected:** Optional framing misrepresents the project's core; a non-renumbered insert
+collides two phases at the same number.
+**Consequences:** Later phase numbers shift by one (planner 5→6, actions 6→7, re-observe 7→8,
+metrics 8→9). Visual perception is now on the critical path and must ship with real,
+honestly-reported results — no fabricated vision output.
+
+## D12 — Sensitive-field detection classifies SIGNALS, never values
+
+**Decision:** Detection (`extension/src/privacy/detect.js`) is a pure function over structural
+signals only — input `type`, `name`/`id`, label text, `autocomplete`. It never reads field values;
+the observer never collects them; output per field is exactly `{ id, role, sensitive, label }`.
+**Reason:** The core principle is that raw values must never leave the browser. Classifying on
+signals (not values) means values are never touched during detection — a provable "no raw PII in
+the outgoing metadata" guarantee (see the serialization/leak test in TESTING).
+**Alternatives considered:** Value-based pattern matching (regex over field contents) to detect PII.
+**Why rejected:** Reading values to classify them creates exactly the exposure we forbid and risks
+logging/serializing PII. Signal-based classification is safer and sufficient for form fields.
+**Consequences:** Detection is conservative and form-oriented. Value-shaped detection (e.g. a raw
+email typed into a generic box) is out of scope for now; revisit only if a phase needs it, and only
+via on-device handling that still never transmits the value.

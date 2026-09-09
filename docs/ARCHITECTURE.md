@@ -42,10 +42,11 @@ Both channels are captured and processed **on-device**, then merged into one san
 structured UI state. The DOM is an *assist* for privacy and grounding; the visual channel
 is the actual screen perception. **The DOM is not the whole perception engine.**
 
-> **Honesty note (current state):** as of Phase 1 only the *visual input pipeline* exists —
-> the extension captures the visible tab locally and reports its real pixel dimensions.
-> **No OCR / CV / vision model is implemented yet** (that is Phase 9). The screenshot is
-> handled in memory, is never stored persistently, and never leaves the browser.
+> **Honesty note (current state):** the *visual input pipeline* exists (Phase 1) — the extension
+> captures the visible tab locally and reports its real pixel dimensions — and local
+> sensitive-field **detection** is implemented (Phase 2). **No OCR / CV / vision model is
+> implemented yet; on-device visual perception is the core Phase 4** (see DECISIONS D11). The
+> screenshot is handled in memory, never stored, and never transmitted.
 
 ## High-level architecture
 
@@ -72,13 +73,13 @@ is the actual screen perception. **The DOM is not the whole perception engine.**
 
 | Component | Responsibility | Phase |
 |-----------|----------------|-------|
-| **Popup** | Goal input, ANALYZE button, status + observation/visual results | 1, 10 |
-| **Background service worker** | Orchestrate a run: query active tab, inject the observer, `captureVisibleTab`, combine, reply to popup; later the (sanitized) planner request | 1, 5 |
-| **Observer (injected)** | Read the live DOM on demand (title, visible inputs/buttons/labels, viewport); later builds the field/action list with stable IDs | 1, 4 |
-| **Visual capture** | Grab the visible-tab pixels locally; report dimensions; later feeds on-device OCR/CV | 1, 9 |
-| **Privacy engine** | Detect sensitive fields; redact values; run the outbound privacy guard | 2, 3 |
-| **Actions** | Resolve internal IDs → elements; perform CLICK/TYPE/… safely | 6 |
-| **Planner server** | Given goal + sanitized state, return the next structured action | 5 |
+| **Popup** | Goal input, ANALYZE button, status + observation / sensitive / visual results | 1, 2, 10 |
+| **Background service worker** | Orchestrate a run: query active tab, inject the observer, run detection, `captureVisibleTab`, combine, reply to popup; later the (sanitized) planner request | 1, 2, 6 |
+| **Observer (injected)** | Read the live DOM on demand (title, visible inputs/buttons/labels, viewport, per-field signals); later builds the field/action list with stable IDs | 1, 2, 5 |
+| **Visual capture → perception** | Grab the visible-tab pixels locally (Phase 1); on-device OCR/CV over them is **core Phase 4** | 1, 4 |
+| **Privacy engine** | Detect sensitive fields (implemented, Phase 2); redact values + outbound privacy guard (Phase 3) | 2, 3 |
+| **Actions** | Resolve internal IDs → elements; perform CLICK/TYPE/… safely | 7 |
+| **Planner server** | Given goal + sanitized state, return the next structured action | 6 |
 
 ## Data flow
 
@@ -89,12 +90,15 @@ is the actual screen perception. **The DOM is not the whole perception engine.**
 4. Background **captures the visible tab** pixels (`captureVisibleTab`) and measures real
    dimensions locally (`createImageBitmap`), then drops the image.
 5. Background returns the combined DOM + visual result to the popup, which renders it.
-6. *(Phase 2+)* Perception builds a field/action list with **stable internal IDs**
-   (`field_1`, `action_1`); the privacy engine **detects** sensitive fields and **redacts** values.
-7. *(Phase 3+)* The **privacy guard** scans the outbound payload; if clean, it goes to the planner.
-8. *(Phase 5+)* Planner returns a **structured action** (e.g. `{ "action": "CLICK", "target": "action_1" }`).
-9. *(Phase 6+)* Action is **validated against a strict schema**, then executed in the page.
-10. *(Phase 7+)* EdgeSight **re-observes**, builds a new state, and **verifies** the result. Continue or stop.
+6. *(Phase 2, done)* The privacy engine **detects** sensitive fields from structural signals
+   (a role per field); *(Phase 3)* it **redacts** values.
+7. *(Phase 4, core)* On-device **visual perception** (OCR/CV) enriches understanding from the
+   screenshot; *(Phase 5)* perception assembles the **sanitized structured UI state** with stable
+   IDs (`field_1`, `action_1`), merging DOM + visual.
+8. *(Phase 3)* The **privacy guard** scans the outbound payload; if clean, it goes to the planner.
+9. *(Phase 6)* Planner returns a **structured action** (e.g. `{ "action": "CLICK", "target": "action_1" }`);
+   *(Phase 7)* it is **validated against a strict schema**, then executed in the page.
+10. *(Phase 8)* EdgeSight **re-observes**, rebuilds state, and **verifies** the result. Continue or stop.
 
 ## Privacy flow
 
@@ -184,9 +188,9 @@ EdgeSight/
 │   │   ├── popup/          # popup UI (html/css/js)
 │   │   ├── background/     # service worker / orchestrator
 │   │   ├── content/        # injected DOM observer
-│   │   ├── perception/     # DOM+visual → field/action model   (Phase 4)
-│   │   ├── privacy/        # detection, redaction, privacy guard (Phase 2–3)
-│   │   ├── actions/        # action executors                   (Phase 6)
+│   │   ├── perception/     # visual perception + DOM→field/action model (Phase 4–5)
+│   │   ├── privacy/        # detect.js done (Phase 2); redaction + guard (Phase 3)
+│   │   ├── actions/        # action executors                   (Phase 7)
 │   │   └── shared/         # message types, schemas, constants
 │   └── public/             # optional static assets
 ├── server/                 # FastAPI planner                    (Phase 5)

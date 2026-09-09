@@ -27,11 +27,16 @@
       <div class="row"><span>Buttons</span><b id="c-buttons">–</b></div>
       <div class="row"><span>Visible labels</span><b id="c-labels">–</b></div>
 
+      <h2>Sensitive information (detected locally)</h2>
+      <div id="sensitive-list" class="list"></div>
+      <div class="row total"><span>Sensitive fields</span><b id="sensitive-count">–</b></div>
+      <p id="nonsensitive" class="muted"></p>
+
       <h2>Visual input</h2>
       <div class="row"><span>Screen capture</span><b id="cap-status">–</b></div>
       <div class="row"><span>Resolution</span><b id="cap-res">–</b></div>
 
-      <p class="note">DOM + pixels captured locally. Nothing sent off-device.</p>
+      <p class="note">DOM + pixels processed locally. Raw values never leave the browser.</p>
     </section>
 
     <p id="error" class="error hidden"></p>

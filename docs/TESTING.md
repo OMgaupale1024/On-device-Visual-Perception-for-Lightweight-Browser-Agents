@@ -46,25 +46,56 @@ The extension load + popup + `captureVisibleTab` cannot be driven by the automat
 (chrome://extensions is restricted, loading unpacked needs a native file dialog, and the
 harness blocks `file://` navigation). Verify by hand:
 
-| # | Manual test | Steps | Expected |
-|---|-------------|-------|----------|
-| M1 | Extension loads | chrome://extensions → Developer mode → Load unpacked → `extension/` | loads, no manifest errors |
-| M2 | Popup opens | click the EdgeSight toolbar icon | title, goal box, ANALYZE PAGE, "Ready" |
-| M3 | Analyze demo | open `demo-page/index.html`, click ANALYZE PAGE | Inputs 7, Buttons 1, Visible labels 7 |
-| M4 | Visual capture | same run | Screen capture: Ready; Resolution: real W×H |
-| M5 | No network | DevTools → Network during a run | zero requests from EdgeSight |
-| M6 | Restricted page | run ANALYZE on a chrome:// page | graceful error message, no crash |
-| M7 | Re-run | click ANALYZE twice | second run works, state not broken |
-| M8 | file:// access | if M3 errors, enable "Allow access to file URLs" for EdgeSight, retry | analysis works |
+| # | Manual test | Expected | Status |
+|---|-------------|----------|--------|
+| M1 | Extension loads (chrome://extensions → Developer mode → Load unpacked → `extension/`) | loads, no manifest errors | ✅ Verified 2026-09-10 (by user) |
+| M2 | Popup opens (click toolbar icon) | title, goal box, ANALYZE PAGE, "Ready" | ✅ Verified 2026-09-10 (by user) |
+| M3 | Analyze demo (ANALYZE PAGE on demo page) | element counts returned and displayed | ✅ Verified 2026-09-10 (by user) |
+| M4 | Visual capture (same run) | Screen capture: Ready; real resolution shown | ✅ Verified 2026-09-10 (by user) |
+| M5 | No network (DevTools → Network during a run) | zero requests from EdgeSight | ⏳ Not yet verified |
+| M6 | Restricted page (ANALYZE on a chrome:// page) | graceful error, no crash | ⏳ Not yet verified |
+| M7 | Re-run (click ANALYZE twice) | second run works, state not broken | ⏳ Not yet verified |
+| M8 | file:// access toggle (if M3 errors, enable "Allow access to file URLs", retry) | analysis works | ⏳ Not yet verified |
+
+> Recorded honestly: the user confirmed M1–M4 (loads, popup, analyze returns counts, capture
+> Ready + real resolution). M5–M8 were not reported, so they remain unverified — not claimed.
 
 > M4 note: `captureVisibleTab` returns **device-pixel** dimensions of the visible viewport, so
 > on a HiDPI display they exceed CSS `innerWidth/innerHeight` (the test machine reported a
 > 2519×1245 CSS viewport). Both are real measurements, not hardcoded.
 
+## Phase 2 — local sensitive-data detection (2026-09-10)
+
+Detection is pure (`extension/src/privacy/detect.js`), so it is unit-tested in Node with no
+browser, plus a live-DOM run of the full observe→detect pipeline on the demo page.
+
+### Node unit tests — `node extension/tests/detect.test.mjs` (7/7 PASS)
+
+| # | Test | Expected | Result |
+|---|------|----------|--------|
+| 2.1 | demo roles | name / email / phone / employee_id / other / other / password | PASS |
+| 2.2 | sensitive total | exactly 5 (name, email, phone, password, employee_id) | PASS |
+| 2.3 | false positives | username, nickname, file name, screen name, destination, purpose, company, search → other | PASS |
+| 2.4 | name variants | "Full Name" / "First Name" / "Name" / autocomplete given-name → name | PASS |
+| 2.5 | ignores values | a field whose *value* looks like PII stays "other" (classifies signals, not values) | PASS |
+| 2.6 | serialization / leak | with raw values injected onto signals, output JSON contains none of them; keys = {id,label,role,sensitive} | PASS |
+| 2.7 | empty input | `undefined` / `[]` / `{}` handled | PASS |
+
+### Live demo DOM (Chrome automation; exact observe+detect logic on the local demo)
+
+| # | Check | Expected | Actual | Result |
+|---|-------|----------|--------|--------|
+| 2.8 | field signals | 7 | 7 | PASS |
+| 2.9 | roles | field_1..7 = name, email, phone, employee_id, other, other, password | same | PASS |
+| 2.10 | sensitive count | 5 | 5 | PASS |
+| 2.11 | output keys | only {id, role, sensitive, label} | true | PASS |
+| 2.12 | no value leak | none of the actual page values appear in output | 0 leaked (7 values checked) | PASS |
+
+> The leak check read the 7 real field values **inside the page** (including the password) and
+> confirmed none appear in the classified output; the values themselves were never returned.
+
 ## Planned tests (upcoming phases)
 
-- **Phase 2:** all five sensitive fields detected on the demo form; no false positives on
-  destination/purpose.
 - **Phase 3:** privacy-guard unit test — a payload containing a known raw value is BLOCKED;
   a sanitized payload passes.
 - **Phase 4:** sanitized state matches the documented schema; sensitive values are `[REDACTED]`.

@@ -4,7 +4,7 @@
 
 Smart India Hackathon 2026 · Problem **SIH26171** — *On-device Visual Perception for Light-weight Browser Agents* · ISRO · Software · Smart Automation.
 
-> **Status: prototype in progress. Phase 1 complete** — a loadable Chrome extension that observes the page DOM and captures the visible tab locally. See [`docs/PROGRESS.md`](docs/PROGRESS.md) for live status and [`docs/HANDOFF.md`](docs/HANDOFF.md) to continue the work.
+> **Status: prototype in progress. Phase 2 complete** — the extension observes the DOM, captures the visible tab locally, and detects sensitive fields on-device (raw values never leave the browser). See [`docs/PROGRESS.md`](docs/PROGRESS.md) for live status and [`docs/HANDOFF.md`](docs/HANDOFF.md) to continue the work.
 
 ---
 
@@ -83,9 +83,9 @@ The demo page and extension are runnable **now** (Phase 1); the server arrives i
 
 ## Roadmap
 
-`0` foundation ✅ · `1` extension + demo + visual capture ✅ · `2` local detection · `3` redaction
-+ privacy guard · `4` sanitized UI state · `5` planner server · `6` safe action exec · `7`
-re-observe + verify · `8` metrics · `9` optional visual perception · `10` polish.
+`0` foundation ✅ · `1` extension + demo + visual capture ✅ · `2` local detection ✅ · `3` redaction
++ privacy guard · `4` **local visual perception (core)** · `5` sanitized UI state · `6` planner
+server · `7` safe action exec · `8` re-observe + verify · `9` metrics · `10` polish.
 
 ## Privacy & security stance
 

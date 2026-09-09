@@ -1,12 +1,18 @@
 // EdgeSight background service worker (MV3) — orchestrates one analysis run.
 //
-// Flow: popup sends ANALYZE_PAGE → we inject the DOM observer (activeTab + scripting) and
-// capture the visible tab pixels (activeTab) → combine → reply to popup.
+// Flow: popup sends ANALYZE_PAGE → inject the DOM observer (activeTab + scripting) → run
+// local sensitive-field detection on the returned signals → capture the visible tab pixels
+// (activeTab) → combine → reply to popup.
 //
-// Privacy: the screenshot is decoded only to read its real dimensions, then dropped. It is
-// held in memory only, never stored, never sent anywhere. No network requests are made.
+// Privacy:
+//  - The observer returns structural signals only (no field values).
+//  - Detection classifies those signals; the raw signals (name/id/autocomplete) are then
+//    DROPPED — the popup receives only { id, role, sensitive, label } per field.
+//  - The screenshot is decoded only to read its real dimensions, then dropped. In-memory
+//    only, never stored, never sent anywhere. No network requests are made.
 import { MSG } from '../shared/messages.js';
 import { observePage } from '../content/observe.js';
+import { detectSensitiveFields, countSensitive } from '../privacy/detect.js';
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === MSG.ANALYZE_PAGE) {
@@ -25,13 +31,13 @@ async function runAnalysis() {
   }
 
   // --- DOM / semantic channel: inject a one-shot observer (activeTab + scripting) ---
-  let observation;
+  let raw;
   try {
     const [injected] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: observePage,
     });
-    observation = injected?.result;
+    raw = injected?.result;
   } catch (err) {
     return {
       ok: false,
@@ -41,11 +47,28 @@ async function runAnalysis() {
         'chrome://extensions. (' + normalizeError(err) + ')',
     };
   }
+  if (!raw) return { ok: false, error: 'Observer returned no data.' };
+
+  // --- Local sensitive-field detection (Phase 2) ---
+  // Classify structural signals, then drop the signals so name/id/autocomplete never leave
+  // the background. Only { id, role, sensitive, label } per field goes to the popup.
+  const fields = detectSensitiveFields(raw.fieldSignals);
 
   // --- Visual / pixel channel: capture the visible tab locally (activeTab) ---
   const capture = await captureVisible(tab.windowId);
 
-  return { ok: true, observation, capture };
+  return {
+    ok: true,
+    observation: {
+      title: raw.title,
+      counts: raw.counts,
+      viewport: raw.viewport,
+      devicePixelRatio: raw.devicePixelRatio,
+      fields,
+      sensitiveCount: countSensitive(fields),
+    },
+    capture,
+  };
 }
 
 async function captureVisible(windowId) {
