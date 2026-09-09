@@ -1,0 +1,29 @@
+# EdgeSight — root .gitignore
+
+# Secrets / environment — NEVER commit a real .env
+.env
+.env.*
+!.env.example
+
+# Node (extension / tooling)
+node_modules/
+dist/
+build/
+*.log
+
+# Python (server)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Session tooling — not part of EdgeSight
+.remember/
