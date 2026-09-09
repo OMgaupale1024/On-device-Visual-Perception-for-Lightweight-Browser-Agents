@@ -4,7 +4,7 @@ CURRENT PHASE:
 Phase 0 — Foundation (complete). Phase 1 not started.
 
 STATUS:
-Phase 0 complete locally. Committed to `main`. Push to GitHub is BLOCKED (see BLOCKERS).
+Phase 0 complete. Committed and PUSHED to `origin/main` (commit `7a443d3`). No blockers.
 
 COMPLETED:
 - Inspected working directory: not a git repo, empty except `.remember/` (harness tooling).
@@ -16,6 +16,8 @@ COMPLETED:
 - Created `docs/`: ARCHITECTURE, PROGRESS, DECISIONS, HANDOFF, TESTING.
 - Created stub `README.md` in `extension/`, `server/`, `demo-page/` (visible map).
 - Committed foundation.
+- Added remote `origin`, rebased foundation onto GitHub's initial commit (kept our README,
+  linear history, no force-push), and pushed `main` to GitHub.
 
 CURRENT WORK:
 - None in flight. Awaiting review + GitHub-auth decision before Phase 1.
@@ -33,15 +35,14 @@ REMAINING (this prototype, high level):
 - Phase 10: polish.
 
 BLOCKERS:
-- GitHub push blocked: `gh` CLI is not authenticated and no git remote is set.
-  Nothing can be pushed until either (a) you run `gh auth login`, or (b) you provide a
-  remote URL. Local commit exists and is safe.
+- None. (Phase 0 pushed. `gh` CLI is still unauthenticated, but git push works via the
+  cached Windows credential helper, so it is not blocking.)
 
 NEXT EXACT TASK:
-- Resolve the push blocker (auth or remote URL), push the Phase 0 commit, then begin
-  Phase 1: create `extension/manifest.json` (MV3), popup (goal input + ANALYZE PAGE +
+- Begin Phase 1: create `extension/manifest.json` (MV3), popup (goal input + ANALYZE PAGE +
   status), background service worker, a content script that counts inputs/buttons/labels,
   and `demo-page/index.html` (Employee Travel Request, FAKE data). No AI yet.
+  (Awaiting user review of Phase 0 before starting.)
 
 LAST UPDATED:
 2026-09-09 — end of Phase 0.

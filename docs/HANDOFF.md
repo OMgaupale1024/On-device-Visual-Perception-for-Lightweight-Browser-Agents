@@ -6,18 +6,21 @@
 
 ## Current working state
 
-Phase 0 (foundation) complete. Repository initialized locally with docs, README,
-`.gitignore`, `.env.example`, and top-level stub folders. **No application code yet** —
-no extension, no server, no demo behavior. Nothing is runnable beyond reading the repo.
+Phase 0 (foundation) complete and **pushed to GitHub**
+(`origin` = https://github.com/OMgaupale1024/On-device-Visual-Perception-for-Lightweight-Browser-Agents).
+Repository has docs, README, `.gitignore`, `.gitattributes`, `.env.example`, and top-level
+stub folders. **No application code yet** — no extension, no server, no demo behavior.
+Nothing is runnable beyond reading the repo.
 
 ## Current branch
 
-`main` (only branch). One commit: the Phase 0 foundation.
+`main`, tracking `origin/main`. Two commits: GitHub's `Initial commit`, then the Phase 0
+foundation on top of it.
 
 ## Latest useful commit
 
-The Phase 0 foundation commit on `main`. Get the hash with `git log --oneline -1`.
-(Recorded in the completion report; not hardcoded here to avoid drift.)
+`7a443d3` — "feat: initialize EdgeSight prototype architecture" (pushed to `origin/main`).
+Verify with `git log --oneline -2`.
 
 ## How to run — extension
 
@@ -59,16 +62,13 @@ Everything from Phase 1 onward. See PROGRESS.md → REMAINING.
 
 ## Current blocker
 
-**GitHub push is blocked.** `gh` CLI is not authenticated and no git remote is configured.
-The Phase 0 commit exists locally but has not been pushed.
-Unblock with either:
-1. `gh auth login` (interactive — the repo owner runs it), then
-   `gh repo create EdgeSight --private --source=. --remote=origin --push`; or
-2. Provide an existing remote URL: `git remote add origin <URL> && git push -u origin main`.
+None. Phase 0 is pushed. Note: `gh` CLI is not authenticated, but `git push` works via the
+cached Windows credential helper. If a future push prompts for credentials, run
+`gh auth login` (or configure Git Credential Manager) and retry — do not force-push.
 
 ## Next exact task
 
-After the push blocker is resolved: begin **Phase 1**.
+Begin **Phase 1** (awaiting user review of Phase 0 first).
 - `extension/manifest.json` (MV3): popup, background service worker, content script,
   `activeTab`/`scripting` permissions.
 - Popup: title "EDGESIGHT", goal input, **ANALYZE PAGE** button, status line.
