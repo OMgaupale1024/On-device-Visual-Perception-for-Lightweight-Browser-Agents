@@ -13,10 +13,22 @@ const ROLE_LABEL = {
   phone: 'Phone',
   employee_id: 'Employee ID',
   password: 'Password',
+  destination: 'Destination',
+  purpose: 'Purpose',
 };
+let previewTimer;
+function clearPreviews() {
+  clearTimeout(previewTimer);
+  byId('original-preview').removeAttribute('src');
+  byId('sanitized-preview').removeAttribute('src');
+  byId('semantic-preview').textContent = '';
+}
+window.addEventListener('pagehide', clearPreviews);
 
 analyzeBtn.addEventListener('click', async () => {
   analyzeBtn.disabled = true;
+  clearPreviews();
+  hide(resultsEl);
   hide(errorEl);
   setStatus('Analyzing…');
   try {
@@ -42,6 +54,14 @@ function render(res) {
   renderSensitive(obs.fields ?? [], obs.sensitiveCount ?? 0);
 
   const cap = res.capture ?? {};
+  byId('redacted-count').textContent = res.privacy.redactedRegions;
+  byId('visual-status').textContent = res.privacy.visual;
+  byId('semantic-status').textContent = res.privacy.semantic;
+  byId('guard-status').textContent = res.privacy.outbound;
+  byId('original-preview').src = res.localPreview.original;
+  byId('sanitized-preview').src = res.safeContext.image.dataUrl;
+  byId('semantic-preview').textContent = JSON.stringify(res.safeContext.semantic, null, 2);
+  previewTimer = setTimeout(clearPreviews, 60_000);
   if (cap.ok) {
     byId('cap-status').textContent = 'Ready';
     byId('cap-res').textContent = `${cap.width} × ${cap.height}`;
@@ -71,11 +91,11 @@ function renderSensitive(fields, count) {
   }
   byId('sensitive-count').textContent = count;
 
-  // Non-sensitive labels are page-derived → set via textContent only (never innerHTML).
+  // Display names come from a fixed vocabulary, never DOM labels.
   const nonEl = byId('nonsensitive');
   const nonSensitive = fields.filter((f) => !f.sensitive);
   nonEl.textContent = nonSensitive.length
-    ? 'Not sensitive: ' + nonSensitive.map((f) => f.label || ROLE_LABEL[f.role] || 'field').join(', ')
+    ? 'Not sensitive: ' + nonSensitive.map((f) => ROLE_LABEL[f.role] || 'field').join(', ')
     : '';
 }
 

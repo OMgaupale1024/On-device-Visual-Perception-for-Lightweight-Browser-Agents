@@ -11,7 +11,9 @@
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  width: 320px;
+  width: 360px;
+  max-height: 580px;
+  overflow-y: auto;
   font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
@@ -67,3 +69,11 @@ body {
   color: var(--danger); font-size: 12px;
 }
 .hidden { display: none; }
+details { margin-top: 10px; }
+summary { cursor: pointer; color: var(--accent); }
+figure { margin: 10px 0; }
+figcaption { font-size: 10px; font-weight: 700; margin-bottom: 5px; }
+figure img { display: block; width: 100%; height: auto; border: 1px solid var(--line); }
+figure img:not([src]) { display: none; }
+.filter-arrow { text-align: center; color: var(--accent); font-size: 10px; }
+pre { font-size: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }

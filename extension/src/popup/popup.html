@@ -25,9 +25,9 @@
       <h2>Page observation</h2>
       <div class="row"><span>Inputs</span><b id="c-inputs">–</b></div>
       <div class="row"><span>Buttons</span><b id="c-buttons">–</b></div>
-      <div class="row"><span>Visible labels</span><b id="c-labels">–</b></div>
+      <div class="row"><span>Labels</span><b id="c-labels">–</b></div>
 
-      <h2>Sensitive information (detected locally)</h2>
+      <h2>Local privacy detection</h2>
       <div id="sensitive-list" class="list"></div>
       <div class="row total"><span>Sensitive fields</span><b id="sensitive-count">–</b></div>
       <p id="nonsensitive" class="muted"></p>
@@ -36,7 +36,22 @@
       <div class="row"><span>Screen capture</span><b id="cap-status">–</b></div>
       <div class="row"><span>Resolution</span><b id="cap-res">–</b></div>
 
-      <p class="note">DOM + pixels processed locally. Raw values never leave the browser.</p>
+      <h2>Privacy filter</h2>
+      <div class="row"><span>Sensitive regions redacted</span><b id="redacted-count">–</b></div>
+      <div class="row"><span>Visual context</span><b id="visual-status">–</b></div>
+      <div class="row"><span>Semantic context</span><b id="semantic-status">–</b></div>
+      <div class="row"><span>Outbound privacy check</span><b id="guard-status">–</b></div>
+      <details id="previews">
+        <summary>Compare local previews</summary>
+        <figure><figcaption>ORIGINAL — LOCAL ONLY</figcaption><img id="original-preview" alt="Local page capture with password region hidden" /></figure>
+        <p class="note">Password regions are always hidden, including in this original preview.</p>
+        <p class="filter-arrow">↓ LOCAL PRIVACY FILTER ↓</p>
+        <figure><figcaption>SANITIZED — SAFE CONTEXT</figcaption><img id="sanitized-preview" alt="Local screenshot with sensitive form regions masked" /></figure>
+        <p class="note">Scope: detected visible DOM fields. No pixel perception yet.</p>
+        <details><summary>Sanitized semantic context</summary><pre id="semantic-preview"></pre></details>
+      </details>
+
+      <p class="note">Both previews stay local. Nothing is transmitted. Previews clear after 60 seconds, on re-analysis, or when this popup closes.</p>
     </section>
 
     <p id="error" class="error hidden"></p>

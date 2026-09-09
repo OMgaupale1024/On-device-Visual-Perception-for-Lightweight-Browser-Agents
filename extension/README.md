@@ -1,12 +1,13 @@
-# extension/
+# EdgeSight extension
 
-Chrome **Manifest V3** extension — the on-device client. Observes the page, detects and
-redacts sensitive data locally, runs the outbound privacy guard, talks to the planner, and
-executes validated actions.
+Chrome MV3 Phase 3: local DOM observation, signal-only detection, visible-tab capture,
+Canvas redaction, semantic sanitization and outbound privacy guard. No network transport,
+planner, OCR/CV model or action execution.
 
-**Current (Phase 2):** DOM observation + local visible-tab capture + on-device sensitive-field
-detection; the popup shows counts, a sensitive checklist + total, and capture resolution.
-Redaction, privacy guard, visual perception, planner, and action execution arrive in later phases.
+Load unpacked this folder at chrome://extensions. Enable Allow access to file URLs,
+open the local demo and ANALYZE PAGE. Expand Compare local previews. Both remain local;
+password regions are masked even in the original. Images expire after 60 seconds.
+Chrome visual checks remain UNVERIFIED.
 
-Load via `chrome://extensions` → Developer mode → Load unpacked → this folder, then click the
-toolbar icon → **ANALYZE PAGE**. Layout + flow: [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).
+Run `node --test extension/tests/*.test.mjs` from the repository root.
+See [Architecture](../docs/ARCHITECTURE.md) and [Testing](../docs/TESTING.md).

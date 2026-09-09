@@ -1,8 +1,11 @@
 {
   "manifest_version": 3,
   "name": "EdgeSight",
-  "version": "0.1.0",
-  "description": "Privacy-preserving on-device perception layer for lightweight browser agents (SIH26171). Phase 1: DOM observation + local visible-tab capture.",
+  "version": "0.3.0",
+  "description": "EdgeSight Phase 3: local visual redaction, sanitized semantic context, and an outbound privacy guard. No network transport.",
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self'; object-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self'"
+  },
   "action": {
     "default_title": "EdgeSight",
     "default_popup": "src/popup/popup.html"

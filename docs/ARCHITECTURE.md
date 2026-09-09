@@ -1,207 +1,121 @@
 # EdgeSight — Architecture
 
-## Project goal
+## Current scope
 
-Give lightweight browser agents the page understanding they need **without** exposing
-the user's sensitive data. All perception and privacy work happens on-device (in the
-Chrome extension); only a sanitized, structured representation of the page leaves the
-browser.
+SIH26171: privacy-preserving on-device visual perception for lightweight browser agents.
+Phase 3 is implemented; Phase 4 is not started. DOM assists privacy and grounding.
+Screenshot capture and deterministic masking do not constitute pixel understanding.
+There is no server, network transport, LLM, OCR, CV model, planner, autonomous action or Pi.
+Permissions remain activeTab + scripting; extension CSP has `connect-src 'none'`.
 
-## Problem statement
+## Analysis transaction
 
-**SIH26171 — On-device Visual Perception for Light-weight Browser Agents**
-(ISRO · Software · Smart Automation). Browser agents typically send raw page content
-(DOM text, form values, screenshots) to a remote model. That leaks PII and credentials.
-EdgeSight moves perception + privacy to the edge (the browser), so the remote planner
-sees only what it needs.
+1. The popup requests ANALYZE_PAGE. The worker checks its sender and rejects overlapping
+   runs; the popup clears stale results and previews before each request.
+2. `observePage` runs in Chrome's isolated world: counts, structural signals, stable IDs,
+   CSS rectangles, viewport and scroll position. It never reads values. A WeakMap retains
+   identity for the same element/document across reordering and repeat analysis; a
+   transient ID-to-element map supports the separate collector.
+3. The unchanged Phase 2 classifier classifies type/name/id/label/autocomplete signals
+   only. Labels are untrusted metadata, not certified outbound strings.
+4. Separate `collectLocalValues` temporarily reads values and returns them only to the
+   trusted worker. It clears element references in finally. Known sensitive values
+   repeated in visible body text or document title block locally, because field masks
+   would not cover those copies. That text is not returned.
+5. The worker checks active-tab identity, captures PNG pixels, rechecks identity, and
+   repeats observation/value collection against the same documentId. Changed geometry,
+   structure, viewport, scroll or values block. Pinch-zoom/panned viewports block.
+6. `redactScreenshot` decodes actual PNG dimensions and black-masks mapped sensitive
+   regions. It mints an opaque handle in a private WeakMap only after success.
+7. Semantic sanitization emits IDs, fixed roles, placeholders and filled booleans.
+   Labels/titles/attributes/arbitrary text are omitted. Unknown values are withheld.
+8. `buildOutboundPackage` requires a genuine sanitized-image handle. It guards candidate
+   semantics, clones them, guards the complete package and recursively freezes it.
+   Failure produces no safe context or previews. No transport exists.
+9. The popup receives safe context plus a separately named LOCAL-ONLY original preview.
+   Finally blocks drop raw screenshot/value references; bitmap.close and Canvas reset
+   release rendering resources. No raw field-value strings reach popup, logs, errors,
+   storage, files or network.
 
-## Core principle
+## CSS-to-image coordinates
 
-> **Raw sensitive information must never reach the server.**
+getBoundingClientRect returns viewport-relative CSS pixels. Only visible fields
+intersecting the viewport participate. Screenshot dimensions are image pixels measured
+by createImageBitmap, not guessed from devicePixelRatio.
 
-The agent needs *structure and status* ("an email field exists and is filled"), not the
-raw value. An outbound **privacy guard** enforces this: before any payload leaves the
-browser, it is scanned for known raw sensitive values; if any is present, the request is
-**blocked** with an explicit privacy error — the network layer never sees an unsafe payload.
-
-## Hybrid local perception (DOM + pixels)
-
-EdgeSight perceives each page through **two local channels**, not DOM alone. This is core
-to the problem statement ("on-device *visual* perception") — EdgeSight must not collapse
-into a DOM-only automation tool.
-
-- **DOM / semantic channel** — element roles, input `type`s, labels, `name`s,
-  `autocomplete` hints, visible controls, and bounding rectangles where useful. This
-  channel makes privacy detection and semantic grounding reliable.
-- **Visual / pixel channel** — a screenshot of the currently visible tab (the actual
-  pixels the user sees), captured locally via `chrome.tabs.captureVisibleTab`. Later phases
-  process it on-device (OCR / CV / vision inference) to perceive what the DOM cannot express:
-  rendered text, canvas/image content, visual layout, overlays.
-
-Both channels are captured and processed **on-device**, then merged into one sanitized
-structured UI state. The DOM is an *assist* for privacy and grounding; the visual channel
-is the actual screen perception. **The DOM is not the whole perception engine.**
-
-> **Honesty note (current state):** the *visual input pipeline* exists (Phase 1) — the extension
-> captures the visible tab locally and reports its real pixel dimensions — and local
-> sensitive-field **detection** is implemented (Phase 2). **No OCR / CV / vision model is
-> implemented yet; on-device visual perception is the core Phase 4** (see DECISIONS D11). The
-> screenshot is handled in memory, never stored, and never transmitted.
-
-## High-level architecture
-
-```
-                        ┌──────────────── Browser (on-device) ────────────────┐
- user clicks ANALYZE ──►│  Popup ──► Background (service worker / orchestrator)│
-                        │                │                                     │
-                        │   ┌────────────┴─────────────┐                       │
-                        │   ▼                           ▼                       │
-                        │  inject observer            captureVisibleTab        │
-                        │  (activeTab + scripting)     (activeTab)              │
-                        │   │  DOM / semantic            │  pixels              │
-                        │   └───────────┬───────────────┘                       │
-                        │               ▼                                       │
-                        │      Local perception  (DOM + visual channels)        │
-                        │               ▼                                       │
-                        │   Privacy engine: detect · redact · PRIVACY GUARD     │
-                        │               ▼                                       │
-                        │   sanitized structured UI state ─ guard ─► network ───┼──► Planner
-                        └───────────────────────────────────────────────────────┘   (FastAPI)
+```text
+scaleX = screenshotWidth / viewportWidth
+scaleY = screenshotHeight / viewportHeight
+left   = floor(rect.x * scaleX)
+top    = floor(rect.y * scaleY)
+right  = ceil((rect.x + rect.width) * scaleX)
+bottom = ceil((rect.y + rect.height) * scaleY)
 ```
 
-## Component responsibilities
+Clamp every edge to image bounds. Round outward to cover fractional borders. Independent
+ratios support HiDPI/nonuniform dimensions. Invalid/zero dimensions and missing or fully
+offscreen sensitive boxes block. Pinch zoom requires another origin mapping and is
+rejected. Ordinary browser zoom uses measured ratios. DPR is diagnostic only.
 
-| Component | Responsibility | Phase |
-|-----------|----------------|-------|
-| **Popup** | Goal input, ANALYZE button, status + observation / sensitive / visual results | 1, 2, 10 |
-| **Background service worker** | Orchestrate a run: query active tab, inject the observer, run detection, `captureVisibleTab`, combine, reply to popup; later the (sanitized) planner request | 1, 2, 6 |
-| **Observer (injected)** | Read the live DOM on demand (title, visible inputs/buttons/labels, viewport, per-field signals); later builds the field/action list with stable IDs | 1, 2, 5 |
-| **Visual capture → perception** | Grab the visible-tab pixels locally (Phase 1); on-device OCR/CV over them is **core Phase 4** | 1, 4 |
-| **Privacy engine** | Detect sensitive fields (implemented, Phase 2); redact values + outbound privacy guard (Phase 3) | 2, 3 |
-| **Actions** | Resolve internal IDs → elements; perform CLICK/TYPE/… safely | 7 |
-| **Planner server** | Given goal + sanitized state, return the next structured action | 6 |
+## Trust levels
 
-## Data flow
+| Representation | Lifetime/location | Future outbound |
+|---|---|---|
+| Raw values | local collector + worker transaction | Never |
+| Raw captured PNG | worker/redaction call | Never |
+| Local original preview | password-masked popup PNG, at most 60 seconds | Never |
+| Source labels/title/signals | local transaction, untrusted | Never copied directly |
+| Sanitized image handle | private redaction WeakMap | Required builder input |
+| Frozen safeContext | guarded semantics + sanitized PNG | Only candidate for future transport |
 
-1. User enters a goal in the popup and clicks **ANALYZE PAGE**.
-2. Popup sends one message to the **background** service worker.
-3. Background queries the active tab and **injects the observer** (`chrome.scripting`,
-   authorized by `activeTab`) to read the DOM.
-4. Background **captures the visible tab** pixels (`captureVisibleTab`) and measures real
-   dimensions locally (`createImageBitmap`), then drops the image.
-5. Background returns the combined DOM + visual result to the popup, which renders it.
-6. *(Phase 2, done)* The privacy engine **detects** sensitive fields from structural signals
-   (a role per field); *(Phase 3)* it **redacts** values.
-7. *(Phase 4, core)* On-device **visual perception** (OCR/CV) enriches understanding from the
-   screenshot; *(Phase 5)* perception assembles the **sanitized structured UI state** with stable
-   IDs (`field_1`, `action_1`), merging DOM + visual.
-8. *(Phase 3)* The **privacy guard** scans the outbound payload; if clean, it goes to the planner.
-9. *(Phase 6)* Planner returns a **structured action** (e.g. `{ "action": "CLICK", "target": "action_1" }`);
-   *(Phase 7)* it is **validated against a strict schema**, then executed in the page.
-10. *(Phase 8)* EdgeSight **re-observes**, rebuilds state, and **verifies** the result. Continue or stop.
+`redact.js` owns handle minting and package construction; it exposes no register/cast
+API. Raw data URLs and lookalike objects are rejected. `safeContext` contains semantic,
+image (dataUrl, dimensions, redactedRegions), and fixed scope `visible-dom-fields`.
+The builder never receives raw pixels or the original preview. Where sensitive boxes
+exist, the sanitized PNG must differ from raw or processing blocks; this equality
+check supplements, rather than proves, pixel correctness.
 
-## Privacy flow
+The ORIGINAL — LOCAL ONLY preview always masks password regions, including revealed
+passwords. Other sensitive values appear only as pixels in this intentionally local
+comparison image. Raw field-value strings never go to the popup. Preview sources clear
+on re-analysis, pagehide or 60-second expiry. No screenshots are persisted.
 
-```
-field value ──► detect (type/label/name/autocomplete/pattern) ──► sensitive?
-   ├─ yes ──► redact to [ROLE]  (value never leaves browser)
-   └─ no  ──► keep usable value (e.g. "Bengaluru")
-                                   │
-                       build sanitized payload
-                                   │
-                       PRIVACY GUARD: scan for any known raw value
-                          ├─ found  ──► BLOCK + explicit error (no network call)
-                          └─ clean  ──► send to planner
-```
+Phase 6 transport must consume only guarded `safeContext`, never the full response
+(which contains localPreview), and preserve the builder and contamination tests.
+New goals/action labels/text must enter sanitization and guard before packaging.
+The current structural API/CSP prevent an accidental raw-image path; they cannot
+prevent a future developer deliberately adding a bypass or removing safeguards.
 
-The visual channel is subject to the same rule: any on-device visual processing (future)
-must redact sensitive regions (e.g. faces, rendered PII) before anything derived from the
-pixels could leave the browser. The raw screenshot itself is never transmitted.
+## Text policy and guard
 
-## Browser action flow
+Sensitive placeholders: [NAME], [EMAIL], [PHONE], [EMPLOYEE_ID], [PASSWORD]. Empty
+sensitive fields still use placeholders; filled reflects whether the value is nonempty.
+All source text is untrusted. Destination permits only Bengaluru. Purpose permits only
+Conference, Training, Client Visit, Site Inspection. Matching field name and ID must
+identify those demo roles. All other non-sensitive values become [WITHHELD]. Fixed
+popup role labels come from an internal dictionary, never arbitrary DOM text.
 
-- Planner returns one action referencing an **internal ID** (`action_1`), not a raw CSS/XPath.
-- The extension resolves the ID to the real element from its own perception map.
-- Allowed actions: `CLICK`, `TYPE`, `SCROLL`, `PRESS`, `WAIT`, `STOP`. CLICK is implemented first.
-- **Security:** planner output is validated against a strict schema. Unknown action → rejected.
-  Never `eval`, never execute server-supplied JavaScript.
+`guard.js` scans JSON string values and keys recursively for exact known nonempty
+sensitive values. Numeric scalars are checked as text. Cycles, accessors, custom object
+types, invalid inputs and traversal errors fail closed. Empty known values are ignored.
+Matches return `{safe:false, reason:"Sensitive data detected in outbound payload"}`;
+clean payloads return `{safe:true}`. Errors never identify offending values. Short
+values can conservatively block safe strings. This is exact-value checking, not
+recognition of transformed/encoded secrets or unknown PII, and cannot inspect pixels.
 
-## Server architecture
+## Limits and verification
 
-- Python + FastAPI. Small and stateless.
-- `PlannerInterface` with two implementations:
-  - `LocalPlanner` — deterministic/mock, the default for the prototype.
-  - `LLMPlanner` — optional, one provider, key from server env only. Added only if time allows.
-- Receives **sanitized** state only. Returns a schema-valid action.
+Supported target: the static fake-data Employee Travel Request form. Current masks
+cover detected visible standard DOM fields. No shadow-root/iframe traversal, unknown
+PII recognition in images/canvas/text, face detection, or text-overflow handling.
+Before/after snapshots reduce races but cannot detect every transient change that
+reverts between snapshots. SAFE is scoped to detected DOM fields, not certification
+for arbitrary-site upload. Unknown pixel privacy and actual perception are Phase 4+.
 
-## Important interfaces (planned shapes)
+Immutable JS strings are garbage-collected: reference cleanup shortens lifetime but
+is not secure memory zeroization or erasure of browser-internal copies. The local
+original preview deliberately retains PII pixels briefly; use fake demo data.
 
-**Phase 1 analysis result (background → popup):**
-```json
-{
-  "ok": true,
-  "observation": {
-    "title": "Employee Travel Request",
-    "counts": { "inputs": 7, "buttons": 1, "labels": 7 },
-    "viewport": { "width": 1280, "height": 720 },
-    "devicePixelRatio": 1
-  },
-  "capture": { "ok": true, "width": 1280, "height": 720 }
-}
-```
-
-**Sanitized UI state (browser → server, Phase 4+):**
-```json
-{
-  "page": { "title": "Employee Travel Request" },
-  "fields": [
-    { "id": "field_1", "role": "name",  "sensitive": true,  "value": "[REDACTED]", "filled": true },
-    { "id": "field_3", "role": "destination", "sensitive": false, "value": "Bengaluru", "filled": true }
-  ],
-  "actions": [ { "id": "action_1", "role": "button", "label": "Continue" } ]
-}
-```
-
-**Planner response (server → browser, Phase 5+):**
-```json
-{ "action": "CLICK", "target": "action_1" }
-```
-
-## Extension internals (Phase 1)
-
-- **Permissions:** `activeTab` (temporary access to the current tab's DOM + pixels, only on
-  user gesture) and `scripting` (to inject the observer). No broad `host_permissions`, no `tabs`.
-- **Observation** uses **programmatic injection** (`chrome.scripting.executeScript({ func })`)
-  rather than a persistent declarative content script, so no host-match permissions are needed.
-- **Message flow:** `popup → background (ANALYZE_PAGE) → [inject observer + captureVisibleTab] → popup`.
-  Message-type constants live in `extension/src/shared/messages.js`.
-
-## Intended directory tree
-
-Created phase by phase (git can't track empty dirs, so folders appear when first filled):
-
-```
-EdgeSight/
-├── extension/
-│   ├── manifest.json
-│   ├── src/
-│   │   ├── popup/          # popup UI (html/css/js)
-│   │   ├── background/     # service worker / orchestrator
-│   │   ├── content/        # injected DOM observer
-│   │   ├── perception/     # visual perception + DOM→field/action model (Phase 4–5)
-│   │   ├── privacy/        # detect.js done (Phase 2); redaction + guard (Phase 3)
-│   │   ├── actions/        # action executors                   (Phase 7)
-│   │   └── shared/         # message types, schemas, constants
-│   └── public/             # optional static assets
-├── server/                 # FastAPI planner                    (Phase 5)
-├── demo-page/              # index.html / style.css / script.js (FAKE data)
-└── docs/
-```
-
-## Why the major decisions were taken
-
-See [`DECISIONS.md`](DECISIONS.md). In short: MV3 extension because browser-side execution
-is the point; **hybrid DOM + visual perception** because the problem statement is on-device
-*visual* perception, not DOM scraping; deterministic planner first to avoid an external-API
-dependency on the demo path; sanitize-before-send + outbound guard because "raw PII never
-leaves the device" is the headline claim we must be able to prove.
+Node tests cover pure functions, observer fixtures and browser API doubles. Real Canvas
+pixel behavior and Chrome capture alignment remain UNVERIFIED; see TESTING.md for the
+local browser harness and exact user procedure.

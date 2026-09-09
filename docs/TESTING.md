@@ -1,8 +1,7 @@
 # EdgeSight — Testing
 
 Test log. One row per check. Do not claim something works without testing it.
-No application code exists yet (Phase 0), so this phase records **foundation
-verification only** — real automated tests start in Phase 1+.
+Historical phase checks are retained below; current Phase 3 evidence and pending manual checks follow.
 
 ## Phase 0 — foundation verification
 
@@ -94,12 +93,91 @@ browser, plus a live-DOM run of the full observe→detect pipeline on the demo p
 > The leak check read the 7 real field values **inside the page** (including the password) and
 > confirmed none appear in the classified output; the values themselves were never returned.
 
-## Planned tests (upcoming phases)
 
-- **Phase 3:** privacy-guard unit test — a payload containing a known raw value is BLOCKED;
-  a sanitized payload passes.
-- **Phase 4:** sanitized state matches the documented schema; sensitive values are `[REDACTED]`.
-- **Phase 5:** planner returns `CLICK action_1` for a filled form + "continue" goal.
-- **Phase 6:** CLICK resolves `action_1` → the Continue button and clicks it; unknown action rejected.
-- **Phase 7:** page change after CLICK is detected and verified as success.
-- **Phase 8:** end-to-end latency + privacy counters recorded from real runs.
+## Phase 2 technical review and manual status
+
+Phase 2 passed technical review (user instruction, 2026-09-10). This is not a manual
+popup confirmation. Phase 2 popup sensitive checklist, count = 5 and Destination/Purpose
+non-sensitive display remain **UNVERIFIED** by the user. No new manual pass is recorded.
+Historic Phase 1 M1–M4 confirmations above are preserved; M5–M8 remain pending.
+
+## Phase 3 automated verification (2026-09-10)
+
+Run `node --test extension/tests/*.test.mjs` (Node 24, no dependencies/server/network).
+The legacy detector file contains 7 assertions and is reported as one Node test entry.
+Result: **31/31 Node test entries PASS**, including the unchanged detector file's
+**7/7 legacy tests**. All extension JS/MJS syntax checks and `git diff --check` PASS.
+No automated browser or manual visual pass is included in these counts.
+
+| Coverage | Evidence |
+|---|---|
+| CSS/screenshot scaling | 1x, 2x HiDPI, independent axis ratios |
+| Mask geometry | outward rounding, all-edge clipping, offscreen/null, invalid/zero sizes |
+| Demo selection | five sensitive roles selected; Destination/Purpose excluded |
+| Semantics | five placeholders, filled/empty booleans, no raw values, demo safe values |
+| Untrusted strings | labels omitted; unknown values withheld; invalid IDs blocked |
+| Guard | sanitized payload accepted; name/email/phone/employee ID/password contamination blocked |
+| Deep guard | nested objects/arrays, keys, numeric phone, empty secrets, cycles/accessors/custom types |
+| Error privacy | no offending value in guard or worker failures |
+| Image boundary | raw PNG and forged handles rejected; snapshot/frozen package prevents later mutation |
+| Canvas API double | full black fill calls, password original mask, region count and resource closure |
+| Worker API doubles | sanitized reply, no raw screenshot/value in reply, repeat run, changed page/capture block, sender check |
+| Phase 1 regression fixture | 7 inputs/1 button/7 labels, viewport/DPR; only visible fields; stable IDs |
+| Separate collector | temporary values, element reference cleanup, repeated sensitive body text blocks |
+| Phase 2 regression | original 7 tests unchanged and rerun |
+| Static network/retention | no transport/logging/storage calls; connect-src none; unchanged minimal permissions |
+
+These are Node fixtures/API doubles, not a new real-browser Phase 1 run and not proof
+of actual Canvas pixels or Chrome capture alignment. Historical Phase 1/2 live-DOM
+results above remain historical. No manual visual redaction pass is claimed.
+
+### Real Canvas browser harness — UNVERIFIED
+
+1. Reload the extension, then copy its ID from chrome://extensions.
+2. Open `chrome-extension://<extension-id>/tests/redaction-browser.html` in Chrome.
+   This is a packaged extension page, not a server or file-module workaround.
+3. Expected: PASS, 320000 pixels checked, 5 opaque masks, Destination/Purpose unchanged,
+   original password masked, 2x mapping. The harness compares every RGBA channel in
+   actual decoded Canvas outputs using synthetic pixels only.
+4. Record the actual PASS/FAIL and Chrome version when run. Current status: **UNVERIFIED**.
+
+This synthetic harness tests the real redaction module but not captureVisibleTab or
+alignment with the demo DOM; the following manual procedure is also required.
+
+### Exact Phase 3 manual procedure — all UNVERIFIED
+
+Use only the existing fake data. For file://, enable Allow access to file URLs. Size or
+zoom the window so all seven fields fit; if a field is offscreen it is intentionally
+not counted/captured. Expand Compare local previews immediately; they expire after
+60 seconds. Re-analyze to regenerate them. Never type a real password for testing.
+
+| Step | Procedure and expected result | Status |
+|---|---|---|
+| P3-M1 | Reload EdgeSight at chrome://extensions; no manifest/worker errors | UNVERIFIED |
+| P3-M2 | Open local Employee Travel Request; all seven fields visible | UNVERIFIED |
+| P3-M3 | Open popup and ANALYZE PAGE; counts Inputs 7, Buttons 1, Labels 7; Capture Ready | UNVERIFIED |
+| P3-M4 | Verify Sensitive = 5: Name, Email, Phone, Employee ID, Password | UNVERIFIED |
+| P3-M5 | Expand Compare local previews; ORIGINAL — LOCAL ONLY shows local page, with password region always hidden | UNVERIFIED |
+| P3-M6 | SANITIZED — SAFE CONTEXT fully black-masks Name, Email, Phone, Employee ID and Password; no glyph edges leak | UNVERIFIED |
+| P3-M7 | Destination = Bengaluru remains visible in sanitized pixels | UNVERIFIED |
+| P3-M8 | Purpose = Conference remains visible in sanitized pixels | UNVERIFIED |
+| P3-M9 | Privacy filter shows 5 redacted regions, Visual Sanitized, Semantic Sanitized, Outbound SAFE; semantic preview has placeholders/filled, no sensitive raw strings | UNVERIFIED |
+| P3-M10 | Inspect extension worker/popup DevTools Network during analysis; zero EdgeSight network requests (local image decoding is not a network transmission) | UNVERIFIED |
+| P3-M11 | Analyze again; state/counts/previews stable, stale results not retained on failure | UNVERIFIED |
+
+Additional manual checks, also **UNVERIFIED**:
+
+- Repeat at ordinary browser zoom levels and HiDPI; every sensitive border/glyph covered.
+- Close/reopen popup and wait 60 seconds: old preview sources are cleared; analyze restores them.
+- Restricted chrome:// page: generic error, no stale SAFE result or preview.
+- Scroll/resize/change form during capture: observed changes block rather than show SAFE.
+- With fake data, repeat a sensitive value in a visible label: run blocks, no value in error.
+- With fake data only, reveal the password field on the page: original preview must still mask it.
+
+Runtime network count and actual demo redaction are pending user verification. Automated
+static checks establish no network API implementation and a connection-blocking CSP;
+they do not replace runtime observation.
+
+## Next phase
+
+Phase 4 — core on-device visual perception over captured pixels. Not started.

@@ -1,96 +1,89 @@
-// EdgeSight background service worker (MV3) — orchestrates one analysis run.
-//
-// Flow: popup sends ANALYZE_PAGE → inject the DOM observer (activeTab + scripting) → run
-// local sensitive-field detection on the returned signals → capture the visible tab pixels
-// (activeTab) → combine → reply to popup.
-//
-// Privacy:
-//  - The observer returns structural signals only (no field values).
-//  - Detection classifies those signals; the raw signals (name/id/autocomplete) are then
-//    DROPPED — the popup receives only { id, role, sensitive, label } per field.
-//  - The screenshot is decoded only to read its real dimensions, then dropped. In-memory
-//    only, never stored, never sent anywhere. No network requests are made.
+// All processing is local. Never log caught browser errors or page-derived content.
 import { MSG } from '../shared/messages.js';
 import { observePage } from '../content/observe.js';
 import { detectSensitiveFields, countSensitive } from '../privacy/detect.js';
+import { collectLocalValues } from '../privacy/collect.js';
+import { sanitizeSemantics } from '../privacy/semantic.js';
+import { redactScreenshot, buildOutboundPackage } from '../privacy/redact.js';
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === MSG.ANALYZE_PAGE) {
-    runAnalysis()
-      .then(sendResponse)
-      .catch((err) => sendResponse({ ok: false, error: normalizeError(err) }));
-    return true; // keep the message channel open for the async response
-  }
-  return false;
+let busy = false;
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type !== MSG.ANALYZE_PAGE) return false;
+  if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL('src/popup/popup.html')) return false;
+  if (busy) { sendResponse({ ok: false, error: 'Analysis already in progress.' }); return false; }
+  busy = true;
+  runAnalysis().then(sendResponse).catch(() => sendResponse({
+    ok: false,
+    error: 'Local privacy processing blocked. Keep the page still and retry. Restricted pages cannot be analyzed; local files require Allow access to file URLs.',
+  })).finally(() => { busy = false; });
+  return true;
 });
 
+async function assertActive(tab) {
+  const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (active?.id !== tab.id || active?.windowId !== tab.windowId) throw new Error('Active page changed.');
+}
+
+async function snapshot(tabId, documentId) {
+  const target = documentId ? { tabId, documentIds: [documentId] } : { tabId };
+  const [observed] = await chrome.scripting.executeScript({ target, func: observePage });
+  if (!observed?.result || !observed.documentId) throw new Error('Observation unavailable.');
+  const [collected] = await chrome.scripting.executeScript({
+    target: { tabId, documentIds: [observed.documentId] }, func: collectLocalValues,
+    args: [observed.result.fieldSignals.map((f) => f.id),
+      detectSensitiveFields(observed.result.fieldSignals).filter((f) => f.sensitive).map((f) => f.id)],
+  });
+  if (!collected?.result) throw new Error('Local context unavailable.');
+  return { observation: observed.result, values: collected.result, documentId: observed.documentId };
+}
+
+function release(snapshot) {
+  if (snapshot) {
+    for (const entry of snapshot.values) entry.value = '';
+    snapshot.values.length = 0;
+    snapshot.observation = null;
+  }
+}
+
 async function runAnalysis() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab || tab.id == null) {
-    return { ok: false, error: 'No active tab to analyze.' };
-  }
-
-  // --- DOM / semantic channel: inject a one-shot observer (activeTab + scripting) ---
-  let raw;
+  let before, after, rawScreenshot, secrets;
   try {
-    const [injected] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: observePage,
-    });
-    raw = injected?.result;
-  } catch (err) {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id == null) throw new Error('No active page.');
+    before = await snapshot(tab.id);
+    const obs = before.observation;
+    if (obs.visualViewport.scale !== 1 || obs.visualViewport.x !== 0 || obs.visualViewport.y !== 0) {
+      throw new Error('Unsupported viewport.');
+    }
+    await assertActive(tab);
+    rawScreenshot = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+    await assertActive(tab);
+    after = await snapshot(tab.id, before.documentId);
+    if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error('Page changed during capture.');
+    const fields = detectSensitiveFields(obs.fieldSignals);
+    const geometry = fields.map((f) => ({ ...f, rect: obs.fieldSignals.find((s) => s.id === f.id).rect }));
+    const visual = await redactScreenshot(rawScreenshot, geometry, obs.viewport);
+    rawScreenshot = null;
+    secrets = before.values.filter((v) => fields.some((f) => f.id === v.id && f.sensitive)).map((v) => v.value);
+    const semantic = sanitizeSemantics(fields, obs.fieldSignals, before.values);
+    const safeContext = buildOutboundPackage(visual.handle, semantic, secrets);
     return {
-      ok: false,
-      error:
-        'Cannot observe this page. Restricted pages (chrome://, Web Store) are blocked; ' +
-        'for local file:// pages, enable "Allow access to file URLs" for EdgeSight in ' +
-        'chrome://extensions. (' + normalizeError(err) + ')',
+      ok: true,
+      observation: {
+        counts: obs.counts, viewport: obs.viewport, devicePixelRatio: obs.devicePixelRatio,
+        fields: safeContext.semantic.fields, sensitiveCount: countSensitive(fields),
+      },
+      capture: { ok: true, width: visual.width, height: visual.height },
+      privacy: { redactedRegions: visual.redactedRegions, visual: 'Sanitized', semantic: 'Sanitized', outbound: 'SAFE' },
+      // LOCAL-ONLY sibling. Never passed to buildOutboundPackage.
+      localPreview: { original: visual.originalPreview },
+      safeContext,
     };
+  } finally {
+    rawScreenshot = null;
+    secrets?.fill('');
+    secrets = null;
+    release(before);
+    release(after);
   }
-  if (!raw) return { ok: false, error: 'Observer returned no data.' };
-
-  // --- Local sensitive-field detection (Phase 2) ---
-  // Classify structural signals, then drop the signals so name/id/autocomplete never leave
-  // the background. Only { id, role, sensitive, label } per field goes to the popup.
-  const fields = detectSensitiveFields(raw.fieldSignals);
-
-  // --- Visual / pixel channel: capture the visible tab locally (activeTab) ---
-  const capture = await captureVisible(tab.windowId);
-
-  return {
-    ok: true,
-    observation: {
-      title: raw.title,
-      counts: raw.counts,
-      viewport: raw.viewport,
-      devicePixelRatio: raw.devicePixelRatio,
-      fields,
-      sensitiveCount: countSensitive(fields),
-    },
-    capture,
-  };
-}
-
-async function captureVisible(windowId) {
-  try {
-    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
-    const { width, height } = await measure(dataUrl);
-    // dataUrl goes out of scope here: in-memory only, never stored or transmitted.
-    return { ok: true, width, height };
-  } catch (err) {
-    return { ok: false, error: normalizeError(err) };
-  }
-}
-
-// Decode the capture just enough to read real pixel dimensions, then release it.
-async function measure(dataUrl) {
-  const blob = await (await fetch(dataUrl)).blob();
-  const bitmap = await createImageBitmap(blob);
-  const dims = { width: bitmap.width, height: bitmap.height };
-  bitmap.close();
-  return dims;
-}
-
-function normalizeError(err) {
-  return err && err.message ? err.message : String(err);
 }

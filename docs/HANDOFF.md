@@ -1,106 +1,71 @@
-# EdgeSight — HANDOFF (emergency recovery)
+# EdgeSight — Handoff
 
-> If a session (Claude / Codex / developer) ends suddenly, read this file first, then
-> `PROGRESS.md`. Update this file at the end of EVERY phase.
+## Current state
 
-## Current working state
+**Phase 3 complete. Phase 4 not started.** Phase 2 passed technical review. No new
+manual checks were confirmed. Historic Phase 1 M1–M4 remain user-verified; Phase 1
+M5–M8 and all Phase 2/3 popup checks remain pending as listed in TESTING.md.
 
-Phase 2 complete and **pushed**. EdgeSight is a loadable Chrome **MV3 extension**. On
-**ANALYZE PAGE** it: observes the active tab's DOM (counts inputs/buttons/labels + per-field
-structural signals), runs local sensitive-field **detection** (classifies each field's role
-*without reading values*), and captures the visible-tab pixels locally. The popup shows counts,
-a **sensitive checklist + total**, and the capture resolution. **No redaction/guard, no server,
-no AI, no OCR yet** — those are Phase 3+.
+ANALYZE PAGE observes/classifies visible DOM fields, captures the tab, checks snapshot
+stability, masks sensitive rectangles locally, sanitizes semantics and guards a frozen
+future outbound package. The popup shows privacy status plus collapsible ORIGINAL —
+LOCAL ONLY / SANITIZED — SAFE CONTEXT previews. Passwords are masked in both; previews
+clear after 60 seconds, on re-analysis or close. No server/network/LLM/OCR/CV/planner/
+actions/Pi. Do not begin Phase 4 as part of this change.
 
-Phase 1 manual checks **M1–M4 were verified by the user on 2026-09-10** (M5–M8 pending) — see
-`TESTING.md`.
+## Repository and run
 
-## Current branch
-
-`main`, tracking `origin/main`. History: Initial → Phase 0 foundation → Phase 0 docs → Phase 1 →
-Phase 2. Repo:
+`main`, tracking `origin/main`.
 https://github.com/OMgaupale1024/On-device-Visual-Perception-for-Lightweight-Browser-Agents
 
-## Latest useful commit
+Phase 3 commit subject: `feat: add local visual redaction and privacy guard`.
+Use `git log -1` and `git rev-parse HEAD origin/main` for hash/sync state. The task's
+final report records actual push verification.
 
-The Phase 2 commit on `main` (pushed). Verify with `git log --oneline -3`.
+Reload unpacked `extension/`; enable Allow access to file URLs; open
+`demo-page/index.html`. Keep all seven fields visible and ANALYZE PAGE.
+Expected: 7/1/7 counts, 5 sensitive fields and masks, sanitized semantic/visual state,
+SAFE guard, Destination/Purpose visible. Actual Chrome results remain UNVERIFIED.
 
-## How to run — extension
+Automated: `node --test extension/tests/*.test.mjs` (Node 24, no dependencies).
+Real Canvas harness: `chrome-extension://<extension-id>/tests/redaction-browser.html`.
+This uses synthetic pixels and no server. It has not been run. Follow TESTING.md and
+record only actually confirmed checks.
 
-`chrome://extensions` → Developer mode → Load unpacked → `extension/`, then click the toolbar icon.
+## Code map
 
-## How to run — demo page
+Paths relative to `extension/src/`:
 
-Open `demo-page/index.html` in Chrome. If ANALYZE errors on `file://`, enable "Allow access to
-file URLs" for EdgeSight (chrome://extensions → Details), or serve via `python -m http.server` in
-`demo-page/`.
+- `content/observe.js`: value-free signals, stable IDs, CSS rectangles.
+- `privacy/detect.js`: unchanged Phase 2 classifier.
+- `privacy/collect.js`: separate temporary values and repeated-sensitive-text block.
+- `privacy/geometry.js`: measured scaling, rounding/clamping.
+- `privacy/semantic.js`: placeholders and demo vocabulary, untrusted labels omitted.
+- `privacy/guard.js`: recursive JSON/key guard with generic failure.
+- `privacy/redact.js`: Canvas masks, private handles, frozen package gateway.
+- `background/service-worker.js`: orchestration, stability, cleanup; no transport.
+- `popup/`: local privacy results/previews.
+- `extension/tests/` (repo-relative): unit/regression tests and browser pixel harness.
 
-## How to run tests
+## Preserve these boundaries
 
-`node extension/tests/detect.test.mjs`  — 7 pure unit tests, no browser needed.
+Classifier/observer never read values. Only collector and trusted worker privacy work
+handle raw strings; never popup/logs/errors/storage/files/transmission. All labels/text
+are untrusted until sanitized. Future goals/action labels must pass the same gateway.
 
-## How ANALYZE PAGE works
+The raw screenshot cannot enter buildOutboundPackage; only redaction mints its private
+sanitized-image handle. The original preview is a separate local-only sibling. Future
+Phase 6 transport must consume only guarded safeContext, never the full response.
+Keep activeTab/scripting permissions, value-free detection, network CSP and tests intact.
 
-Popup sends `{type: ANALYZE_PAGE}` → background service worker:
-1. `chrome.tabs.query` → active tab.
-2. `executeScript({func: observePage})` → `{ title, counts, viewport, dpr, fieldSignals }`
-   (**signals only — no field values**).
-3. `detectSensitiveFields(fieldSignals)` → `[{ id, role, sensitive, label }]`; the raw signals are
-   then **dropped** (never reach the popup).
-4. `captureVisibleTab` → `createImageBitmap` → `{ width, height }`; the image is dropped.
-5. returns `{ ok, observation: { counts, fields, sensitiveCount, ... }, capture }` → popup renders.
+## Known limits
 
-## Files (Phase 1 + Phase 2)
-
-```
-extension/
-  manifest.json                     MV3; permissions: activeTab + scripting
-  src/shared/messages.js            MSG.ANALYZE_PAGE
-  src/content/observe.js            observePage() — self-contained; returns signals (Phase 2: + fieldSignals)
-  src/privacy/detect.js             NEW — pure classifyField / detectSensitiveFields / countSensitive
-  src/background/service-worker.js  orchestrates observe + detect + capture
-  src/popup/popup.html|css|js       UI + sensitive section
-  tests/detect.test.mjs             NEW — node test suite
-demo-page/  index.html style.css script.js   Employee Travel Request (FAKE data) + success state
-```
-
-## Environment requirements
-
-Chrome (MV3). Node 24 for tests. Python 3.10 only later (server, Phase 6).
-
-## Known browser restrictions
-
-- `activeTab` granted only on user gesture (opening the popup) — ANALYZE is user-initiated.
-- Restricted pages (`chrome://`, Web Store) can't be observed/captured → graceful error.
-- `file://` pages need "Allow access to file URLs" enabled for the extension.
-- `captureVisibleTab` returns device-pixel dimensions (HiDPI → larger than CSS viewport).
-
-## Known bugs
-
-- None in the extension code. The dev automation harness times out on screenshots (harness issue,
-  unrelated to EdgeSight).
-
-## Incomplete work
-
-Phase 3+ (see PROGRESS.md → REMAINING): redaction, outbound privacy guard, local visual perception
-(**core Phase 4**), sanitized structured UI state, planner server, actions, verify loop, metrics.
-
-## Current blocker
-
-None.
+Chrome visual alignment and runtime zero-network observation await manual checks.
+Node Canvas doubles are not pixel proof. The supplied browser harness is UNVERIFIED.
+Masks cover detected visible standard DOM fields; no unknown PII recognition in arbitrary
+text/images/canvas/iframes/shadow DOM. Pinch zoom blocks. Snapshot checks cannot eliminate
+every transient race. JS cleanup is not secure memory wiping. Use the static fake-data demo.
 
 ## Next exact task
 
-Phase 3 — local redaction + outbound privacy guard (details in PROGRESS.md → NEXT EXACT TASK).
-Awaiting review.
-
-## Things another AI/developer must NOT break
-
-- **Core principle:** raw sensitive values must never leave the browser.
-- **Detection classifies SIGNALS, never values** (`detect.js`). The observer must not start
-  returning field values; keep detection output = `{ id, role, sensitive, label }`.
-- The screenshot stays local (in-memory, dropped) — do not store or transmit it.
-- Keep permissions minimal (`activeTab` + `scripting`); no `host_permissions`/`tabs` without cause.
-- `observePage()` must stay **self-contained** (serialized for injection; no imports/closures).
-- Never `eval`/execute server output (Phase 6+). Never commit secrets/`.env`. Never force-push.
-  Demo/test data stays FAKE.
+Phase 4 — core on-device visual perception over captured pixels.

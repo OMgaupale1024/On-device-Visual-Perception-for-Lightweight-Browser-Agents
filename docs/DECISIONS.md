@@ -158,3 +158,55 @@ logging/serializing PII. Signal-based classification is safer and sufficient for
 **Consequences:** Detection is conservative and form-oriented. Value-shaped detection (e.g. a raw
 email typed into a generic box) is out of scope for now; revisit only if a phase needs it, and only
 via on-device handling that still never transmits the value.
+
+## D13 — DOM-assisted deterministic visual redaction (Phase 3)
+
+Use visible field getBoundingClientRect boxes to black-mask the full field region with
+local Canvas. No OCR/CV/model is involved. Phase 4 remains actual perception over pixels.
+Map viewport CSS pixels using actual screenshotWidth/viewportWidth and
+screenshotHeight/viewportHeight; round outward and clamp to image bounds. Invalid
+geometry blocks. HiDPI must never assume CSS pixels equal screenshot pixels.
+
+## D14 — Keep Phase 2 value-free; separate short-lived local raw handling
+
+The classifier remains unchanged and the observer never reads values. A separate
+privacy collector temporarily reads values inside the trusted browser and returns
+them only to the worker for semantic sanitization, capture stability and guard work.
+No raw field-value strings go to popup/logs/errors/files/storage/network. Finally
+cleanup drops references and clears temporary element maps. JS garbage collection
+cannot guarantee secure memory erasure. Known sensitive values repeated in visible
+body text/title block because field-region masks cannot cover those copies.
+
+## D15 — Separate raw pixels, local previews and sanitized-image capabilities
+
+Raw screenshot PNG stays in the worker/redaction call and never enters the future
+package builder. Only successful Canvas redaction can mint a private WeakMap handle;
+raw strings and forged handles are rejected. buildOutboundPackage lives with that
+private registry, always invokes the guard and returns a cloned/frozen safeContext.
+Future Phase 6 transport must consume only safeContext, never the full analysis
+response. Extension CSP blocks connections now; no transport exists.
+
+This supersedes D10's Phase 1 no-preview choice: Phase 3 explicitly requires a local
+comparison. ORIGINAL — LOCAL ONLY is a separate password-masked preview (even a
+revealed password is hidden), outside the outbound package. SANITIZED — SAFE CONTEXT
+is scoped to detected visible DOM fields. Both previews expire after 60 seconds or
+clear on re-analysis/close. There is no persistence or transmission.
+
+## D16 — All source text is untrusted until sanitized
+
+Phase 2 labels help local classification but are not privacy-certified by textContent
+rendering. Phase 3 omits DOM labels/titles/arbitrary strings from the semantic package;
+uses fixed roles/placeholders; and withholds unknown non-sensitive values. A narrow
+demo allowlist retains Bengaluru and known Purpose choices only. The guard recursively
+checks keys/values against exact known sensitive strings, blocks unsupported structures,
+and never identifies the offending value. New goals/action labels must use this same
+layer in later phases. Unknown or transformed PII is not solved by exact-value matching.
+
+## D17 — Fail closed, with honest prototype limits
+
+Check active tab, document identity and before/after geometry/values; reject changes,
+unsupported pinch zoom, invalid masks, capture/decode failure and guard contamination.
+These checks do not make DOM/capture atomic. No masks for unknown PII in arbitrary
+pixels, images/canvas/iframes/shadow DOM are claimed. Phase 3 is the static demo's
+privacy filter; Phase 4 remains the core perception phase. Node doubles prove code
+paths, not real browser pixels. Chrome visual/manual checks remain UNVERIFIED.
