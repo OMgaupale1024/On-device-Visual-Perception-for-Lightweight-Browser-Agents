@@ -1,88 +1,101 @@
 # EdgeSight — HANDOFF (emergency recovery)
 
 > If a session (Claude / Codex / developer) ends suddenly, read this file first, then
-> `PROGRESS.md`. It tells you exactly where things are and the next concrete step.
-> Update this file at the end of EVERY phase.
+> `PROGRESS.md`. Update this file at the end of EVERY phase.
 
 ## Current working state
 
-Phase 0 (foundation) complete and **pushed to GitHub**
-(`origin` = https://github.com/OMgaupale1024/On-device-Visual-Perception-for-Lightweight-Browser-Agents).
-Repository has docs, README, `.gitignore`, `.gitattributes`, `.env.example`, and top-level
-stub folders. **No application code yet** — no extension, no server, no demo behavior.
-Nothing is runnable beyond reading the repo.
+Phase 1 complete and **pushed**. EdgeSight is a loadable Chrome **MV3 extension**: on
+**ANALYZE PAGE** it observes the active tab's DOM (counts visible inputs/buttons/labels, title,
+viewport) **and** captures the visible-tab pixels locally, showing real counts + capture
+resolution in the popup. A controlled demo page exists. **No PII detection/redaction, no server,
+no AI yet** — those are Phase 2+.
 
 ## Current branch
 
-`main`, tracking `origin/main`. Two commits: GitHub's `Initial commit`, then the Phase 0
-foundation on top of it.
+`main`, tracking `origin/main`. History: Initial commit → Phase 0 foundation → Phase 0 docs →
+Phase 1. Repo:
+https://github.com/OMgaupale1024/On-device-Visual-Perception-for-Lightweight-Browser-Agents
 
 ## Latest useful commit
 
-`7a443d3` — "feat: initialize EdgeSight prototype architecture" (pushed to `origin/main`).
-Verify with `git log --oneline -2`.
+The Phase 1 commit on `main` (pushed). Verify with `git log --oneline -3`.
 
 ## How to run — extension
 
-Not built yet (Phase 1). Intended: `chrome://extensions` → enable Developer mode →
-"Load unpacked" → select `extension/`.
-
-## How to run — server
-
-Not built yet (Phase 5). Intended: `cd server && pip install -r requirements.txt &&
-uvicorn app.main:app --reload` (reads `server/.env`, copied from `.env.example`).
+1. Chrome → `chrome://extensions`
+2. Enable **Developer mode** (top-right).
+3. **Load unpacked** → select the `extension/` folder.
+4. Click the EdgeSight toolbar icon to open the popup.
 
 ## How to run — demo page
 
-Not built yet (Phase 1). Intended: open `demo-page/index.html` directly in Chrome.
+Open `demo-page/index.html` in Chrome (double-click, or File → Open File).
+If ANALYZE PAGE errors on the `file://` page, enable **"Allow access to file URLs"** for EdgeSight
+(chrome://extensions → EdgeSight → Details). Alternative: `python -m http.server` inside
+`demo-page/` and open the `http://localhost:PORT` URL.
+
+## How ANALYZE PAGE works
+
+Popup sends `{type: ANALYZE_PAGE}` to the background service worker, which:
+1. `chrome.tabs.query({active:true, currentWindow:true})` → active tab.
+2. `chrome.scripting.executeScript({target:{tabId}, func: observePage})` → DOM counts, title, viewport.
+3. `chrome.tabs.captureVisibleTab(windowId, {format:'png'})` → data URL → `createImageBitmap` reads
+   real width/height → image dropped (in-memory only, never stored/sent).
+4. Returns `{ok, observation, capture}`; the popup renders counts + capture status/resolution.
+
+## Message flow / files added in Phase 1
+
+```
+extension/
+  manifest.json                     MV3; permissions: activeTab + scripting
+  src/shared/messages.js            MSG.ANALYZE_PAGE constant
+  src/content/observe.js            observePage() — self-contained, injected into the page
+  src/background/service-worker.js  module service worker; orchestrates observe + capture
+  src/popup/popup.html              popup markup
+  src/popup/popup.css               popup styles
+  src/popup/popup.js                popup logic (module; click → message → render)
+demo-page/
+  index.html  style.css  script.js  Employee Travel Request (FAKE data) + success state
+```
 
 ## Environment requirements
 
-- Chrome (Manifest V3).
-- Node v24.x — verified v24.11.0 (only needed if extension build tooling is added).
-- Python 3.10+ — verified 3.10.11 (for the planner server).
-- git 2.51; gh 2.97 present but **not authenticated**.
+Chrome (MV3). Node 24 / Python 3.10 are only for tooling/tests — **not** required to run the extension.
 
-## Important files
+## Known browser restrictions
 
-- `README.md` — overview + run table + roadmap.
-- `docs/ARCHITECTURE.md` — components, data/privacy/action flow, interface shapes, full tree.
-- `docs/PROGRESS.md` — live status + exact next task.
-- `docs/DECISIONS.md` — why each choice was made.
-- `docs/TESTING.md` — test log.
-- `.env.example` — server env template (no secrets).
+- `activeTab` is granted only after the user invokes the extension (opens the popup); ANALYZE is
+  user-initiated, so this is satisfied.
+- Restricted pages (`chrome://`, Chrome Web Store, other extensions) can't be observed/captured →
+  popup shows a graceful error.
+- `file://` pages require "Allow access to file URLs" enabled for the extension.
+- `captureVisibleTab` returns **device-pixel** dimensions (HiDPI → larger than CSS viewport).
 
 ## Known bugs
 
-None (no runtime code yet).
+- None in the extension code. The dev automation harness times out on screenshots (harness issue,
+  unrelated to EdgeSight); manual capture in Chrome is the verification path (see TESTING M4).
 
 ## Incomplete work
 
-Everything from Phase 1 onward. See PROGRESS.md → REMAINING.
+Everything Phase 2+ (see PROGRESS.md → REMAINING): PII detection, redaction, privacy guard,
+sanitized state, planner server, actions, verification loop, metrics, vision model.
 
 ## Current blocker
 
-None. Phase 0 is pushed. Note: `gh` CLI is not authenticated, but `git push` works via the
-cached Windows credential helper. If a future push prompts for credentials, run
-`gh auth login` (or configure Git Credential Manager) and retry — do not force-push.
+None.
 
 ## Next exact task
 
-Begin **Phase 1** (awaiting user review of Phase 0 first).
-- `extension/manifest.json` (MV3): popup, background service worker, content script,
-  `activeTab`/`scripting` permissions.
-- Popup: title "EDGESIGHT", goal input, **ANALYZE PAGE** button, status line.
-- Content script: on ANALYZE PAGE, count `inputs`, `buttons`, and visible labels; return to popup.
-- `demo-page/index.html`: Employee Travel Request form, **FAKE data only**
-  (Rahul Sharma / rahul@example.com / 9876543210 / EMP1024 / Bengaluru / Conference /
-  password) + a **Continue** button.
-- No AI, no Raspberry Pi. Then test, update docs, commit, push, STOP + report.
+Phase 2 — on-device sensitive-field detection (details in PROGRESS.md → NEXT EXACT TASK). Awaiting review.
 
 ## Things another AI/developer must NOT break
 
-- The core principle: **raw sensitive values must never leave the browser.** Any outbound
-  path must go through the (future) privacy guard.
-- Never commit `.env` or real API keys; never put keys in `extension/` or `demo-page/`.
-- Never `eval` or execute planner-supplied JavaScript; validate actions against the schema.
-- Never force-push or rewrite shared history. Commit phase by phase.
+- **Core principle:** raw sensitive values must never leave the browser. The screenshot stays local
+  (in-memory, dropped) — do not store or transmit it.
+- Keep permissions minimal (`activeTab` + `scripting`). Do not add `host_permissions` or `tabs`
+  without a documented reason.
+- `observePage()` must stay **self-contained** (it is serialized for injection; no imports/closures).
+- Never `eval`/execute server output (Phase 5+). Never commit secrets/`.env`. Never force-push.
 - Demo/test data stays FAKE.

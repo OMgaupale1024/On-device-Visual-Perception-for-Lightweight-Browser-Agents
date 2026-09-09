@@ -4,7 +4,7 @@
 
 Smart India Hackathon 2026 · Problem **SIH26171** — *On-device Visual Perception for Light-weight Browser Agents* · ISRO · Software · Smart Automation.
 
-> **Status: prototype in progress. Phase 0 (foundation) complete.** See [`docs/PROGRESS.md`](docs/PROGRESS.md) for the live status and [`docs/HANDOFF.md`](docs/HANDOFF.md) to continue the work.
+> **Status: prototype in progress. Phase 1 complete** — a loadable Chrome extension that observes the page DOM and captures the visible tab locally. See [`docs/PROGRESS.md`](docs/PROGRESS.md) for live status and [`docs/HANDOFF.md`](docs/HANDOFF.md) to continue the work.
 
 ---
 
@@ -28,10 +28,14 @@ The agent doesn't need the real email — only that an email field exists and is
 ## Prototype flow
 
 ```
-USER GOAL → Chrome extension → observe page locally → detect sensitive info
+USER GOAL → Chrome extension → observe page locally (DOM + screenshot) → detect sensitive info
 → redact/sanitize locally → sanitized structured UI state → planner/server
 → structured action → browser executes → re-observe → verify → continue or stop
 ```
+
+**Hybrid perception:** EdgeSight observes both DOM/semantic signals *and* a locally-captured
+screenshot (pixels) — it is not a DOM-only tool. Phase 1 establishes the visual-capture pipeline;
+on-device vision (OCR/CV) is Phase 9.
 
 Core rule: **raw sensitive information must never reach the server.** An outbound
 **privacy guard** blocks any payload that still contains a known raw sensitive value.
@@ -53,14 +57,13 @@ fills them — the full intended tree lives in [`docs/ARCHITECTURE.md`](docs/ARC
 
 ## How to run (per component)
 
-Nothing is runnable yet beyond the foundation — components come online phase by phase.
-Commands below are the intended entry points; each phase wires up its own.
+The demo page and extension are runnable **now** (Phase 1); the server arrives in Phase 5.
 
-| Component | Phase | Run (intended) |
-|-----------|-------|----------------|
-| Demo page | 1 | open `demo-page/index.html` in Chrome |
-| Extension | 1 | `chrome://extensions` → Developer mode → Load unpacked → `extension/` |
-| Server    | 5 | `cd server && pip install -r requirements.txt && uvicorn app.main:app --reload` |
+| Component | Phase | Run |
+|-----------|-------|-----|
+| Demo page | 1 | open `demo-page/index.html` in Chrome (for analysis on `file://`, enable "Allow access to file URLs" for EdgeSight) |
+| Extension | 1 | `chrome://extensions` → Developer mode → Load unpacked → `extension/`, then click the toolbar icon → **ANALYZE PAGE** |
+| Server    | 5 | `cd server && pip install -r requirements.txt && uvicorn app.main:app --reload` *(not built yet)* |
 
 ## Environment
 
@@ -80,8 +83,8 @@ Commands below are the intended entry points; each phase wires up its own.
 
 ## Roadmap
 
-`0` foundation ✅ · `1` extension + demo · `2` local detection · `3` redaction + privacy
-guard · `4` sanitized UI state · `5` planner server · `6` safe action exec · `7`
+`0` foundation ✅ · `1` extension + demo + visual capture ✅ · `2` local detection · `3` redaction
++ privacy guard · `4` sanitized UI state · `5` planner server · `6` safe action exec · `7`
 re-observe + verify · `8` metrics · `9` optional visual perception · `10` polish.
 
 ## Privacy & security stance

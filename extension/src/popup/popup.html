@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EdgeSight</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="brand">
+      <span class="dot"></span>
+      <h1>EDGESIGHT</h1>
+    </header>
+
+    <label class="lbl" for="goal">Goal</label>
+    <input id="goal" class="goal" type="text"
+           value="Check whether this form is complete and continue" />
+
+    <button id="analyze" class="btn">ANALYZE PAGE</button>
+
+    <p class="status">Status: <span id="status">Ready</span></p>
+
+    <section id="results" class="card hidden" aria-live="polite">
+      <h2>Page observation</h2>
+      <div class="row"><span>Inputs</span><b id="c-inputs">–</b></div>
+      <div class="row"><span>Buttons</span><b id="c-buttons">–</b></div>
+      <div class="row"><span>Visible labels</span><b id="c-labels">–</b></div>
+
+      <h2>Visual input</h2>
+      <div class="row"><span>Screen capture</span><b id="cap-status">–</b></div>
+      <div class="row"><span>Resolution</span><b id="cap-res">–</b></div>
+
+      <p class="note">DOM + pixels captured locally. Nothing sent off-device.</p>
+    </section>
+
+    <p id="error" class="error hidden"></p>
+  </main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

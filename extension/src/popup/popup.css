@@ -1,0 +1,61 @@
+:root {
+  --bg: #0f1720;
+  --panel: #16212e;
+  --line: #26333f;
+  --text: #e6edf3;
+  --muted: #9fb0c0;
+  --accent: #3fb6a8;
+  --accent-2: #2b8fd6;
+  --danger: #ff6b6b;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  width: 320px;
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+.app { padding: 14px 14px 16px; }
+.brand { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.brand h1 { font-size: 15px; letter-spacing: 2px; margin: 0; }
+.dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, var(--accent), var(--accent-2));
+}
+.lbl {
+  display: block; color: var(--muted); font-size: 11px; text-transform: uppercase;
+  letter-spacing: .6px; margin-bottom: 4px;
+}
+.goal {
+  width: 100%; padding: 8px 9px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  margin-bottom: 10px;
+}
+.goal:focus { outline: none; border-color: var(--accent); }
+.btn {
+  width: 100%; padding: 9px 10px; border: 0; border-radius: 8px; cursor: pointer;
+  font-weight: 600; letter-spacing: .5px; color: #06131a;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+.btn:disabled { opacity: .6; cursor: default; }
+.status { color: var(--muted); margin: 10px 2px 0; }
+.status span { color: var(--text); }
+.card {
+  margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--panel);
+}
+.card h2 {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .7px;
+  color: var(--muted); margin: 8px 0 6px;
+}
+.card h2:first-child { margin-top: 0; }
+.row { display: flex; justify-content: space-between; padding: 3px 0; }
+.row b { font-variant-numeric: tabular-nums; }
+.note { color: var(--muted); font-size: 11px; margin: 8px 0 0; }
+.error {
+  margin-top: 10px; padding: 8px 10px; border-radius: 8px;
+  background: rgba(255, 107, 107, .12); border: 1px solid rgba(255, 107, 107, .4);
+  color: var(--danger); font-size: 12px;
+}
+.hidden { display: none; }

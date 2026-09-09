@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Employee Travel Request</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="card">
+    <h1>Employee Travel Request</h1>
+    <p class="sub">Demo form — <strong>fake data only.</strong> Used to exercise EdgeSight perception.</p>
+
+    <form id="travel-form" novalidate>
+      <div class="field">
+        <label for="employeeName">Employee Name</label>
+        <input id="employeeName" name="employeeName" type="text" autocomplete="name" value="Rahul Sharma" />
+      </div>
+
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" value="rahul@example.com" />
+      </div>
+
+      <div class="field">
+        <label for="phone">Phone</label>
+        <input id="phone" name="phone" type="tel" autocomplete="tel" value="9876543210" />
+      </div>
+
+      <div class="field">
+        <label for="employeeId">Employee ID</label>
+        <input id="employeeId" name="employeeId" type="text" value="EMP1024" />
+      </div>
+
+      <div class="field">
+        <label for="destination">Destination</label>
+        <input id="destination" name="destination" type="text" value="Bengaluru" />
+      </div>
+
+      <div class="field">
+        <label for="purpose">Purpose</label>
+        <select id="purpose" name="purpose">
+          <option>Conference</option>
+          <option>Training</option>
+          <option>Client Visit</option>
+          <option>Site Inspection</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" value="secret123" />
+      </div>
+
+      <button id="continue" type="submit" class="btn">Continue</button>
+    </form>
+
+    <section id="success" class="success hidden" aria-live="polite">
+      <div class="tick">✓</div>
+      <h2>Travel Request Submitted</h2>
+      <p>Your request has been recorded.</p>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

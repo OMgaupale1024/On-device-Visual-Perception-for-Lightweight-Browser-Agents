@@ -83,4 +83,46 @@ push automatically.
 outward-facing and needs the owner's explicit action/login. A local commit still gives the
 recoverable checkpoint and a real hash.
 **Consequences:** Push is a tracked blocker (see PROGRESS/HANDOFF) resolved by
-`gh auth login` or a provided remote URL.
+`gh auth login` or a provided remote URL. *(Resolved 2026-09-09: remote added, pushed.)*
+
+## D8 — Hybrid local perception (DOM + pixels), not DOM-only
+
+**Decision:** EdgeSight perceives through two on-device channels — a DOM/semantic channel
+and a visual/pixel channel (screenshot of the visible tab) — merged into one sanitized state.
+Phase 1 establishes the **visual input pipeline** (local `captureVisibleTab`); vision ML
+(OCR/CV/face) is deferred to Phase 9.
+**Reason:** The problem statement is on-device *visual* perception. A DOM-only system would
+miss the point and fail to perceive rendered text, canvas/image content, and visual layout.
+DOM still earns its place: it makes privacy detection and semantic grounding reliable.
+**Alternatives considered:** DOM-only observation; screenshot-only perception.
+**Why rejected:** DOM-only isn't "visual perception" and can't read pixels; screenshot-only
+throws away the cheap, reliable semantic signal that makes privacy detection accurate.
+**Consequences:** We must capture pixels locally now and keep them local (no transmission,
+in-memory only). Real visual understanding is future work and must be described honestly as
+not-yet-implemented until Phase 9.
+
+## D9 — Observe via programmatic injection (activeTab + scripting), not a persistent content script
+
+**Decision:** Read the DOM by injecting a self-contained function with
+`chrome.scripting.executeScript({ func })` on user gesture, authorized by `activeTab`.
+No declarative `content_scripts`, no `host_permissions`, no `tabs` permission.
+**Reason:** Minimum permissions. A persistent content script needs match patterns / broad
+host access; programmatic injection under `activeTab` touches the page only when the user
+clicks ANALYZE, and returns its result directly (no extra message plumbing to the page).
+**Alternatives considered:** Declarative content script + `tabs.sendMessage`; `<all_urls>` host permission.
+**Why rejected:** Both request far more standing access than a click-to-analyze prototype needs.
+**Consequences:** The injected function must be fully self-contained (it is serialized and
+run in the page, so it can't close over module-scope helpers). `file://` demo pages require
+the user to enable "Allow access to file URLs" for the extension (documented in HANDOFF).
+
+## D10 — Measure screenshot dimensions in the service worker; don't ship pixels to the popup
+
+**Decision:** The background worker decodes the capture with `createImageBitmap` to read real
+width/height, then drops the image. Only dimensions (not the image) go to the popup.
+**Reason:** Keeps the screenshot in memory and local; avoids sending a multi-MB data URL across
+the message channel just to prove capture worked. Matches "keep it local, drop when done."
+**Alternatives considered:** Send the data URL to the popup and measure with `new Image()`
+(also enables a preview).
+**Why rejected:** Heavier payload and weaker privacy story for Phase 1. A small preview is an
+easy, optional future add if a phase needs it.
+**Consequences:** No in-popup screenshot preview in Phase 1 (proof is "Ready" + real resolution).

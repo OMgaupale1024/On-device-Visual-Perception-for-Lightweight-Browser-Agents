@@ -24,58 +24,77 @@ raw value. An outbound **privacy guard** enforces this: before any payload leave
 browser, it is scanned for known raw sensitive values; if any is present, the request is
 **blocked** with an explicit privacy error — the network layer never sees an unsafe payload.
 
+## Hybrid local perception (DOM + pixels)
+
+EdgeSight perceives each page through **two local channels**, not DOM alone. This is core
+to the problem statement ("on-device *visual* perception") — EdgeSight must not collapse
+into a DOM-only automation tool.
+
+- **DOM / semantic channel** — element roles, input `type`s, labels, `name`s,
+  `autocomplete` hints, visible controls, and bounding rectangles where useful. This
+  channel makes privacy detection and semantic grounding reliable.
+- **Visual / pixel channel** — a screenshot of the currently visible tab (the actual
+  pixels the user sees), captured locally via `chrome.tabs.captureVisibleTab`. Later phases
+  process it on-device (OCR / CV / vision inference) to perceive what the DOM cannot express:
+  rendered text, canvas/image content, visual layout, overlays.
+
+Both channels are captured and processed **on-device**, then merged into one sanitized
+structured UI state. The DOM is an *assist* for privacy and grounding; the visual channel
+is the actual screen perception. **The DOM is not the whole perception engine.**
+
+> **Honesty note (current state):** as of Phase 1 only the *visual input pipeline* exists —
+> the extension captures the visible tab locally and reports its real pixel dimensions.
+> **No OCR / CV / vision model is implemented yet** (that is Phase 9). The screenshot is
+> handled in memory, is never stored persistently, and never leaves the browser.
+
 ## High-level architecture
 
 ```
-┌───────────────────────── Browser (on-device) ─────────────────────────┐
-│                                                                        │
-│  Popup (UI)        Content script (page access)     Background (SW)    │
-│  ─ goal input      ─ observe DOM                     ─ message router   │
-│  ─ status/metrics  ─ execute validated actions       ─ planner fetch    │
-│        │                    │                              │            │
-│        └──────────┬─────────┴──────────────┬───────────────┘            │
-│                   ▼                         ▼                            │
-│            Perception engine         Privacy engine                     │
-│            ─ enumerate fields        ─ detect sensitive fields          │
-│            ─ enumerate actions       ─ redact values                    │
-│            ─ build UI state          ─ PRIVACY GUARD (outbound scan)    │
-│                             │                                           │
-│                             ▼                                           │
-│                  Sanitized structured UI state ── guard ──►  network    │
-└────────────────────────────────────────────────────────────│──────────┘
-                                                               ▼
-                                              ┌──────────────────────────┐
-                                              │  Planner server (FastAPI) │
-                                              │  ─ LocalPlanner (mock)    │
-                                              │  ─ LLMPlanner (optional)  │
-                                              │  returns validated action │
-                                              └──────────────────────────┘
+                        ┌──────────────── Browser (on-device) ────────────────┐
+ user clicks ANALYZE ──►│  Popup ──► Background (service worker / orchestrator)│
+                        │                │                                     │
+                        │   ┌────────────┴─────────────┐                       │
+                        │   ▼                           ▼                       │
+                        │  inject observer            captureVisibleTab        │
+                        │  (activeTab + scripting)     (activeTab)              │
+                        │   │  DOM / semantic            │  pixels              │
+                        │   └───────────┬───────────────┘                       │
+                        │               ▼                                       │
+                        │      Local perception  (DOM + visual channels)        │
+                        │               ▼                                       │
+                        │   Privacy engine: detect · redact · PRIVACY GUARD     │
+                        │               ▼                                       │
+                        │   sanitized structured UI state ─ guard ─► network ───┼──► Planner
+                        └───────────────────────────────────────────────────────┘   (FastAPI)
 ```
 
 ## Component responsibilities
 
 | Component | Responsibility | Phase |
 |-----------|----------------|-------|
-| **Popup** | Goal input, run button, privacy/agent/metrics display | 1, 10 |
-| **Content script** | Read the live page (fields, buttons, labels); execute validated actions | 1, 6 |
-| **Background service worker** | Route messages popup↔content; make the (sanitized) planner request | 1, 5 |
-| **Perception engine** | Turn the DOM into a field/action list with stable internal IDs | 1, 4 |
+| **Popup** | Goal input, ANALYZE button, status + observation/visual results | 1, 10 |
+| **Background service worker** | Orchestrate a run: query active tab, inject the observer, `captureVisibleTab`, combine, reply to popup; later the (sanitized) planner request | 1, 5 |
+| **Observer (injected)** | Read the live DOM on demand (title, visible inputs/buttons/labels, viewport); later builds the field/action list with stable IDs | 1, 4 |
+| **Visual capture** | Grab the visible-tab pixels locally; report dimensions; later feeds on-device OCR/CV | 1, 9 |
 | **Privacy engine** | Detect sensitive fields; redact values; run the outbound privacy guard | 2, 3 |
 | **Actions** | Resolve internal IDs → elements; perform CLICK/TYPE/… safely | 6 |
 | **Planner server** | Given goal + sanitized state, return the next structured action | 5 |
 
 ## Data flow
 
-1. User enters a goal in the popup and clicks run.
-2. Content script **observes** the current page.
-3. Perception builds a field/action list with **stable internal IDs** (`field_1`, `action_1`).
-4. Privacy engine **detects** sensitive fields and **redacts** their values.
-5. A **sanitized structured UI state** is produced.
-6. The **privacy guard** scans the outbound payload; if clean, it goes to the planner.
-7. Planner returns a **structured action** (e.g. `{ "action": "CLICK", "target": "action_1" }`).
-8. Action is **validated against a strict schema**, then executed in the page.
-9. EdgeSight **re-observes**, builds a new state, and **verifies** the expected result.
-10. Continue or stop.
+1. User enters a goal in the popup and clicks **ANALYZE PAGE**.
+2. Popup sends one message to the **background** service worker.
+3. Background queries the active tab and **injects the observer** (`chrome.scripting`,
+   authorized by `activeTab`) to read the DOM.
+4. Background **captures the visible tab** pixels (`captureVisibleTab`) and measures real
+   dimensions locally (`createImageBitmap`), then drops the image.
+5. Background returns the combined DOM + visual result to the popup, which renders it.
+6. *(Phase 2+)* Perception builds a field/action list with **stable internal IDs**
+   (`field_1`, `action_1`); the privacy engine **detects** sensitive fields and **redacts** values.
+7. *(Phase 3+)* The **privacy guard** scans the outbound payload; if clean, it goes to the planner.
+8. *(Phase 5+)* Planner returns a **structured action** (e.g. `{ "action": "CLICK", "target": "action_1" }`).
+9. *(Phase 6+)* Action is **validated against a strict schema**, then executed in the page.
+10. *(Phase 7+)* EdgeSight **re-observes**, builds a new state, and **verifies** the result. Continue or stop.
 
 ## Privacy flow
 
@@ -90,6 +109,10 @@ field value ──► detect (type/label/name/autocomplete/pattern) ──► se
                           ├─ found  ──► BLOCK + explicit error (no network call)
                           └─ clean  ──► send to planner
 ```
+
+The visual channel is subject to the same rule: any on-device visual processing (future)
+must redact sensitive regions (e.g. faces, rendered PII) before anything derived from the
+pixels could leave the browser. The raw screenshot itself is never transmitted.
 
 ## Browser action flow
 
@@ -109,7 +132,21 @@ field value ──► detect (type/label/name/autocomplete/pattern) ──► se
 
 ## Important interfaces (planned shapes)
 
-**Sanitized UI state (browser → server):**
+**Phase 1 analysis result (background → popup):**
+```json
+{
+  "ok": true,
+  "observation": {
+    "title": "Employee Travel Request",
+    "counts": { "inputs": 7, "buttons": 1, "labels": 7 },
+    "viewport": { "width": 1280, "height": 720 },
+    "devicePixelRatio": 1
+  },
+  "capture": { "ok": true, "width": 1280, "height": 720 }
+}
+```
+
+**Sanitized UI state (browser → server, Phase 4+):**
 ```json
 {
   "page": { "title": "Employee Travel Request" },
@@ -121,10 +158,19 @@ field value ──► detect (type/label/name/autocomplete/pattern) ──► se
 }
 ```
 
-**Planner response (server → browser):**
+**Planner response (server → browser, Phase 5+):**
 ```json
 { "action": "CLICK", "target": "action_1" }
 ```
+
+## Extension internals (Phase 1)
+
+- **Permissions:** `activeTab` (temporary access to the current tab's DOM + pixels, only on
+  user gesture) and `scripting` (to inject the observer). No broad `host_permissions`, no `tabs`.
+- **Observation** uses **programmatic injection** (`chrome.scripting.executeScript({ func })`)
+  rather than a persistent declarative content script, so no host-match permissions are needed.
+- **Message flow:** `popup → background (ANALYZE_PAGE) → [inject observer + captureVisibleTab] → popup`.
+  Message-type constants live in `extension/src/shared/messages.js`.
 
 ## Intended directory tree
 
@@ -135,18 +181,15 @@ EdgeSight/
 ├── extension/
 │   ├── manifest.json
 │   ├── src/
-│   │   ├── popup/          # popup UI
-│   │   ├── content/        # page observation + action execution
-│   │   ├── background/     # service worker / message routing
-│   │   ├── perception/     # DOM → field/action model
-│   │   ├── privacy/        # detection, redaction, privacy guard
-│   │   ├── actions/        # action executors
-│   │   └── shared/         # schemas, constants
-│   └── public/
-├── server/
-│   ├── app/                # FastAPI app + planners
-│   ├── tests/
-│   └── requirements.txt
+│   │   ├── popup/          # popup UI (html/css/js)
+│   │   ├── background/     # service worker / orchestrator
+│   │   ├── content/        # injected DOM observer
+│   │   ├── perception/     # DOM+visual → field/action model   (Phase 4)
+│   │   ├── privacy/        # detection, redaction, privacy guard (Phase 2–3)
+│   │   ├── actions/        # action executors                   (Phase 6)
+│   │   └── shared/         # message types, schemas, constants
+│   └── public/             # optional static assets
+├── server/                 # FastAPI planner                    (Phase 5)
 ├── demo-page/              # index.html / style.css / script.js (FAKE data)
 └── docs/
 ```
@@ -154,6 +197,7 @@ EdgeSight/
 ## Why the major decisions were taken
 
 See [`DECISIONS.md`](DECISIONS.md). In short: MV3 extension because browser-side execution
-is the point; deterministic planner first to avoid an external-API dependency on the demo
-path; sanitize-before-send + outbound guard because "raw PII never leaves the device" is
-the headline claim we must be able to prove.
+is the point; **hybrid DOM + visual perception** because the problem statement is on-device
+*visual* perception, not DOM scraping; deterministic planner first to avoid an external-API
+dependency on the demo path; sanitize-before-send + outbound guard because "raw PII never
+leaves the device" is the headline claim we must be able to prove.
