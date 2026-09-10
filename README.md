@@ -3,12 +3,12 @@
 **Privacy-preserving on-device perception for lightweight browser agents.**
 SIH26171 · ISRO · Smart India Hackathon 2026.
 
-**Phase 7 implemented in code:** browser-local OCR and semantic analysis, local
+**Phases 0–8 implemented in code:** browser-local OCR and semantic analysis, local
 redaction, privacy-approved SafeAgentContext, FastAPI validation, one real NVIDIA NIM
 planner adapter (deterministic mode is the default), and **safe visually grounded
 execution** — a validated `CLICK visual_N` is turned into ONE guarded, user-triggered
-click on the locally resolved target. No re-observation/success verification (Phase 8),
-metrics dashboard or Raspberry Pi work.
+click on the locally resolved target. Phase 8 then captures fresh pixels and verifies
+the visible outcome locally. No metrics dashboard or Raspberry Pi work.
 
 **Phase 6A is manually Chrome-verified by the user:** extension → POST /plan →
 FastAPI HTTP 200; seven fields, five sensitive/redacted regions, safe status,
@@ -50,8 +50,11 @@ For a `CLICK` plan an **EXECUTE SUGGESTED ACTION** button appears (Phase 7). Pre
 resolves the chosen `visual_N` locally — screenshot-pixel bbox → CSS viewport point →
 `elementFromPoint` → a small clickable-element allowlist — and performs exactly ONE
 `element.click()`, bound to the same observation, tab and document, single-use. The UI
-then shows **CLICK DISPATCHED**; it does **not** claim the task succeeded (Phase 8 will
-verify by fresh perception). A `STOP` plan performs no action. The server never supplies
+then shows **CLICK DISPATCHED → VERIFYING**. After 750 ms, one fresh capture of the same
+active tab runs local OCR and privacy again. Only the full pixel-derived phrase
+**Travel Request Submitted** produces **VISUALLY VERIFIED**; otherwise **NOT VERIFIED —
+Analyze again**. The result panel shows the before/after observation IDs and safe evidence.
+Verification never calls `/plan`, NVIDIA, or another endpoint. A `STOP` plan performs no action. The server never supplies
 selectors, coordinates or code.
 
 ## Two privacy boundaries
@@ -67,6 +70,9 @@ LLM → untrusted structured decision → strict action/ID validation
 ========== back in the browser (Phase 7, local only) ==========
 CLICK visual_N → local bbox → screenshot px → CSS viewport px → elementFromPoint
 → clickable-element allowlist → ONE guarded, single-use click (or STOP: no action)
+========== Phase 8, browser local only ==========
+750 ms → fresh same-tab capture → new observation → local OCR + privacy again
+→ safe visual text → Travel Request Submitted → VISUALLY VERIFIED / NOT VERIFIED
 ```
 
 The browser transport still accepts only the exact frozen context approved by the
@@ -103,12 +109,14 @@ Set-Location server
 .venv/Scripts/python.exe -m unittest discover -s tests -v
 ```
 
-Current results: **152/152 extension test entries** (32 new Phase 7 geometry, ticket,
-execution-policy and element-safety tests), **50/50 server test methods**. Both browser
+Current results: **207/207 extension test entries** (55 new Phase 8 tests),
+**50/50 server test methods**. Both browser
 transport and provider boundary contamination tests pass with zero downstream calls.
 Real OCR cold/warm smoke and local deterministic/AI-missing-key HTTP smoke pass. Mocked
-AI tests are not real-provider acceptance; the Phase 7 Chrome click demo is manual and
-still pending (no key/extension load in the coding shell).
+AI tests are not real-provider acceptance. Phase 6B integrated NVIDIA, Phase 7 positive/
+negative, and Phase 8 positive/negative Chrome demos remain **PENDING**. Chrome was
+launched, but Computer Use stopped because it could not reliably determine the current
+browser URL for policy enforcement. No manual click or verification pass was observed.
 
 With a separately running server, from repository root:
 `node scripts/smoke-planner.mjs` for deterministic mode, or
@@ -118,8 +126,14 @@ synthetic safe fixture. The latter was NOT run — no NVIDIA_API_KEY was configu
 [Architecture](docs/ARCHITECTURE.md) · [Testing](docs/TESTING.md) ·
 [Progress](docs/PROGRESS.md) · [Decisions](docs/DECISIONS.md) ·
 [Handoff](docs/HANDOFF.md) · [AI context](docs/AI_CONTEXT.md) ·
-[Phase 6B plan](docs/PHASE_6B_PLAN.md) · [Phase 7 plan](docs/PHASE_7_PLAN.md)
+[Phase 6B plan](docs/PHASE_6B_PLAN.md) · [Phase 7 plan](docs/PHASE_7_PLAN.md) ·
+[Phase 8 plan](docs/PHASE_8_PLAN.md)
 
-Exact next phase after review: **Phase 8 — re-observation and visual verification: after
-the Phase 7 click, fresh capture → new observation → local OCR/CV → confirm the outcome
-(e.g. "Travel Request Submitted"). Not started.**
+Verification uses one attempt, a 60-second transaction deadline, five-second local API
+bounds and the existing 45-second OCR deadline. Navigation is allowed after dispatch;
+the intended tab must remain active. Matching normalizes case/whitespace/punctuation
+spacing and joins at most three spatially adjacent OCR items in bbox reading order.
+Confidence values are recorded without an uncalibrated threshold. This proves visible
+text at capture time, not backend persistence or arbitrary workflow completion.
+
+Exact next implementation task: **Phase 9 — SIH evaluation metrics. Not started.**

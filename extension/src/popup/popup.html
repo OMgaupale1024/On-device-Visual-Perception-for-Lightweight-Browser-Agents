@@ -77,7 +77,7 @@
       <div class="row"><span>Status</span><b id="action-status">–</b></div>
       <div class="row"><span>Target</span><b id="action-target">–</b></div>
       <button id="execute" class="btn hidden">EXECUTE SUGGESTED ACTION</button>
-      <p id="action-note" class="note">One guarded click on the suggested target. No other browser action. Success is not verified yet (Phase 8).</p>
+      <p id="action-note" class="note">One guarded click on the suggested target. No other browser action. Then verify the result using fresh local OCR.</p>
 
       <details id="previews">
         <summary>Compare local previews</summary>
@@ -93,6 +93,15 @@
       <p class="note">Both image previews stay local. Only guarded structured context is sent to localhost. Previews clear after 60 seconds, on re-analysis, or when this popup closes.</p>
     </section>
 
+    <section class="card" aria-live="polite">
+      <h2>Result verification</h2>
+      <div class="row"><span>Status</span><b id="verification-status">Waiting for action</b></div>
+      <div class="row"><span>Evidence</span><b id="verification-evidence">–</b></div>
+      <div class="row"><span>Before observation</span><b id="verification-before">–</b></div>
+      <div class="row"><span>Observation</span><b id="verification-observation">–</b></div>
+      <div class="row"><span>Verification privacy</span><b id="verification-privacy">–</b></div>
+      <p id="verification-note" class="note">Fresh local visual evidence after Execute.</p>
+    </section>
     <p id="error" class="error hidden"></p>
   </main>
   <script type="module" src="popup.js"></script>

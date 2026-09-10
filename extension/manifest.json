@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "EdgeSight",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "minimum_chrome_version": "116",
-  "description": "Local OCR and privacy filtering with a localhost planner (deterministic or NVIDIA NIM). Plans a click, then executes one guarded, user-triggered click on the chosen target; no other browser actions.",
+  "description": "Local OCR and privacy-safe planning, one guarded user-triggered click, then fresh browser-local visual outcome verification.",
   "content_security_policy": {
     "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self' data: http://127.0.0.1:8000; worker-src 'self'; img-src 'self' data:; style-src 'self'"
   },
@@ -15,6 +15,12 @@
     "service_worker": "src/background/service-worker.js",
     "type": "module"
   },
-  "permissions": ["activeTab", "scripting", "offscreen"],
-  "host_permissions": ["http://127.0.0.1/*"]
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*"
+  ]
 }

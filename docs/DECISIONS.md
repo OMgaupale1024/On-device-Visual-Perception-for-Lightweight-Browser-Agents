@@ -570,3 +570,44 @@ navigation, scroll, downloads or multi-step actions. Ticket state lives in the s
 worker; a worker teardown drops it, which is a safe fail-closed (re-analyze). Automated
 tests cover geometry, binding, policy, replay and element safety; the manual Chrome
 click demo (positive and stale/wrong-page negative) is pending.
+
+## D35 - Fresh browser-local visual outcome verification (Phase 8, 2026-09-11)
+
+A click acknowledgement cannot prove success. After Phase 7 EXECUTED, automatically
+observe again locally, then match only fresh safe pixel OCR. Extract the smallest shared
+Phase 1-5 transaction into background/local-observation.js so analysis and verification
+share capture, privacy, OCR, safe conversion and cleanup. Keep requestPlan and ticket
+creation exclusively in the analysis orchestrator. No provider/server request during
+verification, no recovery click or automatic replanning.
+
+Choose one attempt after 750 ms because the travel demo reveals success synchronously.
+Avoid speculative retry complexity; a slow transition produces NOT VERIFIED / Analyze
+again. Preserve the 45-second OCR bound; add five-second local API/redaction awaits and
+a 60-second verification deadline with abort/late-result rejection. No Phase 9 charts.
+
+Execution remains pinned to the old document. Verification instead requires the same
+intended active tab/window and explicitly permits a new URL/document. Pin consistency
+only within the new capture. Fresh UUID/timestamp/dimensions/OCR/visual IDs are mandatory;
+old observation identity or pre-dispatch capturedAt cannot pass. Tab checks before/after
+capture and after perception fail closed, but are not an atomic capture guarantee.
+
+Use a narrow fixed local spec: VISUAL_TEXT / Travel Request Submitted. Require the full
+phrase with word boundaries after NFKC/lowercase/whitespace/punctuation-spacing
+normalization; punctuation itself remains. No fuzzy OCR spell correction, isolated
+request/submitted, optional supporting phrase requirement or generic workflow language.
+Sort by bbox row then x; join at most three spatially adjacent fragments with explicit
+height-relative gap limits. Record contributing OCR confidence (0-1 or null), no
+uncalibrated minimum threshold or invented aggregate. Threshold tuning belongs to Phase 9.
+
+Reuse the builder's private immutable approval as proof of the final privacy gate.
+verify-visual-result.js matches only source=visual elements, never DOM fields or
+planner/server text. Return known expected text, observation IDs, contributing IDs/
+confidence, status/reason, actual privacy and timings only. Post-action previews/images,
+raw OCR/DOM/private values never reach popup results. No new storage or permissions.
+
+Show CLICK DISPATCHED -> VERIFYING -> VISUALLY VERIFIED / NOT VERIFIED automatically
+after explicit Execute. Retain safe result metadata only in worker memory so reopening
+the popup can display it; reset on new analysis, lose it on worker teardown. Reject
+concurrent Analyze/Execute. No end-to-end manual success claim until Chrome observes
+fresh OCR evidence. Current manual checks remain PENDING due to the Computer Use URL
+policy-enforcement stop; all automated tests passing is a separate code-complete claim.

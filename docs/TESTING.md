@@ -666,3 +666,115 @@ tests above against mocked chrome/DOM; that is not a substitute for the Chrome d
 Exact next task after review: **PHASE 8 — re-observation and visual verification: fresh
 capture after the Phase 7 click → new observation → local OCR/CV → confirm the outcome
 (e.g. "Travel Request Submitted"). DO NOT START PHASE 8 here.**
+
+## Phase 8 - fresh local visual outcome verification (2026-09-11)
+
+This section supersedes historical next-phase instructions above. Phases 0-8 are complete
+in code; Phase 9 has NOT started. Manual acceptance is recorded separately below.
+
+| Check | Actual result |
+| --- | --- |
+| npm test | PASS **207/207 extension entries**: original 152 unchanged + 55 Phase 8 |
+| server/.venv/Scripts/python.exe -m unittest discover -s tests -v, from server with relative .venv path | PASS **50/50 server methods**, unchanged code; sandbox escalation required for interpreter access |
+| npm run check | PASS JavaScript/test/script syntax, manifest, packaged OCR hashes |
+| node scripts/smoke-ocr.mjs .browser-test/synthetic.png | PASS actual Node/WASM cold/warm OCR; Continue retained and synthetic sensitive line withheld; not Chrome evidence |
+| Existing ignored .browser-test/smoke-phase6b.py | PASS temporary FastAPI HTTP deterministic 200/CLICK and ai missing-key 503 with correct headers; no provider request, processes stopped |
+| git diff --check | PASS |
+
+### New automated evidence
+
+verification.test.mjs: exact phrase, case, whitespace and terminal punctuation positive;
+full-phrase negative matrix (Travel Request, Submitted, Request Submitted, Pending,
+Failed, unrelated submitted, partial-word variants and inserted punctuation); shuffled
+horizontal/vertical reading order; reverse/distant/different-column/intervening text
+rejection; empty pixels; old identity/pre-dispatch timestamp rejection; semantic-only
+goal/field phrase cannot verify; server/planner/raw/forged approval rejection; actual
+confidence/null retention; fixed spec; tab/window/missing/active checks; one-attempt
+failures/no match; transaction/API deadlines and late-result rejection.
+
+verification-integration.test.mjs executes the REAL shared local pipeline with Chrome,
+Canvas and OCR API doubles. It proves distinct pre/post capture strings, a second OCR
+call using exactly the new image, changed decoded dimensions, new observation UUID and
+regenerated observation-scoped visual IDs; a new URL/document is accepted while each
+new capture pins its own document. Privacy inputs include five synthetic name/email/
+phone/employee-ID/password canaries even after the action: masks rerun, raw canaries
+are absent from result/popup payloads/logs, fragmented sensitive text revokes output.
+
+The worker integration records exactly capture -> OCR -> click -> capture -> OCR,
+VERIFYING then VERIFIED events, distinct old/new IDs, one click and one initial planner
+fetch. **Verification network calls = ZERO** (including /plan/NVIDIA/other endpoints).
+Blocked replay and concurrent Analyze/Execute add no capture, click or plan. Standalone
+verification tests also spy fetch with zero calls, and never dispatch an action.
+A pre-action OCR phrase plus a fresh-frame miss returns NO_VISUAL_MATCH, never success.
+Capture errors, OCR error, actual bridge OCR timeout (mocked timer advances the existing
+45s limit and verifies host closure), redaction error, fragmented-PII failure, missing/
+switched/during-capture tab changes, empty and no-match all fail safely without retry.
+The OCR timeout maps to PERCEPTION_FAILED under the unchanged Phase 4 contract.
+
+verification-popup.test.mjs runs the actual popup script against DOM/runtime doubles:
+CLICK DISPATCHED / VERIFYING / VISUALLY VERIFIED transition, expected evidence only,
+distinct IDs, SAFE only from metadata, friendly failure/Analyze again, unrelated message
+rejection and reopening from retained safe metadata without planning or execution.
+These are behavior tests, not screenshot/layout or native Chrome acceptance.
+
+### Policy tested
+
+Exactly one attempt after 750 ms; five-second local API/redaction waits, 45-second OCR
+bound and 60-second transaction bound. Fresh capture UUID/capturedAt (strictly after
+click dispatch acknowledgement), actual decoded dimensions and fresh OCR every time.
+No old URL/document gate after dispatch; require same intended active tab/window.
+Full normalized phrase with Unicode word boundaries, retained punctuation, no fuzzy
+spelling. Join <=3 consecutive OCR boxes in row/x order only with the documented
+spatial adjacency limits (AI_CONTEXT.md). Record actual confidence, no new threshold.
+Timing hooks are real numeric local measurements, not completed Phase 9 evaluation.
+
+### P8-M1 - manual positive Chrome demo: PENDING
+
+1. Start FastAPI on 127.0.0.1:8000 with --no-access-log and exact extension-origin CORS.
+   Prefer ai only with the user's privately supplied valid rotated NVIDIA key;
+   deterministic mode is sufficient to isolate Phases 7/8. Record actual mode.
+2. Reload EdgeSight 0.8.0, enable file access if required, reset Employee Travel Request
+   and keep all seven inputs and Continue visible.
+3. Goal: Check whether this travel request is complete and submit it.
+4. Analyze / Plan: confirm pixel OCR Ready, privacy SAFE, SafeAgentContext READY,
+   planner CLICK Continue. The guarded Action target is the before visual evidence.
+5. Press EXECUTE SUGGESTED ACTION. Observe actual Continue click and submitted page.
+6. Observe automatic VERIFYING and fresh capture/OCR. Result must be VISUALLY VERIFIED,
+   Evidence Travel Request Submitted, SAFE backed by the new privacy run, and a new
+   verification observation ID distinct from Before observation. The popup is the
+   primary judge display; no raw PII or DevTools is required to read this evidence.
+7. If investigating network, count no verification /plan or external requests; packaged
+   extension-local OCR messaging/assets are allowed. Do not upload screenshots.
+
+Actual this session: **PENDING, not performed to acceptance**. Chrome was launched via
+Computer Use, but the tool stopped because it could not reliably determine the current
+browser URL for policy enforcement. No further browser input was issued; extension
+reload, click and fresh visual verification were not observed. No manual planner mode
+can be reported. Separately, synthetic HTTP smoke used deterministic and ai missing-key
+modes; it is not the manual demo. No NVIDIA_API_KEY configured, no root/server .env,
+no credential contents accessed and no live provider call.
+
+### P8-M2 - manual negative Chrome demo: PENDING
+
+Analyze/Plan on the reset form, Execute, then switch to another tab immediately before
+the 750ms verification capture. Reopen the popup and expect NOT VERIFIED, TAB_CHANGED,
+Analyze again, and no unrelated page counted as evidence. The completed click is not
+undone; verification only observes. No replan or second click. This exact native Chrome
+path was NOT observed; automated switched-tab and no-match cases PASS above.
+
+### Prior manual statuses retained
+
+Phase 6B integrated NVIDIA Chrome PENDING. Phase 7 positive Chrome click PENDING.
+Phase 7 stale/wrong-page negative PENDING. Phase 6A historical user confirmation remains
+PASS with its original scope. Neither Phase 8 code nor API-double tests promote these.
+The full goal -> local perception/privacy -> safe AI planning -> click -> fresh local
+perception -> visual success loop remains a desired manual demonstration, not a pass.
+
+Known limits: a slow transition can miss the one frame; text confidence is uncalibrated;
+OCR/unknown-PII errors remain; text presence is not backend persistence or causal proof;
+non-atomic tab/capture checks and cross-origin activeTab permission loss can fail closed;
+worker teardown loses the transient result. No metrics dashboard or benchmark claims.
+
+Exact next implementation task: **PHASE 9 - SIH evaluation metrics**. NOT STARTED.
+Visual-context accuracy 25%, PII precision/recall 20%, redaction precision 20%, client
+resource utilization 20%, end-to-end latency 15%. No fabricated metrics.

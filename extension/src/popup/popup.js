@@ -22,7 +22,7 @@ const ACTION_REASON = {
   OUT_OF_VIEWPORT: 'Blocked: target is outside the viewport.',
   EXECUTION_FAILED: 'Blocked: action could not be executed.',
 };
-const GUARDED_NOTE = 'One guarded click on the suggested target. No other browser action. Success is not verified yet (Phase 8).';
+const GUARDED_NOTE = 'One guarded click on the suggested target. No other browser action. Then verify the result using fresh local OCR.';
 
 // Fixed, internal display names — safe to render as-is (not page-derived).
 const ROLE_LABEL = {
@@ -51,6 +51,7 @@ window.addEventListener('pagehide', clearPreviews);
 analyzeBtn.addEventListener('click', async () => {
   analyzeBtn.disabled = true;
   clearPreviews();
+  renderVerification({ status: 'WAITING' });
   hide(resultsEl);
   hide(errorEl);
   setStatus('Analyzing locally (up to 45s), then planning through localhost (up to 20s)…');
@@ -195,14 +196,21 @@ function renderAction(res) {
 
 executeBtn.addEventListener('click', async () => {
   executeBtn.disabled = true;
+  analyzeBtn.disabled = true;
   byId('action-status').textContent = 'Executing…';
   let res;
   try { res = await chrome.runtime.sendMessage({ type: MSG.EXECUTE_ACTION }); }
   catch { res = null; }
   hide(executeBtn);
+  analyzeBtn.disabled = false;
   if (res?.status === 'EXECUTED') {
     byId('action-status').textContent = 'CLICK DISPATCHED';
-    byId('action-note').textContent = 'Click dispatched. Task success is NOT verified yet (Phase 8).';
+    byId('action-note').textContent = 'One click dispatched. Result checked locally below.';
+    renderVerification(res.verification || { status: 'NOT_VERIFIED' });
+  } else if (!res) {
+    byId('action-status').textContent = 'Dispatch status unavailable';
+    byId('action-note').textContent = 'Analyze again before another action.';
+    renderVerification({ status: 'NOT_VERIFIED' });
   } else {
     byId('action-status').textContent = 'BLOCKED';
     byId('action-note').textContent = ACTION_REASON[res?.reason] || 'Blocked: action unavailable.';
@@ -239,3 +247,32 @@ function setStatus(text) { statusEl.textContent = text; }
 function show(el) { el.classList.remove('hidden'); }
 function hide(el) { el.classList.add('hidden'); }
 function showError(msg) { errorEl.textContent = msg; show(errorEl); }
+
+// Safe metadata only; no retained post-action screenshot or page-text preview.
+function renderVerification(result) {
+  const state = result?.status || 'WAITING';
+  byId('verification-status').textContent = state === 'VERIFIED' ? 'VISUALLY VERIFIED' :
+    state === 'VERIFYING' ? 'VERIFYING' : state === 'WAITING' ? 'Waiting for action' : 'NOT VERIFIED';
+  byId('verification-evidence').textContent = state === 'VERIFIED' ? 'Travel Request Submitted' : '–';
+  byId('verification-before').textContent = result?.actionObservationId || '–';
+  byId('verification-observation').textContent = result?.verificationObservationId || '–';
+  byId('verification-privacy').textContent = result?.privacy === 'SAFE' ? 'SAFE' : '–';
+  const reasons = ['TAB_CHANGED', 'CAPTURE_FAILED', 'PERCEPTION_FAILED', 'PRIVACY_FAILED',
+    'TIMEOUT', 'NO_VISUAL_MATCH', 'STALE_OBSERVATION', 'INVALID_SPEC'];
+  byId('verification-note').textContent = state === 'VERIFIED' ? 'Confirmed by fresh local pixel OCR.' :
+    state === 'VERIFYING' ? 'Click dispatched. Observing fresh pixels locally…' :
+    state === 'WAITING' ? 'Fresh local visual evidence after Execute.' :
+    (reasons.includes(result?.reason) ? result.reason + ' — ' : '') + 'Analyze again';
+  if (state === 'VERIFYING') {
+    byId('action-status').textContent = 'CLICK DISPATCHED';
+    byId('action-note').textContent = 'Verifying the result locally.';
+  }
+  if (state === 'VERIFYING') analyzeBtn.disabled = true;
+  else if (state !== 'WAITING') analyzeBtn.disabled = false;
+}
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (sender.id !== chrome.runtime.id || message?.type !== MSG.VERIFICATION_UPDATE) return false;
+  renderVerification(message.verification);
+  return false;
+});
+chrome.runtime.sendMessage({ type: MSG.GET_VERIFICATION }).then(renderVerification).catch(() => {});

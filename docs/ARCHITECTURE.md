@@ -1,4 +1,4 @@
-# EdgeSight architecture — Phase 7
+# EdgeSight architecture — Phase 8
 
 SIH26171 / ISRO: on-device visual perception for lightweight browser agents.
 
@@ -22,13 +22,18 @@ structured JSON POST http://127.0.0.1:8000/plan
 CLICK visual_N → LOCAL bbox for the SAME observation → screenshot px → CSS viewport px
  → document.elementFromPoint → clickable-element allowlist + safety validation
  → ONE guarded, single-use element.click()   (STOP → no browser action)
+================ FRESH LOCAL VERIFICATION (Phase 8, no network) ================
+750 ms → same intended active tab → NEW capture/observation → local OCR/privacy again
+ → approved safe visual text → full Travel Request Submitted phrase
+ → VISUALLY VERIFIED / NOT VERIFIED (no recovery action)
 ```
 
-Phase 6B calls one real server-side provider adapter; no image upload or re-observation.
+Phase 6B calls one real server-side provider adapter; no image upload.
 Phase 7 adds LOCAL execution of a validated CLICK: the server chooses WHAT (visual_N),
 the browser resolves WHERE/HOW from the local bbox and clicks once. No screenshot,
 selector, coordinate or code ever comes from the server. Designs are recorded in
-[PHASE_6B_PLAN.md](PHASE_6B_PLAN.md) and [PHASE_7_PLAN.md](PHASE_7_PLAN.md); the Phase
+[PHASE_6B_PLAN.md](PHASE_6B_PLAN.md), [PHASE_7_PLAN.md](PHASE_7_PLAN.md) and
+[PHASE_8_PLAN.md](PHASE_8_PLAN.md); the Phase
 6A request/action JSON and local approval architecture remain unchanged.
 
 ## Local observation, perception and privacy
@@ -197,7 +202,8 @@ visible rect containing the point, is not covered by an unrelated element, and i
 consistent with the OCR target. It performs exactly one `element.click()` and returns a
 fixed status/reason code — never DOM nodes, HTML or page text. No selector, coordinate or
 code from the server is ever used; no eval/Function/CDP/automation library. Phase 7 does
-NOT re-observe: the UI reports "CLICK DISPATCHED", not task success.
+NOT itself re-observe: its result is "CLICK DISPATCHED". The worker now follows a
+successful dispatch with the separate Phase 8 transaction below.
 
 ## Development network policy
 
@@ -239,3 +245,75 @@ manual Chrome click demo — real Analyze/Plan → Execute → the actual Contin
 clicked → submitted page appears — and the negative stale/wrong-page demo remain PENDING;
 the unpacked extension was not loaded in the coding shell. Deterministic mode is
 sufficient for that manual test when no key is available.
+
+## Phase 8 local observation and evidence boundary
+
+background/local-observation.js extracts the original Phase 1-5 transaction without
+copying it. Analysis uses its existing safe result envelope, then calls requestPlan
+and mints the ticket. Post-action verification calls the same transaction with an
+empty local goal. Neither local-observation.js nor verification modules have a network
+interface, planner call or ticket creation. Packaged OCR resources remain local.
+
+verify-after-click.js starts only after EXECUTED. Wait 750 ms, then make one observation.
+Before capture require the action tab to exist, retain its intended window, and be the
+active tab in the current window. The shared transaction rechecks active tab before
+and after capture; verification checks again after perception. A switched/missing tab
+returns NOT_VERIFIED / TAB_CHANGED. No unrelated page can be accepted as evidence.
+Post-action navigation is allowed: never use the old documentId or URL as a gate.
+Snapshot the current document, pin the within-capture second snapshot to that new
+document and retain the original consistency comparison. A transition during capture
+fails safely. Checks are not atomic and cannot detect every away-and-back tab switch.
+
+Each invocation captures fresh PNG bytes, mints obs_<UUID>, records capturedAt, decodes
+fresh dimensions and invokes OCR again. visual_N IDs are regenerated from those pixels
+and scoped to the new observation. The matcher rejects equal action/verification IDs
+or capturedAt <= dispatchedAt. No old image, bbox, OCR or agent context is an input to
+post-action observation. Only local tab binding metadata is carried across the action.
+
+Privacy runs again: field classification, transient local value collection, Canvas
+redaction, semantic allowlist, OCR geometry/known-value/obvious-PII filtering and final
+SafeAgentContext guard. The verifier consumes only the already-approved frozen context;
+only source=visual items are searched. Approval checking uses the existing local
+prepareAgentContextForTransport capability check but invokes no transport. DOM fields,
+planner reasons and server text cannot supply success evidence. No post-action image,
+raw OCR, DOM, private value or arbitrary matched text enters the result/popup message.
+
+Local specification: VISUAL_TEXT / Travel Request Submitted. Normalize NFKC, case,
+whitespace and spacing around common punctuation; retain punctuation. Require the full
+phrase with Unicode word boundaries, no spelling fuzziness or partial phrase matches.
+A punctuation mark inserted between the words does not match. Supporting text is not
+required. Order boxes top-to-bottom into fixed rows (50% vertical overlap), then by x.
+Join at most three consecutive spatially adjacent items: same-row gap <=2 maximum
+heights, or successive lines with horizontal overlap and vertical gap <=1.5 maximum
+heights. Do not join unrelated columns or distant boxes. Confidence is the existing
+actual 0-1/null value per contributing ID, with no calibrated score/threshold claim.
+
+Result metadata: VERIFIED / NOT_VERIFIED; fixed reason on failure; old/new observation
+IDs; known expected phrase, source, contributing visual IDs/confidences; actual SAFE
+privacy only after a successful privacy rerun; numeric timing hooks. No network use.
+Failure reasons: NO_VISUAL_MATCH, CAPTURE_FAILED, PERCEPTION_FAILED, PRIVACY_FAILED,
+TAB_CHANGED, TIMEOUT; defensive matcher gates STALE_OBSERVATION and INVALID_SPEC.
+OCR bridge retains its existing combined error/timeout contract (PERCEPTION_FAILED),
+while local diagnostics distinguish OCR_TIMEOUT. No uncontrolled page-derived errors.
+
+One attempt, no retries. Delay 750 ms suits the synchronous demo transition; slower
+pages can return no match. Five seconds bounds each local API/redaction await, OCR has
+its existing 45-second bound, and 60 seconds bounds the verification transaction.
+Abort prevents further stages and late acceptance; already-running platform work may
+finish before resource/reference cleanup. No secure memory erasure claim.
+Actual counters: epoch dispatch acknowledgement/completion timestamps; monotonic actual
+delay, capture, perception (includes visual filtering), matching and total duration.
+Unavailable failure-stage timings are omitted. These are hooks, not Phase 9 metrics.
+
+Worker rejects overlapping Analyze/Execute. Popup displays CLICK DISPATCHED -> VERIFYING
+-> VISUALLY VERIFIED / NOT VERIFIED, known expected evidence, old/new observation IDs
+and actual privacy. It preserves the pre-action guarded Continue display. Only the safe
+verification metadata is retained in worker memory and read when the popup reopens;
+new analysis resets it, worker teardown loses it. No storage or new permissions.
+
+Phase 8 code is automated-test verified; positive and negative Chrome runs remain
+PENDING. The current session launched Chrome but Computer Use stopped because the
+browser URL could not be reliably determined for policy enforcement. No actual Phase 7
+click or Phase 8 visual verification was observed. A visible phrase at capture time is
+not proof of backend persistence, causality, or arbitrary-goal completion. English OCR,
+unknown-PII limitations and possible cross-origin activeTab revocation remain.

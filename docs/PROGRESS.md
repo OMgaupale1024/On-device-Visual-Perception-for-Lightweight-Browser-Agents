@@ -1,47 +1,46 @@
 # EdgeSight progress
 
-Current phase: **Phase 7 — safe, visually grounded browser execution. Complete in code;
-the manual Chrome click demo is pending (unpacked extension not loaded in the coding
-shell). Phase 6B end-to-end AI verification also still pending — no NVIDIA_API_KEY was
-configured this session, though the NVIDIA endpoint was verified out-of-band.**
+**Phases 0-8 complete in code. Phase 8 manual Chrome verification PENDING.**
+Checkpoint 2026-09-11. No Phase 9 work.
 
-Phases 0–5 are implemented. **Phase 6A manually Chrome-verified by the user**:
-POST /plan → FastAPI HTTP 200, 7 fields, sensitiveFieldCount=5,
-redactedRegionCount=5, rawPiiIncluded=false, privacy.status=safe, all five role
-placeholders, Bengaluru/Conference retained, deterministic planner working.
-No unreported detailed checks are inferred.
+Phase 6A remains user Chrome-verified: POST /plan -> FastAPI 200, seven fields, five
+sensitive fields/redacted regions, privacy safe/rawPiiIncluded=false, five role
+placeholders, Bengaluru/Conference retained and working deterministic planner.
+Unreported detailed checks are not inferred.
 
-Phase 6B uses one NVIDIA NIM adapter (nvidia/nemotron-3.5-lightning-30b-a3b via the
-OpenAI-compatible Chat Completions endpoint), minimized and revalidated provider input
-with semantic/pixel provenance, fixed policy, strict model-output/visual-ID validation
-and server-owned observation binding.
-Deterministic default mode is unchanged. AI mode never silently falls back.
-Mode header updates the existing popup; JSON request/action contracts stay unchanged.
+Phase 6B retains the single NVIDIA NIM adapter, minimized guarded structured context,
+strict output validation and explicit ai mode with no fallback. Its integrated NVIDIA
+server/Chrome run is PENDING; no NVIDIA_API_KEY configured in this shell, no provider call.
 
-Phase 7 executes a validated CLICK locally: the server chooses WHAT (visual_N); the
-browser converts the LOCAL screenshot-pixel bbox to a CSS viewport point, resolves the
-element via elementFromPoint against a small clickable allowlist, validates it, and
-performs ONE guarded, single-use element.click() bound to the same observation/tab/
-document. STOP does nothing. An explicit EXECUTE SUGGESTED ACTION button triggers it;
-the server never supplies selectors/coordinates/code. No re-observation or success
-verification (Phase 8); the UI reports only "CLICK DISPATCHED". Still no typing/
-navigation/scroll/downloads/multi-step actions, metrics, Pi or provider routing.
+Phase 7 executes one user-triggered visually grounded click using a local single-use
+observation/tab/document ticket. Positive and stale/wrong-page Chrome demos remain PENDING.
 
-Tests: **50/50 server methods**, **152/152 extension entries** (32 new Phase 7:
-geometry incl. non-1:1 pixel density, observation/target binding, tab/page/stale
-policy, replay, and element-safety against a DOM stub), all prior regressions. 20
-provider contamination cases block directly and through /plan with zero provider calls;
-browser transport contamination regressions also pass. 23 malformed/malicious
-model-output cases reject. Syntax/assets/dependency checks and genuine cold/warm OCR
-smoke pass. Real local HTTP checks: deterministic 200, AI missing-key 503 with explicit
-mode; no provider call. See TESTING for evidence.
+Phase 8 automatically waits 750 ms after successful dispatch, captures the same intended
+active tab again, creates a new observation, reruns local OCR/privacy/redaction/filtering,
+and checks only approved pixel OCR for 'Travel Request Submitted'. New URL/document is
+allowed; old pixels/context never prove success. One attempt, 60s total bound, 45s OCR,
+5s API bounds. No /plan, NVIDIA or remote calls, no replan or second click. Exact matching,
+bbox reading order, actual confidence and timing policy are in AI_CONTEXT.md.
+Popup result: Waiting -> VERIFYING -> VISUALLY VERIFIED / NOT VERIFIED + Analyze again,
+expected evidence, distinct before/after observation IDs and actual privacy status.
 
-Known limitations: no live model/account verification, imperfect OCR and unknown-PII
-detection, prompt policy does not guarantee correct model choices, fixed safe reason
-vocabulary, text-only model input, CORS not authentication. Phase 7 clicks only
-button-like targets and does not verify task success. Manual Chrome click demo pending.
-No model/Chrome timing claims. Starlette's test adapter deprecation warning is non-failing.
+Phase 8 positive and negative manual demos remain PENDING: Chrome was launched but
+Computer Use stopped because it could not reliably determine the browser URL to enforce
+policy. No extension reload/click/verification was observed, no manual pass claimed.
 
-Exact next task after Phase 7 review: **Phase 8 — re-observation and visual verification:
-fresh capture after the click → new observation → local OCR/CV → confirm the outcome
-(e.g. "Travel Request Submitted"). Not started.**
+Automated results: **207/207 extension entries** (55 new Phase 8 + all 152 prior),
+**50/50 server methods**, syntax/manifest/packaged OCR integrity and diff check PASS.
+Genuine cold/warm Node/WASM synthetic OCR smoke PASS; real local FastAPI smoke confirms
+deterministic 200/CLICK and ai missing-key 503 with correct headers, no provider call.
+Tests prove fresh capture/OCR/identity, document replacement, privacy canaries absent
+from output/popup/logs, zero verification fetch, bounded errors/no retries, phrase-only
+matching and popup progress/reopening. They are not a real Chrome acceptance run.
+
+Limits: one capture may miss slow transitions, OCR/unknown-PII errors, English text-only
+phrase policy, no backend-persistence proof, non-atomic tab/capture checks, cross-origin
+permission failures, transient state lost on worker restart. Existing model limitations
+remain. No new side effects/provider/Pi or general automation.
+
+Exact next implementation task: **PHASE 9 - SIH evaluation metrics**. NOT STARTED.
+Official weights: visual-context accuracy 25%, PII precision/recall 20%, redaction
+precision 20%, client resources 20%, end-to-end latency 15%. No fabricated values.
