@@ -1,33 +1,32 @@
 # EdgeSight progress
 
-Current phase: **Phase 6A — privacy-safe server transport + deterministic planner,
-complete in code; Chrome/server acceptance pending.** Stopped for review.
+Current phase: **Phase 6B — privacy-safe AI planner. Complete in code; real-provider
+manual verification pending because no server-side key was available.**
 
-- Phases 0–5 implemented: foundation, MV3 observation/capture, sensitive detection,
-  local redaction/guard, real browser-local OCR/WASM, SafeAgentContext.
-- User confirmed the current Chrome flow works before Phase 6A. Only that general
-  confirmation is recorded; detailed unreported manual checks remain pending.
-- Phase 6A: private context approval, structured-only transport, five-second HTTP
-  bound, strict FastAPI/Pydantic server, deterministic CLICK/STOP suggestions,
-  observation/visual-ID binding, client response validation and small popup panel.
-- Images stay local. No LLM/VLM, browser action, re-observation, metrics dashboard,
-  cloud deployment or subsequent phase work.
+Phases 0–5 are implemented. **Phase 6A manually Chrome-verified by the user**:
+POST /plan → FastAPI HTTP 200, 7 fields, sensitiveFieldCount=5,
+redactedRegionCount=5, rawPiiIncluded=false, privacy.status=safe, all five role
+placeholders, Bengaluru/Conference retained, deterministic planner working.
+No unreported detailed checks are inferred.
 
-Validation: extension/full regression **115/115** Node test entries, including the
-original 7/7 classifier assertions; server **24/24** unittest methods with parameterized
-subcases. All 20 transport contamination cases block with zero fetch calls.
-Syntax/manifest/OCR asset checks and real localhost health/CLICK/STOP smoke pass.
-See TESTING for exact evidence and limits.
+Phase 6B adds one OpenAI Responses adapter (gpt-4.1-mini-2025-04-14), minimized and
+revalidated provider input with semantic/pixel provenance, fixed policy, strict
+model-output/visual-ID validation and server-owned observation binding.
+Deterministic default mode is unchanged. AI mode never silently falls back.
+Mode header updates the existing popup; JSON request/action contracts stay unchanged.
+No images, action execution, re-observation, metrics, Pi or provider routing.
 
-Next manual review: start server, reload extension, Analyze / Plan on the travel
-demo, inspect POST body for absence of the five fake values, confirm actual Continue
-ID and Planner decision: CLICK Continue, and confirm no browser action occurs.
-This is **PENDING**, not marked passed.
+Tests: **50/50 server methods**, **120/120 extension entries**, all prior
+regressions. 20 provider contamination cases block directly and through /plan
+with zero provider calls; browser transport contamination regressions also pass.
+23 malformed/malicious model-output cases reject. Syntax/assets/dependency checks
+and genuine cold/warm OCR smoke pass. Real local HTTP checks: deterministic 200,
+AI missing-key 503 with explicit mode; no provider call. See TESTING for evidence.
 
-Known limits: static travel demo, English OCR and conservative known-PII privacy
-rules, no image upload, no arbitrary goal understanding, no execution-time page
-freshness check. Local CORS is not authentication. No new Chrome timings are claimed.
+Known limitations: no live model/account verification, imperfect OCR and unknown-PII
+detection, prompt policy does not guarantee correct model choices, fixed safe reason
+vocabulary, text-only model input, CORS not authentication. No model/Chrome timing
+claims. Starlette's test adapter deprecation warning remains non-failing.
 
-Exact next implementation task after review: **Phase 6B — ONE real server-side
-LLM/VLM planner**, preserving the same privacy-safe request and strict response schema.
-Do not start Phase 7 or Phase 8. Last updated: 2026-09-10.
+Exact next task after Phase 6B review: **Phase 7 — safe browser action execution
+using the current observation's visual bounding boxes. Not started.**

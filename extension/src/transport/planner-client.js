@@ -25,6 +25,7 @@ export async function requestPlan(context, { fetchImpl = globalThis.fetch,
   catch { return { status: 'BLOCKED', privacy: 'BLOCKED', bytes: 0, reason: 'Privacy gate blocked planning.' }; }
   const bytes = new TextEncoder().encode(body).length;
   const base = { privacy: 'SAFE', bytes };
+  let plannerMode = 'unknown';
   const controller = new AbortController();
   let timer;
   let timedOut = false;
@@ -38,15 +39,17 @@ export async function requestPlan(context, { fetchImpl = globalThis.fetch,
       const response = await fetchImpl(PLANNER_CONFIG.url, { method: 'POST',
         headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal,
         credentials: 'omit', redirect: 'error', cache: 'no-store', referrerPolicy: 'no-referrer' });
-      if (!response.ok) return { ...base, status: response.status >= 500 ? 'UNAVAILABLE' : 'REJECTED',
+      const mode = response.headers?.get('X-EdgeSight-Planner');
+      plannerMode = ['ai', 'deterministic'].includes(mode) ? mode : 'unknown';
+      if (!response.ok) return { ...base, plannerMode, status: response.status >= 500 ? 'UNAVAILABLE' : 'REJECTED',
         reason: response.status >= 500 ? 'Planner unavailable.' : 'Plan rejected.' };
       try {
         const plan = validatePlannerResponse(await response.json(), context);
-        return { ...base, status: 'READY', plan };
-      } catch { return { ...base, status: 'REJECTED', reason: 'Plan rejected.' }; }
+        return { ...base, plannerMode, status: 'READY', plan };
+      } catch { return { ...base, plannerMode, status: 'REJECTED', reason: 'Plan rejected.' }; }
     };
     return await Promise.race([operation(), deadline]);
   } catch {
-    return { ...base, status: 'UNAVAILABLE', reason: timedOut ? 'Planner unavailable: timeout.' : 'Planner unavailable.' };
+    return { ...base, plannerMode, status: 'UNAVAILABLE', reason: timedOut ? 'Planner unavailable: timeout.' : 'Planner unavailable.' };
   } finally { clearTimeout(timer); }
 }

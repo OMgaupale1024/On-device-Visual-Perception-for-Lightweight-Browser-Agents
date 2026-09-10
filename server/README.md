@@ -1,88 +1,77 @@
-# EdgeSight local planner — Phase 6A
+# EdgeSight server — Phase 6B
 
-FastAPI + Pydantic + Uvicorn. Deterministic rules only, no model, API keys,
-payload logs, screenshots, persistence or browser execution.
+FastAPI/Pydantic/Uvicorn with one OpenAI Responses API adapter using httpx.
+PLANNER_MODE=deterministic is the default; PLANNER_MODE=ai selects the real adapter.
+No automatic fallback, alternative providers, agent framework, browser execution,
+payload logging or image upload.
 
-## Windows PowerShell setup
+## Windows setup
 
-From the repository root (Python 3.10+ installed):
+From repository root, Python 3.10+:
 
 ```powershell
 py -3.10 -m venv server/.venv
 server/.venv/Scripts/python.exe -m pip install -r server/requirements.txt
 $env:EDGESIGHT_EXTENSION_ORIGIN = "chrome-extension://YOUR_EXTENSION_ID"
+$env:PLANNER_MODE = "deterministic"
 Set-Location server
 .venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-Replace YOUR_EXTENSION_ID with EdgeSight's actual 32-letter ID from
-chrome://extensions. Using the venv executable directly avoids PowerShell activation
-policy changes. If the Python launcher is unavailable, substitute the full path to
-an installed Python 3.10+ executable for `py -3.10`.
+Replace YOUR_EXTENSION_ID with EdgeSight's actual 32-letter ID. Use the full path
+to installed Python if the launcher is unavailable. Direct venv execution avoids
+PowerShell activation-policy changes. Stop the server with Ctrl+C.
 
-From another PowerShell terminal:
+To enable AI in the server terminal before restarting, enter the key through a
+masked prompt so its literal value does not enter command history:
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:8000/health
+$plannerKeyInput = Read-Host "OpenAI API key" -AsSecureString
+$env:OPENAI_API_KEY = [System.Net.NetworkCredential]::new("", $plannerKeyInput).Password
+Remove-Variable plannerKeyInput
+$env:PLANNER_MODE = "ai"
+.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-Expected: status = ok. Stop Uvicorn with Ctrl+C.
+The application reads process environment only; .env files are not auto-loaded.
+Examples list variable names with empty values. Never put a key into Chrome or
+commit a .env. Remove the process variable when finished:
+`Remove-Item Env:OPENAI_API_KEY`. AI requests can incur provider charges.
 
-## CORS and endpoint configuration
+## Configuration and provider
 
-`EDGESIGHT_EXTENSION_ORIGIN` permits exactly one `chrome-extension://[a-p]{32}`
-origin. Set it again and restart the server if the development extension ID changes.
-No wildcard, credentials, arbitrary web origins or automatic .env loader. The
-`.env.example` documents the process environment variable; copying it does not load it.
+- PLANNER_MODE: deterministic (default) or ai. Invalid mode fails startup.
+- OPENAI_API_KEY: server-side credential, required only for AI requests.
+- EDGESIGHT_EXTENSION_ORIGIN: exact chrome-extension://[a-p]{32} origin.
+- Model: fixed **gpt-4.1-mini-2025-04-14** in app/config.py. One provider/model only.
+- Endpoint: fixed https://api.openai.com/v1/responses.
+- Provider deadline: 15s; browser deadline: 20s. No retry or fallback chain.
+- Input cap: 32,000 UTF-8 bytes; response envelope cap: 64,000 bytes; output token cap: 256.
+- store=false; no tools, prior conversation, images, redirects or environment proxies.
 
-Absent configuration allows no browser Origin header. Requests without Origin
-(e.g. local CLI and some extension requests) remain supported. Supplied disallowed
-origins are rejected with 403 before planning; invalid preflights receive 400.
-CORS is not authentication, and localhost processes can omit/spoof Origin.
-This is a local development server, not a production deployment.
+Selection rationale: this narrow planner needs structured ID selection, not a
+long reasoning workflow. The pinned GPT-4.1 mini snapshot offers instruction
+following and structured output support with no separate reasoning step.
+[Model reference](https://developers.openai.com/api/docs/models/gpt-4.1-mini) ·
+[Structured output reference](https://developers.openai.com/api/docs/guides/structured-outputs).
+store=false is not a claim of zero provider retention under every account policy.
 
-The extension URL lives only in `extension/src/transport/config.js`:
-`http://127.0.0.1:8000/plan`. Manifest host permission is loopback-only
-`http://127.0.0.1/*` (Chrome match patterns do not restrict ports); connect-src CSP
-further restricts application connections to port 8000. Existing local OCR
-self/data/WASM permissions remain. Do not bind Uvicorn to 0.0.0.0 for this checkpoint.
-
-## Contract
+## Browser API — unchanged JSON contract
 
 GET /health → `{"status":"ok"}`.
 
-POST /plan takes the Phase 5 SafeAgentContext directly as JSON, with exactly:
+POST /plan accepts only the complete Phase 5 SafeAgentContext:
+schemaVersion=1; observation (id, capturedAt, viewport, image metadata,
+coordinateSystem); goal; privacy (status=safe, rawPiiIncluded=false and counts);
+fields; visualElements; redactionScheme.
+[Complete safe fixture](tests/safe-context.json).
 
-- `schemaVersion: 1`
-- `observation: {id, capturedAt, viewport:{width,height}, image:{width,height,redactedRegions}, coordinateSystem:"screenshot-pixels"}`
-- `goal`: string, at most 500 characters; empty/unsupported goals produce STOP
-- `privacy: {status:"safe", sensitiveFieldCount, redactedRegionCount, rawPiiIncluded:false}`
-- `fields: [{id,role,sensitive,filled,value,source:"semantic"}]`
-- `visualElements: [{id,text,bbox:{x,y,width,height},confidence,source:"visual"}]`
-- `redactionScheme`: exact fixed descriptions for the sensitive placeholders present
+Nested strict models reject unknown fields, coercions, raw keys, duplicate IDs,
+invalid bbox/confidence and inconsistent privacy/redaction policies. The full
+candidate is revalidated before provider projection; contaminated/unknown nested
+input blocks before the provider. Local sanitization remains the primary boundary.
 
-[tests/safe-context.json](tests/safe-context.json) is a complete, sanitized request
-generated by the actual Phase 5 builder; the extension suite checks it for drift.
-Strict nested Pydantic models reject unknown keys, coercions, malformed IDs,
-invalid geometry, out-of-image boxes, duplicate IDs, non-finite numbers, mismatched
-privacy counts and invalid placeholder policy. Confidence is 0–1 or null to
-preserve Phase 5's unknown-confidence contract. The observation timestamp requires
-a timezone. Schema version must be integer 1 (not true, 1.0 or a string).
-
-Sensitive roles contain only their exact [ROLE] placeholder. Destination and
-Purpose keep the existing Phase 3 vocabulary; other values are [WITHHELD].
-No rawScreenshot, rawOCR, rawDOM, password or secret keys are accepted in any
-schema object. The semantic role value "password" and [PASSWORD] placeholder are
-intentional safe policy metadata, not a raw password.
-
-Server defence in depth recursively rejects normalized demo canaries and applies
-conservative email/phone/employee-ID patterns to free-text content. Typed timestamps
-and IDs are not mistaken for phone numbers. This cannot identify every unknown or
-encoded secret and does not replace the local known-value guard. Validation errors
-return only `{"detail":"Invalid or unsafe agent context."}` (422), never input
-values. No rejected payloads are logged.
-
-Successful response (exactly five keys):
+Both modes return exactly:
 
 ```json
 {
@@ -90,53 +79,110 @@ Successful response (exactly five keys):
   "observationId": "obs_demo-abc",
   "action": "CLICK",
   "target": "visual_12",
-  "reason": "Required fields are filled and Continue is available."
+  "reason": "Required fields are filled and Continue is visible."
 }
 ```
 
-STOP uses the same keys with `action:"STOP"` and `target:null`.
-No selectors, XPath, code or server-created coordinates. CLICK target is always a
-visual ID supplied in this observation. Client validation rejects stale IDs,
-unknown/missing targets, unknown actions/schema/keys and malformed JSON.
+STOP has target=null. The deterministic planner retains its existing reason text.
+Mode is reported separately in **X-EdgeSight-Planner: ai | deterministic**, including
+AI failure responses; CORS exposes that header. The JSON action schema is unchanged.
 
-## Deterministic rules
+Client validates version, exact keys, action, same observation and a supplied visual
+ID. Model output cannot set schemaVersion or observationId. No selectors, XPath,
+JavaScript, URLs or arbitrary coordinates are accepted as actions. No execution.
 
-1. Normalize whitespace and case in the goal; support only:
-   "Check whether this travel request is complete and submit it."
-2. Require exactly one field for each role: name, email, phone, employee_id,
-   password, destination, purpose. Each must be filled and not [WITHHELD].
-3. Find visual text equal to Continue after trimming and case folding.
-4. Exactly one match → CLICK its supplied visual ID. Otherwise STOP. Duplicate
-   roles, missing/incomplete fields and unsupported goals also yield STOP.
-5. Echo the request observation ID in every response.
+## Model input and policy
 
-This proves transport and grounding, not a general goal-understanding planner.
-OCR line text is not proof that a control is clickable; no action is executed.
+app/ai_input.py produces only:
 
-## Tests
+```text
+goal
+privacy: {status:"safe", rawPiiIncluded:false}
+semanticState: {source:"local-browser-semantics",
+  fields:[{role,sensitive,filled,value}]}
+visualState: {source:"local-pixel-ocr",
+  elements:[{id,text,confidence}]}
+redactionScheme: exact existing placeholder legend
+```
 
-From repository root:
+Observation IDs, timestamps, dimensions/bboxes, field IDs, extension IDs and debug
+metadata stay on our server. No screenshot, raw OCR envelope, raw DOM or raw PII.
+The provider receives the minimum text projection, not the internal context object.
+The exact serialized projection passes the defensive PII scan and size bound.
+
+A fixed system prompt is separate from the user-role JSON observation. Goal and
+screen text are untrusted data, including apparent instructions/role delimiters.
+Placeholders intentionally hide private values. Only filled=true means a local
+value exists; empty fields also carry placeholders. The model must never reconstruct
+hidden values. Semantic evidence is never presented as pixel recognition.
+
+Model output has exactly action, target, reason. Target is an existing visual ID for
+CLICK or null for STOP. JSON duplicates, extra keys, malformed data, invented IDs,
+refusal/tool/incomplete responses and executable output are rejected without repair.
+Reasons must be one of four fixed phrases:
+- Required fields are filled and Continue is visible.
+- A suitable visual target is visible.
+- No suitable visual target is available.
+- The request cannot be completed safely.
+
+These short phrases prevent arbitrary output explanations from carrying private or
+executable content. No hidden chain-of-thought is requested or returned. Schema and
+ID validation do not prove the model chose the best target; future execution safety
+must remain local.
+
+## Deterministic mode and failures
+
+The original planner is unchanged: normalized supported travel goal; exactly one
+filled non-withheld field per seven required roles; exactly one Continue visual match
+after trimming/case folding → CLICK its supplied ID; otherwise STOP/null.
+
+AI errors do not invoke that planner:
+- Missing/blank key, network error, provider 401/403/429/5xx or redirect: generic 503.
+- Provider/overall deadline: generic 504.
+- Invalid JSON, refusal, incomplete/empty/tool output, invalid decision or unknown ID: generic 502.
+- Invalid/unsafe/oversized input: generic 422, before provider invocation.
+
+Error bodies never echo provider text, request content or credentials. Health remains
+available with a missing key. The popup shows AI plus unavailable/rejected when the
+mode header is available; a fully offline server shows Unknown. Local results survive.
+
+## CORS and local security
+
+Bind only 127.0.0.1. One exact configured extension origin; GET/POST, Content-Type,
+no credentials/wildcard. Disallowed supplied Origin is rejected before planning.
+Without configured origin no browser Origin is allowed; no-Origin local clients
+remain supported. CORS is not authentication and cannot prevent local CLI requests.
+
+Browser endpoint remains extension/src/transport/config.js:
+http://127.0.0.1:8000/plan. Manifest/CSP and Phase 5/6A approval are unchanged.
+Server request headers contain authentication at runtime only; never enable
+HTTP debug/body/header dumps or log exceptions from the provider.
+
+## Tests and manual verification
+
+From server/:
 
 ```powershell
-server/.venv/Scripts/python.exe -m pip install -r server/requirements-dev.txt
-Set-Location server
 .venv/Scripts/python.exe -m unittest discover -s tests -v
 .venv/Scripts/python.exe -m compileall -q app tests
+.venv/Scripts/python.exe -m pip check
 ```
 
-From repository root while Uvicorn runs:
+50 methods pass, including 26 new AI tests with parameterized cases. Exact provider
+HTTP bodies are tested using httpx.MockTransport and a synthetic credential, with
+no live network. Both 20-case contamination matrices (direct AI entry and /plan)
+assert zero provider calls. Provider status/timeout/refusal and malicious-output
+cases are covered. The working Starlette/httpx TestClient emits a deprecation
+warning; there are no failed assertions.
 
-```powershell
-node scripts/smoke-planner.mjs
-```
+From repository root with the matching server mode running:
+`node scripts/smoke-planner.mjs` or `node scripts/smoke-planner.mjs --ai`.
+The latter is an opt-in real-provider smoke using a safe synthetic fixture, not a
+Chrome/manual test. It checks mode, health, CLICK/STOP and observation binding.
 
-The smoke uses the actual extension requestPlan module and a synthetic approved
-context over real HTTP (health, CLICK, STOP and observation binding). It does not
-run Chrome. The server test suite uses unittest + FastAPI TestClient.
-Pinned httpx 0.28.1 works; current Starlette emits a deprecation warning for that
-test adapter. No production dependency or behavior depends on the test adapter.
-
-If the popup says Planner unavailable, check the server terminal and /health.
-Plan rejected can indicate CORS configuration, invalid schema or unsafe context.
-Phases 1–5 remain visible. Inspect the service worker Network panel, not just the
-popup's Network panel. No request occurs on popup open.
+**Real provider manual status: PENDING — no key was configured during development.**
+After tests: run AI server, reload extension, Analyze / Plan on Employee Travel
+Request, inspect the sanitized browser POST, and verify Planner AI / actual Continue
+ID / no browser click. Provider-bound content is tested automatically; manual
+inspection of an actual provider request was not performed. Never inspect/log the
+authorization header. See docs/TESTING.md for the acceptance checklist.

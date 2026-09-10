@@ -1,4 +1,4 @@
-# EdgeSight architecture — Phase 6A
+# EdgeSight architecture — Phase 6B
 
 SIH26171 / ISRO: on-device visual perception for lightweight browser agents.
 
@@ -14,13 +14,15 @@ Safe semantics + safe visual items + observation metadata + guarded goal
  → SafeAgentContext → FINAL LOCAL PRIVACY GUARD + immutable approval
 ================ NETWORK BOUNDARY ================
 structured JSON POST http://127.0.0.1:8000/plan
- → strict FastAPI/Pydantic validation → deterministic planner
+ → strict FastAPI/Pydantic validation → deterministic planner OR explicit AI mode:
+   minimized/revalidated safe input → provider privacy guard → OpenAI Responses LLM
+   → untrusted structured output → strict action/visual-ID validator
  → observation-bound CLICK / STOP → client validation → suggestion display
 ```
 
-No model inference on the server, image upload, browser execution or re-observation
-is implemented in Phase 6A. Design inspection is recorded in
-[PHASE_6A_PLAN.md](PHASE_6A_PLAN.md); chronological decisions remain in DECISIONS.
+Phase 6B calls one real server-side provider adapter; no image upload, browser
+execution or re-observation. Design is recorded in [PHASE_6B_PLAN.md](PHASE_6B_PLAN.md);
+the Phase 6A request/action JSON and local approval architecture remain unchanged.
 
 ## Local observation, perception and privacy
 
@@ -38,7 +40,8 @@ regions; sanitized preview masks all known sensitive fields.
 
 `privacy/redact.js` privately mints a WeakMap image handle only after Canvas redaction.
 Raw PNG strings and forged handles cannot enter its guarded package builder.
-The image accessor remains local; Phase 6A transport never imports it.
+The image accessor remains local; transport never imports it. Phase 6B is an LLM
+over sanitized structured visual context, not a VLM integration.
 
 Tesseract.js 6.0.1, WASM core 6.1.2 and packaged English data run in an offscreen
 Web Worker. Raw PNG bytes/dimensions are its only inference input; no DOM labels,
@@ -90,7 +93,8 @@ boundary cannot prevent a future developer deliberately removing it.
 ## HTTP and response boundary
 
 POST uses JSON content type, no credentials/referrer/cache and redirect:error.
-Five seconds bounds fetch and body parsing, with AbortController cleanup.
+Twenty seconds bounds fetch and body parsing, with AbortController cleanup;
+provider work is independently bounded to fifteen seconds.
 HTTP 4xx, malformed JSON and invalid plans return REJECTED; network/5xx/timeout
 return UNAVAILABLE. Local Phase 1–5 output remains available in either case.
 
@@ -112,6 +116,50 @@ XPath, JavaScript, arbitrary coordinates or execution calls. IDs are scoped to t
 submitted observation; they are not stable after another observation. Actual page
 freshness at future execution time remains Phase 7's responsibility.
 
+## Phase 6B provider boundary
+
+PLANNER_MODE chooses deterministic (default, original logic unchanged) or ai.
+There is no fallback when AI fails. The only AI adapter uses OpenAI Responses API
+with fixed gpt-4.1-mini-2025-04-14, strict JSON schema, no tools/conversation,
+store=false, bounded output, redirects/retries/environment proxies disabled.
+httpx is the sole HTTP dependency; no SDK, routing or agent framework.
+
+The AI entry accepts a JSON-shaped candidate, takes a JSON snapshot and revalidates
+the complete SafeAgentContext BEFORE projection. Nested extra keys, fake PII and
+model-instance validation bypasses block before provider invocation. ai_input.py
+then explicitly copies only goal, safe privacy flags, semantic role/sensitive/filled/
+safe value fields, pixel-OCR ID/text/confidence, and the existing redaction legend.
+It guards the exact serialized JSON again and rejects inputs over 32KB. Observation
+ID, timestamp, geometry/dimensions, field IDs and debug/extension metadata stay local
+to our server. The provider receives the JSON string, not the internal context.
+
+Fixed system instructions are separate from user-role observational JSON. Both
+goal and screen text are untrusted data that cannot override policy. The prompt
+distinguishes local-browser-semantics from local-pixel-ocr, forbids reconstruction
+of placeholders, and treats only filled=true as evidence of a local value. It asks
+for a decision, never hidden reasoning. Prompt separation is not a proof of perfect
+model behavior under injection.
+
+Model output is exactly action/target/reason. The reason must be one of four short
+safe phrases (ai_contract.py), so arbitrary private/executable explanation text is
+rejected. Duplicate JSON keys, unknown actions/IDs, null CLICK or non-null STOP,
+extra properties, selectors/code/coordinates/URLs, refusals and incomplete output
+are rejected without repair. The model never controls schemaVersion/observationId;
+ai_planner.py binds them from the local validated snapshot after ID membership checks.
+Schema validation constrains the response but does not prove the action is correct.
+
+Provider authentication is read only in the server adapter and used only as protocol
+authentication, never model content. No payload/header/exception logging. Fifteen
+seconds bounds provider work and 64KB bounds its response envelope. Generic 503 for
+missing key/network/status failures; 504 for timeout; 502 for invalid model/refusal
+output; 422 for unsafe/oversized input. Health remains available with a missing key.
+
+The exact five-key Phase 6A action JSON is unchanged. X-EdgeSight-Planner is a separate
+allowlisted/exposed header (ai or deterministic), surfaced by the popup even on
+server-reported AI failure. Missing/unrecognized mode reports Unknown, never inferred
+AI success. No latency metric is added. Explicit Analyze / Plan still initiates all
+browser transport; Phases 1–5 survive planner failure.
+
 ## Development network policy
 
 One endpoint in config; manifest host permission `http://127.0.0.1/*`, plus CSP
@@ -123,17 +171,22 @@ FastAPI binds 127.0.0.1. CORS permits one explicitly configured extension origin
 GET/POST and Content-Type, no credentials or wildcard. Other supplied origins block
 before planning. Requests without Origin are supported for local clients; CORS is
 not authentication. The app logs/persists no bodies. Uvicorn runs with access logs off.
+CORS additionally exposes the safe planner-mode header. Provider HTTPS is server-side
+only; Chrome manifest/CSP and loopback permissions are unchanged in Phase 6B.
 See official [CORS](https://fastapi.tiangolo.com/tutorial/cors/) and
 [Pydantic strict mode](https://docs.pydantic.dev/latest/concepts/strict_mode/) documentation.
 
 ## Limits and verification
 
 No general PII detector, unknown pixel masking, iframe/shadow-root traversal,
-face/object detector, LLM/VLM or browser execution. OCR can miss/misread Continue;
+face/object detector or browser execution. OCR can miss/misread Continue;
 multiple matches stop. Confidence may be null and is not a calibrated probability.
 Visual text is not proof of a clickable control. Local previews expire on close,
 re-analysis or 60 seconds; nothing is persisted.
 
-The user confirmed the pre-Phase-6A Chrome flow works. New Chrome/server payload
-inspection and no-click demonstration remain pending. Automated tests and the real
-Node-client → Uvicorn HTTP smoke do not constitute a manual Chrome pass.
+Phase 6A is user Chrome-verified: POST /plan → FastAPI 200; seven safe fields, five
+sensitive/redacted regions, safe status/false PII flag, five placeholders, retained
+Bengaluru/Conference and working deterministic flow. No unreported checks inferred.
+Phase 6B real-provider and Chrome AI/no-click acceptance remain pending because no
+server-side key was available. Mock tests and local HTTP missing-key tests are not
+real-model verification. store=false does not certify zero provider retention.

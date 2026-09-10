@@ -2,7 +2,7 @@
 
 Chronological record of significant technical decisions.
 
-Current Phase 6A policy is D28–D30 below. Earlier phase-local statements such as
+Current Phase 6B policy is D31–D33 below, extending D28–D30. Earlier phase-local statements such as
 "no transport" are historical; D28 supersedes the old D2 planner-mode scaffold,
 D5 broader action list, and D9/D20 network permission scope for this checkpoint.
 
@@ -443,3 +443,56 @@ unknown/ambiguous targets. Popup displays local safe target text and suggestion-
 wording; arbitrary server reasons are not rendered. There is no execution or later
 live-page freshness guarantee. Real model integration is Phase 6B; execution is Phase 7;
 re-observation is Phase 8. Stop after Phase 6A commit/push and await review.
+
+## D31 — One OpenAI LLM over sanitized structured visual context
+
+The user confirmed Phase 6A's actual Chrome POST /plan → FastAPI HTTP 200, seven
+fields, five sensitive/redacted regions, safe/false-PII flags, placeholders, retained
+Bengaluru/Conference and working deterministic flow. Proceed only with Phase 6B.
+
+Presence-only local configuration checks found no provider key variables and no
+root/server .env. No values were read/displayed. No provisioning tool was available.
+Implement OpenAI Responses with pinned gpt-4.1-mini-2025-04-14. It fits this small
+instruction-following/ID-selection task and supports strict structured output without
+a separate reasoning stage. Use existing httpx as a production dependency, no SDK,
+agent framework, provider chain or model router. Real-key verification remains pending.
+
+This is an LLM over sanitized structured visual context, not a VLM. No image upload;
+the existing private sanitized-image capability remains unchanged. Fixed provider URL,
+store=false, no tools/history/retries/redirects/environment proxies. Server-side key
+only, never prompt/browser/logs. Official references:
+[model](https://developers.openai.com/api/docs/models/gpt-4.1-mini),
+[structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
+
+## D32 — Minimized provider input and untrusted output
+
+Revalidate the entire JSON candidate before explicit projection, including unknown
+nested fields. Keep only goal, safe privacy flags, semantic state and pixel-derived
+visual state with clear provenance, plus legend. Omit observation IDs, timestamps,
+bboxes, dimensions, field IDs and internal metadata. Scan exact projected JSON and
+cap at 32KB without truncation. Both direct AI-entry and /plan contamination matrices
+must prove zero provider calls.
+
+One fixed system prompt; user goal and screen content stay separate as observational
+JSON. Placeholder values must never be inferred, and only filled=true means filled.
+Model returns exactly action/target/reason. Use four fixed safe reason phrases to
+prevent free-form private/executable explanations; no chain-of-thought. Strict local
+output validation rejects duplicates, unsafe keys/actions/targets, code/coordinates,
+refusals and malformed output without repair. Server owns observation binding.
+Prompt policy does not guarantee correct semantic choices; execution remains future.
+
+## D33 — Explicit modes with unchanged action contract
+
+Preserve original deterministic planner as default. PLANNER_MODE=ai selects the
+single real adapter; failures never trigger deterministic fallback. Keep the exact
+Phase 6A request and five-key response JSON. Expose mode through X-EdgeSight-Planner,
+allowlisted in the extension and shown as AI/Deterministic/Unknown, also on failures.
+
+Provider work is bounded to 15s/64KB; browser request timeout increases to 20s, with
+the existing final privacy gate intact. Missing key/network/status errors return
+generic 503, timeout 504, malformed/refused/unsafe model output 502, bad input 422.
+No provider body/headers/errors logged. No new metrics UI. Local results remain visible.
+
+Phase 6B automated acceptance and real-key manual acceptance are separate. Stop after
+commit/push for review. Next task: Phase 7 safe execution using the current
+observation's visual boxes. No Phase 7 code in this checkpoint.

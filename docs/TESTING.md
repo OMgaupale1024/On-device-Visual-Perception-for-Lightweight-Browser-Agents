@@ -2,7 +2,7 @@
 
 Test log. One row per check. Do not claim something works without testing it.
 Historical phase checks are retained below. The latest Phase 6A checkpoint and manual
-procedure are at the end; old "no transport" and awaiting-reload statements describe
+procedure follow; the latest Phase 6B evidence is at the end. Old "no transport" and awaiting-reload statements describe
 their historical phase. The user now confirms the current Chrome flow works, without
 individually confirming every detailed historical check.
 
@@ -483,7 +483,7 @@ locations, duplicate IDs, fixed redaction/field policy, CLICK/STOP conditions,
 target-supply/observation binding across 14 IDs, invalid response fields, malformed
 JSON and exact-origin CORS. Invalid input yields a generic 422 body without input values.
 
-### P6A-M1 — manual Chrome/server demo (PENDING user confirmation)
+### P6A-M1 — manual Chrome/server demo (core flow user-verified; see Phase 6B evidence)
 
 1. Start FastAPI using the exact Windows commands in server/README.md; configure
    EdgeSight's actual extension origin. Confirm GET /health returns status ok.
@@ -503,8 +503,9 @@ JSON and exact-origin CORS. Invalid input yields a generic 422 body without inpu
 12. Confirm popup shows **Planner decision: CLICK Continue**.
 13. Confirm the browser **DOES NOT CLICK** and the travel form remains on screen.
 
-All 13 steps remain **PENDING** for this new integration. Do not mark passed until
-the user confirms. If OCR does not yield one exact Continue text match, STOP is
+At the original Phase 6A checkpoint these steps were pending. The subsequent user
+confirmation below verifies the reported core flow; unreported supplementary checks
+are not automatically promoted to passed. If OCR does not yield one exact Continue text match, STOP is
 the honest expected rule outcome; do not fabricate a visual ID or recognition success.
 
 Additional pending manual checks: opening popup alone creates no /plan request;
@@ -515,3 +516,91 @@ the authorized localhost /plan request is now expected. No Phase 7 execution is 
 Exact next implementation task after review: **Phase 6B — ONE real server-side
 LLM/VLM planner**, preserving the same privacy-safe request and strict response schema.
 Do not implement Phase 6B, Phase 7 or Phase 8 in this checkpoint.
+
+## Phase 6B — one privacy-safe AI planner
+
+### Phase 6A manual verification — user-confirmed
+
+The Phase 6B instruction confirms **Phase 6A manually Chrome-verified**:
+Chrome extension → POST /plan → FastAPI → HTTP 200. Actual transmitted context:
+fields=7, sensitiveFieldCount=5, redactedRegionCount=5, rawPiiIncluded=false,
+privacy.status=safe. Sensitive values appear as [NAME], [EMAIL], [PHONE],
+[EMPLOYEE_ID], [PASSWORD]; Bengaluru and Conference remain. The user confirms
+the deterministic planner flow works. No additional unreported no-click, timing,
+offline, geometry/HiDPI or failure-mode check is inferred.
+
+### Automated Phase 6B evidence
+
+| Command/check | Actual result |
+|---|---|
+| npm test | PASS 120/120 extension entries, including all Phase 1–6A regressions and 7/7 original classifier assertions |
+| .venv/Scripts/python.exe -m unittest discover -s tests -v (server/) | PASS 50/50 methods: 24 existing + 26 AI methods, with parameterized cases |
+| npm run check | PASS JS/script/test syntax, manifest, packaged OCR asset hashes |
+| .venv/Scripts/python.exe -m compileall -q app tests | PASS Python syntax |
+| .venv/Scripts/python.exe -m pip check | PASS no broken requirements |
+| node scripts/smoke-ocr.mjs .browser-test/synthetic.png | PASS genuine Node/WASM cold/warm, Continue retained, one synthetic sensitive line withheld |
+| Temporary Uvicorn on 127.0.0.1:8011, safe fixture over actual HTTP | PASS deterministic 200/CLICK and AI missing-key 503, matching mode headers, health; test processes stopped |
+| git diff --check | PASS |
+
+No actual provider call occurred. Presence-only checks found no provider variables or
+root/server .env. No key value was read, displayed or added. The provider HTTP tests
+use httpx.MockTransport with a synthetic credential and inspect only the request
+body, never retain/print auth headers. FastAPI 0.141.1, Pydantic 2.13.5, Uvicorn 0.52.4,
+httpx 0.28.1; existing Starlette TestClient deprecation warning remains non-failing.
+
+**Provider privacy proof:** exact captured HTTP application body has one fixed system
+message and one user-role JSON projection. All five fake values are absent and all
+five placeholders are allowed. No credential, observation ID, timestamp, geometry,
+field ID, extension/environment/debug metadata or images are in model content.
+Semantic source=local-browser-semantics and visual source=local-pixel-ocr are distinct.
+
+Five fake values × goal/field/visual/nested input = **20/20 cases block at direct AI
+entry with provider.complete call count=0**. The same matrix through /plan yields
+422 and another **20/20 zero-call cases**. Tests also block unknown clean metadata,
+model-instance bypasses, projection-guard failure and oversized input before calling
+the provider. Phase 6A's separate 20-case zero-fetch regression still passes.
+
+**Output security:** **23/23 malicious/malformed cases reject**: selector/invented ID,
+coordinates, RUN_JS, additional JavaScript/URL/version/observation fields, wrong/null
+target policies, unsafe/private/empty/long/non-allowlisted reasons, plain text,
+invalid/empty/null/array/fenced JSON and duplicate keys. Valid CLICK and STOP preserve
+the exact Phase 6A contract. Five supplied visual IDs are exercised with server-owned
+observation binding. Candidate mutation during provider wait cannot change binding.
+
+**Prompt injection:** injected goal and pixel text impersonating system instructions
+remain data in the user-role JSON; the fixed system prompt is unchanged. It explicitly
+states untrusted-data policy, never reconstruct placeholders, and only filled=true
+means filled. Mocked RUN_JS output is rejected. This tests separation and enforcement,
+not a claim that a real model always ignores malicious screen text.
+
+**Failures/modes:** missing/blank key makes no HTTP client call; network/timeouts,
+301/401/403/429/500/503, refusal, incomplete/empty/multiple/tool outputs, malformed and
+oversized provider envelopes fail generically without retries/redirects/fallback.
+Deterministic mode never invokes a provider. Header-only mode signaling preserves
+strict JSON; extension tests cover ai/deterministic/unknown/missing headers and
+AI failure without fabricated fallback success. No latency metric is claimed.
+
+### P6B-M1 — real provider and Chrome demo (PENDING)
+
+1. After automated tests pass, use server/README.md to enter a real API key privately
+   in the server terminal. Set PLANNER_MODE=ai and the exact extension origin; start
+   Uvicorn. Never put the key in Chrome or chat.
+2. Reload EdgeSight; open Employee Travel Request with all fields and Continue visible.
+3. Goal: Check whether this travel request is complete and submit it.
+4. Analyze / Plan. Confirm local perception READY, privacy SAFE, context READY,
+   server Connected and Planner AI. Inspect the service worker Network POST body.
+5. Confirm response CLICK targets the actual supplied Continue visual ID and echoes
+   the request observation ID. Popup displays CLICK Continue.
+6. Confirm browser does NOT click; no execution exists in Phase 6B.
+7. Inspect only safe server status and, where reasonably available, sanitized
+   provider-bound content. Never log/inspect the credential or auth header. Do not
+   enable HTTP debug dumps. Automated body capture is not a real-network inspection.
+
+**All Phase 6B real-provider/Chrome steps remain PENDING** because no server-side
+key was available. The new --ai smoke option can be run against AI mode using the
+synthetic safe fixture; it incurs real provider requests and was not run here.
+Unknown PII/OCR errors, semantic model mistakes and account/model availability remain
+limitations. store=false does not establish zero provider retention for every account.
+
+Exact next task after review: **PHASE 7 — safe browser action execution using the
+current observation's visual bounding boxes. DO NOT START PHASE 7 here.**

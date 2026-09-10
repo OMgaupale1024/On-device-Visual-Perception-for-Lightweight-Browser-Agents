@@ -35,7 +35,7 @@ analyzeBtn.addEventListener('click', async () => {
   clearPreviews();
   hide(resultsEl);
   hide(errorEl);
-  setStatus('Analyzing locally (up to 45s), then planning on localhost (up to 5s)…');
+  setStatus('Analyzing locally (up to 45s), then planning through localhost (up to 20s)…');
   try {
     const res = await chrome.runtime.sendMessage({ type: MSG.ANALYZE_PAGE, goal: byId('goal').value });
     if (!res || !res.ok) throw new Error(res?.error || 'Analysis failed.');
@@ -138,6 +138,8 @@ function renderAgentContext(res) {
 function renderPlanner(res) {
   const planner = res.planner;
   const plan = planner?.plan;
+  byId('planner-mode').textContent = planner?.plannerMode === 'ai' ? 'AI' :
+    planner?.plannerMode === 'deterministic' ? 'Deterministic' : 'Unknown';
   byId('planner-status').textContent = planner?.status === 'READY' ? 'READY' :
     planner?.status === 'UNAVAILABLE' ? 'Planner unavailable' : 'Plan rejected';
   byId('planner-privacy').textContent = planner?.privacy || 'BLOCKED';

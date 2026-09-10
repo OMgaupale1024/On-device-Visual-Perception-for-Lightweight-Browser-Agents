@@ -3,74 +3,83 @@
 **Privacy-preserving on-device perception for lightweight browser agents.**
 SIH26171 · ISRO · Smart India Hackathon 2026.
 
-**Phase 6A implemented:** browser-local Tesseract.js/WASM OCR and semantic analysis,
-local PII detection/redaction, privacy-guarded SafeAgentContext, localhost FastAPI,
-and a deterministic planner returning validated CLICK/STOP suggestions.
-No real LLM/VLM, browser action execution, or re-observation exists.
+**Phase 6B implemented in code:** browser-local OCR and semantic analysis, local
+redaction, privacy-approved SafeAgentContext, FastAPI validation, and one real
+OpenAI planner adapter. Deterministic mode remains the default. Both modes return
+the exact same observation-bound CLICK/STOP suggestion contract. No browser action
+execution, re-observation, metrics dashboard or Raspberry Pi work.
 
-The user confirmed the current Chrome flow works before Phase 6A. The new
-Chrome-to-server demo and detailed privacy/network checks remain **pending**.
-Automated evidence is in [Testing](docs/TESTING.md).
+**Phase 6A is manually Chrome-verified by the user:** extension → POST /plan →
+FastAPI HTTP 200; seven fields, five sensitive/redacted regions, safe status,
+rawPiiIncluded=false, five role placeholders, Bengaluru/Conference retained, and
+working deterministic planning. **Phase 6B real-provider/Chrome verification remains
+pending:** no server-side API key was available during this implementation.
 
 ## Run on Windows
 
-From the repository root in PowerShell (Python 3.10+):
+From repository root (Python 3.10+):
 
 ```powershell
 py -3.10 -m venv server/.venv
 server/.venv/Scripts/python.exe -m pip install -r server/requirements.txt
 $env:EDGESIGHT_EXTENSION_ORIGIN = "chrome-extension://YOUR_EXTENSION_ID"
+$env:PLANNER_MODE = "deterministic"
 Set-Location server
 .venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-Replace YOUR_EXTENSION_ID with EdgeSight's 32-letter ID from chrome://extensions.
-The app reads process environment; it does not auto-load .env. No API key is needed.
-See [server/README.md](server/README.md) for configuration, schema and troubleshooting.
+Use EdgeSight's actual 32-letter extension ID. For AI mode, set PLANNER_MODE=ai
+and OPENAI_API_KEY **server-side only**, then restart. The
+[server README](server/README.md) includes a masked PowerShell key-entry procedure;
+never paste a key into the extension, repository, logs or chat. No .env auto-loader.
 
-1. Load/reload unpacked `extension/` at chrome://extensions (Chrome 116+).
-2. Enable Allow access to file URLs and open `demo-page/index.html` (fake data only).
-3. Keep all seven fields and Continue visible. Use the default travel-request goal.
-4. Click **ANALYZE / PLAN**. Local OCR has a 45-second deadline; planning has five seconds.
-5. Inspect local privacy, Safe agent context and Planner server panels.
-6. Inspect **service worker DevTools → Network → POST /plan → Payload**.
-   Only structured sanitized context should appear. Both image previews stay local.
-7. A complete form with one recognized Continue yields **Planner decision: CLICK Continue**.
-   The browser does **not** click. Server failure preserves the local results.
+Reload unpacked extension/ at chrome://extensions (Chrome 116+), enable file URL
+access, open demo-page/index.html and keep all seven fields and Continue visible.
+Click **ANALYZE / PLAN** with the default travel-request goal. Opening the popup
+alone sends nothing. OCR has a 45s limit; planning through localhost has a 20s limit
+(provider work is bounded to 15s).
 
-Nothing is sent when the popup merely opens. Every explicit Analyze / Plan performs
-a new local observation, then sends its approved context if the privacy gate passes.
+The planner panel displays **AI**, **Deterministic**, or **Unknown** based on an
+allowlisted server header. AI failures show unavailable/rejected and never silently
+fall back to deterministic success. Local Phase 1–5 results remain visible.
+**CLICK Continue is a suggestion only. The browser does not execute it.**
 
-## Privacy boundary
+## Two privacy boundaries
 
 ```text
-Browser screen → local semantic analysis + local pixel OCR
-→ local PII detection / field masks / OCR filtering
-→ SafeAgentContext → final local privacy guard
-========== NETWORK BOUNDARY (localhost JSON only) ==========
-FastAPI → deterministic planner → strict observation-bound CLICK / STOP
-→ local response validation → suggested action display
+Browser screen → local OCR + semantics → local PII detection/redaction
+→ SafeAgentContext → FINAL LOCAL PRIVACY GUARD
+========== Browser → EdgeSight server ==========
+FastAPI strict validation → minimized safe planning input → provider guard
+========== EdgeSight server → OpenAI (AI mode only) ==========
+LLM → untrusted structured decision → strict action/ID validation
+→ server-owned observation binding → extension validation → suggestion display
 ```
 
-Only the exact frozen context approved by the Phase 5 privacy builder can be sent.
-The transport takes no raw screenshot, raw OCR, DOM observation, secret list,
-image handle, or local preview envelope. A private WeakMap approval binds object
-identity to the bytes that passed the final known-value guard. Copies and contaminated
-candidates are rejected before fetch. It retains safe bytes only, never raw secrets.
+The browser transport still accepts only the exact frozen context approved by the
+Phase 5 builder. It has no normal interface to raw screenshots, raw OCR, raw DOM,
+secret lists or local previews. Its Phase 6A approval boundary is unchanged.
 
-**Image upload is deferred to Phase 6B.** The existing Phase 3 sanitized-image
-capability remains local. Observation image metadata (dimensions/redaction count) is
-in the JSON; no image bytes are sent. Server validation is defence in depth and
-does not replace browser sanitization.
+The provider receives only goal, safe privacy flags, semantic roles/filled flags/
+safe values, visual IDs/text/confidence, and the redaction legend. Semantic and
+pixel-OCR evidence remain explicitly separate. Observation IDs, timestamps, field
+IDs, geometry, image metadata, extension IDs, environment and debug data are omitted.
+Authentication uses the server credential as protocol authentication only; it is
+never model content.
 
-The demo privacy scope is known visible DOM fields and conservative text filtering.
-Unknown/transformed PII, OCR mistakes, image-only secrets, iframes and shadow DOM
-remain limitations; this is not general arbitrary-site privacy certification.
+Selected model: **OpenAI gpt-4.1-mini-2025-04-14**, via Responses API with strict
+structured output. This is an **LLM over sanitized structured visual context**, not
+a VLM integration. No image upload. See [model documentation](https://developers.openai.com/api/docs/models/gpt-4.1-mini).
 
-## Development
+Prompt policy treats goal/screen text as untrusted data, forbids hidden-value
+reconstruction, and permits only supplied visual IDs or STOP. All model output is
+validated again; reasons use four fixed non-sensitive phrases. Prompt separation
+does not guarantee perfect resistance to malicious screen text. Known/unknown PII
+limits of local perception also remain; no general arbitrary-site privacy claim.
+
+## Tests and handoff
 
 ```powershell
-npm ci --ignore-scripts --no-audit --no-fund
 npm test
 npm run check
 server/.venv/Scripts/python.exe -m pip install -r server/requirements-dev.txt
@@ -78,14 +87,20 @@ Set-Location server
 .venv/Scripts/python.exe -m unittest discover -s tests -v
 ```
 
-From the repository root, with FastAPI running: `node scripts/smoke-planner.mjs`.
-`npm run build` repackages pinned OCR assets; no npm install is needed to load
-the committed extension. No runtime OCR/model downloads.
+Current results: **120/120 extension test entries**, **50/50 server test methods**.
+Both browser transport and provider boundary contamination tests pass with zero
+downstream calls. Real OCR cold/warm smoke and local deterministic/AI-missing-key
+HTTP smoke pass. Mocked AI tests are not real-provider acceptance.
 
-[Architecture](docs/ARCHITECTURE.md) · [Progress](docs/PROGRESS.md) ·
-[Decisions](docs/DECISIONS.md) · [Handoff](docs/HANDOFF.md) ·
-[AI context](docs/AI_CONTEXT.md) · [Phase 6A plan](docs/PHASE_6A_PLAN.md)
+With a separately running server, from repository root:
+`node scripts/smoke-planner.mjs` for deterministic mode, or
+`node scripts/smoke-planner.mjs --ai` for a real, billable AI smoke using only the
+synthetic safe fixture. The latter was NOT run without a key.
 
-Next after review: **Phase 6B — ONE real server-side LLM/VLM planner**, preserving
-the privacy-safe request and strict response schema. Phase 7 execution and Phase 8
-re-observation remain separate future work.
+[Architecture](docs/ARCHITECTURE.md) · [Testing](docs/TESTING.md) ·
+[Progress](docs/PROGRESS.md) · [Decisions](docs/DECISIONS.md) ·
+[Handoff](docs/HANDOFF.md) · [AI context](docs/AI_CONTEXT.md) ·
+[Phase 6B plan](docs/PHASE_6B_PLAN.md)
+
+Exact next phase after review: **Phase 7 — safe browser action execution using the
+current observation's visual bounding boxes. Not started.**

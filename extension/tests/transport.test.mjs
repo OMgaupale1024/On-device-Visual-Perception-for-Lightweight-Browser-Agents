@@ -134,3 +134,21 @@ test('server fixture matches the actual Phase 5 builder wire contract', async ()
   const fixture = JSON.parse(await readFile(new URL('../../server/tests/safe-context.json', import.meta.url), 'utf8'));
   assert.deepEqual(fixture, approvedContext());
 });
+
+for (const mode of ['ai', 'deterministic', 'unknown-provider', null]) {
+  test(`planner mode header is explicit and allowlisted: ${mode}`, async () => {
+    const result = await requestPlan(approvedContext(), { fetchImpl: async () => ({
+      ...reply(), headers: { get: () => mode },
+    }) });
+    assert.equal(result.plannerMode, ['ai', 'deterministic'].includes(mode) ? mode : 'unknown');
+    assert.deepEqual(result.plan, clickPlan()); // Wire contract remains unchanged.
+  });
+}
+
+test('AI failure remains visibly AI and never invents a fallback decision', async () => {
+  const result = await requestPlan(approvedContext(), { fetchImpl: async () => ({
+    ok: false, status: 503, headers: { get: () => 'ai' },
+  }) });
+  assert.equal(result.status, 'UNAVAILABLE'); assert.equal(result.plannerMode, 'ai');
+  assert.equal(result.plan, undefined); assert.equal(PLANNER_CONFIG.timeoutMs, 20_000);
+});

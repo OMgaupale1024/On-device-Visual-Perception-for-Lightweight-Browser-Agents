@@ -1,70 +1,75 @@
-# EdgeSight — Handoff
+# EdgeSight — Phase 6B handoff
 
-**Phase 6A complete in code. Stop for review.** No real model or browser execution.
+**Code complete; stop for review.** Real-provider manual verification remains
+pending because no provider key was configured. No Phase 7 work.
 
-## Takeover protocol
+Before changes: git status, git branch, git log --oneline -10, git fetch,
+git pull --ff-only; read README and all context/architecture/progress/decisions/
+testing docs. Only one AI writes. Code/tests/Git are source of truth.
 
-Only one AI writes at a time. Before changes: git status, git branch,
-git log --oneline -10, git fetch, git pull --ff-only. Read README, AI_CONTEXT,
-HANDOFF, ARCHITECTURE, PROGRESS, DECISIONS and TESTING; inspect code/tests/history.
-Never force push. Before phase completion: tests, docs, AI_CONTEXT, diff/artifact
-inspection, commit, normal push, HEAD == origin/main and clean-tree verification.
+## Verified baseline
 
-## Delivered boundary
+Phases 0–6A implemented. User Chrome-verified Phase 6A: POST /plan → FastAPI HTTP
+200; seven fields; five sensitive fields/redacted regions; rawPiiIncluded=false;
+privacy.status=safe; five role placeholders; Bengaluru/Conference retained;
+deterministic flow working. No additional unreported manual check inferred.
 
-The Phase 5 builder still receives safe semantics, safe OCR, image metadata and
-locally known sensitive strings for its final guard. It now privately approves the
-frozen context's exact serialization; safe bytes only are retained in a WeakMap.
-Transport accepts only that context identity, verifies the approval, and posts it
-as JSON to localhost. It has no raw-value list, raw OCR/image or local-response API.
-The service worker clears known-value references before passing agent.context.
+## Phase 6B boundary
 
-Server: app/main.py (FastAPI, exact-origin CORS, generic errors, health/plan),
-app/schemas.py (strict wire contract, defensive PII checks), app/planner.py
-(deterministic travel rules). requestPlan validates response keys/action/version,
-same observation and existing visual ID. Five-second deadline covers response body.
-Server errors preserve Phases 1–5. Popup shows suggestions only.
+PLANNER_MODE=deterministic (default) preserves original planner. Explicit ai mode
+uses exactly one provider: OpenAI Responses, gpt-4.1-mini-2025-04-14.
+OPENAI_API_KEY belongs only in the server process. No key was available/read/printed.
 
-Structured context only; sanitized image upload is deferred to Phase 6B. The
-Phase 3 private handle is unchanged and must remain the sole future image source.
-No real LLM/VLM, selectors/code/coordinates from server, action execution or re-observation.
+app/ai_input.py snapshots/revalidates the full candidate, projects only safe
+goal/privacy/semantic and pixel-OCR evidence/redaction legend, guards the exact
+JSON and caps it. No observation ID/timestamps/bboxes/debug/environment goes to model.
+app/ai_contract.py supplies fixed instructions and strict three-key model schema.
+app/openai_provider.py sends the prompt via async httpx, fixed HTTPS endpoint,
+store=false, no tools/redirects/environment proxies/retries, 15s/64KB bounds.
+app/ai_planner.py validates action/target/reason and binds observation on our server.
 
-## Run and tests
+Same five-key CLICK/STOP response. X-EdgeSight-Planner reports mode separately;
+extension allowlists and displays it, including AI on server failures. Browser
+deadline 20s. No silent fallback, browser execution, re-observation or image upload.
+This is an LLM over structured visual context, not a VLM integration.
 
-Exact Windows instructions: [server/README.md](../server/README.md).
-From server/, after installing requirements and setting the actual extension origin:
+## Tests / manual work
 
+50/50 server methods and 120/120 extension entries pass; all existing regressions
+remain. Twenty contamination cases at direct AI entry and again via /plan each
+produce zero provider calls. Exact mocked provider request contains placeholders
+and no known fake PII/credential/observation metadata. Twenty-three malicious output
+cases reject. Injection text stays separate from policy. Genuine OCR cold/warm,
+syntax/assets/Python/dependency checks pass. Real localhost HTTP verifies
+deterministic 200 and AI missing-key 503 with correct mode header. No live model call.
+
+Next manual review: follow server/README.md masked key setup, run AI mode and the
+Employee Travel Request demo. Confirm local privacy/context, Planner AI, actual
+Continue visual ID, and no browser click. Inspect safe planning content without
+logging auth headers. All real-provider/Phase 6B Chrome checks remain pending.
+
+## Run / files / limitations
+
+Full Windows setup: [server README](../server/README.md).
+From server/ after process configuration:
 ```powershell
 .venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-Reload extension/, allow file URLs, open demo-page/index.html, keep seven fields and
-Continue visible, and click Analyze / Plan. Inspect service worker DevTools Network.
+Reload extension/, allow file URLs, Analyze / Plan. Optional synthetic real-provider
+smoke from root: node scripts/smoke-planner.mjs --ai (requires key; not run here).
 
-Current evidence: **115/115 Node test entries**, **24/24 server test methods**,
-all 20 transport contamination cases → BLOCKED / fetch count 0, checks pass.
-Actual Node requestPlan → local Uvicorn /health and /plan CLICK/STOP smoke passed
-with a 1553-byte approved synthetic context. This is not Chrome proof.
-Detailed manual workflow and historical evidence remain in TESTING.
+Important: app/{ai_input,ai_contract,ai_planner,openai_provider,config,main}.py,
+test_ai_planner.py, transport/config + planner-client, popup. Preserve the untouched
+Phase 5/6A approval/sanitized handle/schemas/deterministic planner and all regressions.
+Unknown PII/OCR errors, model semantic mistakes, prompt-injection limits, no live
+page freshness guarantee, fixed reason vocabulary and dev CORS limitations remain.
+The existing Starlette TestClient warning is non-failing.
 
-## Manual evidence
+Baseline commit f356308. Phase 6B commit subject: feat: add privacy-safe AI planner.
+The commit containing this handoff is the checkpoint; git log -1 --format=%H resolves
+its hash. Final report records push and clean-tree verification. No keys, .env,
+provider dumps, captures, node_modules, venv or caches in commits; never force push.
 
-User confirmed the current Chrome flow works before Phase 6A. Historical Phase 1
-M1–M4 and the reported Phase 3 privacy-display test remain recorded. No individual
-unreported mask, OCR recognition, timing, offline, Network or HiDPI check is inferred.
-
-Phase 6A Chrome/server demo, exact payload inspection, actual Continue ID and no-click
-confirmation are **PENDING user review**. Server-offline UI should also be reviewed.
-
-## Git and next task
-
-Baseline synchronized: ae4e37e. Phase 6A commit subject:
-`feat: add privacy-safe planner transport`. The commit containing this handoff is the
-Phase 6A checkpoint; resolve its exact hash with `git log -1 --format=%H`. The final
-delivery report records commit/push and clean-tree verification (self-hashes cannot
-be embedded in their own commit). No API key, .env, raw capture, PII dump, venv,
-__pycache__ or node_modules belongs in the commit.
-
-Exact next task after review: **Phase 6B — ONE real server-side LLM/VLM planner**
-under the same privacy-safe request and strict response schema. Do not start it in
-the Phase 6A session. Phase 7 execution and Phase 8 re-observation are separate.
+Exact next task after review: **PHASE 7 — safe browser action execution using the
+current observation's visual bounding boxes. Not started.**

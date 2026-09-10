@@ -16,7 +16,7 @@ SECRETS = ["Rahul Sharma", "rahul@example.com", "9876543210", "EMP1024", "secret
 
 class PlannerTests(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(create_app(ORIGIN))
+        self.client = TestClient(create_app(ORIGIN, mode="deterministic"))
         self.addCleanup(self.client.close)
         self.context = json.loads(Path(__file__).with_name("safe-context.json").read_text(encoding="utf-8"))
 
