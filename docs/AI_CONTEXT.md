@@ -49,12 +49,39 @@ There is no application network transport, server, LLM or browser action impleme
 - **Phase 1 — Observation: COMPLETE.** MV3 popup, DOM observation, visible-tab capture and fake demo.
 - **Phase 2 — Sensitive detection: COMPLETE.** Signal-only name/email/phone/employee-ID/password classification.
 - **Phase 3 — Privacy: COMPLETE IN CODE.** Geometry, pixel mapping, masks, safe semantics and guarded image packaging; detailed manual checks pending.
-- **Phase 4 — Visual perception: COMPLETE IN CODE.** Real pixel OCR, safe visual items, boxes/confidence, local assets and debug UI; Chrome acceptance pending.
+- **Phase 4 — Visual perception: CODE COMPLETE, FAILING IN CHROME.** Real pixel OCR, safe visual items, boxes/confidence, local assets and debug UI; Node/WASM passes but real Chrome OCR errors out. Root cause unidentified; stage diagnostics added to localize it.
 
 ## Current Phase
 
-**Phase 4 — Browser-local visual perception. Status: COMPLETE IN CODE.**
-Stopped for review. No Phase 5 authorization or implementation is implied by this handoff.
+**Phase 4 — Browser-local visual perception. Status: CODE COMPLETE, FAILING IN CHROME.**
+Root cause not yet identified; stage diagnostics were added to expose it. Stopped for the
+user's Chrome run. No Phase 5 authorization or implementation is implied by this handoff.
+
+### Phase 4 Chrome OCR failure — diagnosis in progress
+
+- **Symptom (user-observed, real Chrome):** LOCAL VISUAL PERCEPTION shows Status: ERROR,
+  "Local OCR unavailable or timed out. Phase 1–3 results remain available." Phases 1–3 still
+  work (5 regions redacted, Visual/Semantic Sanitized, Outbound SAFE).
+- **Why Node passed but Chrome failed:** the automated suite and `smoke-ocr.mjs` exercise
+  Tesseract's **Node** worker path (worker_threads + require'd core). Chrome uses a different
+  path — a same-origin Web Worker that `importScripts` the packaged core and `fetch`es the
+  packaged traineddata under MV3 CSP — which Node never runs. Node evidence cannot prove it.
+- **Exact root cause:** NOT YET IDENTIFIED. Every statically checkable cause was verified
+  CORRECT: worker/core/lang URLs resolve to real files under `vendor/ocr/`; the vendored
+  worker strips a trailing slash before appending core/lang filenames (no double-slash);
+  `workerBlobURL:false` yields a same-origin worker (a blob worker would violate CSP); the
+  manifest already grants `script-src 'wasm-unsafe-eval'`, `worker-src 'self'` and
+  `connect-src 'self' data:`. The fault is runtime-only and was swallowed by five catch
+  layers, so it needs a live Chrome error to localize.
+- **Fix applied THIS session:** diagnosis only — privacy-safe, stage-tagged diagnostics (see
+  D25). No root-cause code change was made. `createWorker` is now inside a try; Tesseract's
+  progress logger is mapped to stage tags; the offscreen host returns a sanitized
+  `{stage,name,message}` instead of bare `{ ok:false }`; the bridge distinguishes
+  OCR_TIMEOUT from an immediate fault. All logging is confined to `perception/diagnostics.js`.
+- **Still UNVERIFIED:** the actual root cause and every P4-M1–M10 Chrome check. Next Chrome
+  run must capture the `[EdgeSight OCR] …` lines from the offscreen and service-worker
+  consoles; the last stage before the error names the failing component.
+- **DO NOT start Phase 5** until the Chrome OCR path is fixed and browser-verified by the user.
 
 ## Work Completed This Session
 
@@ -84,8 +111,12 @@ Fresh documentation-follow-up run, Node 24.11.0 on Windows:
 
 | Command | Result | Passed | Failed |
 |---|---|---|---|
-| `npm test` (`node --test extension/tests/*.test.mjs`) | PASS | 56 test entries | 0 |
+| `npm test` (`node --test extension/tests/*.test.mjs`) | PASS | 57 test entries | 0 |
 | `npm run check` | PASS: JS syntax, manifest, local asset hashes | all checks | 0 |
+| `node scripts/smoke-ocr.mjs .browser-test/synthetic.png` | PASS: cold+warm real Node/WASM, all five targets, 1 line withheld | both runs | 0 |
+
+The 57th entry is the new diagnostics regression (host failure surfaces a stage-tagged
+diagnostic while the thrown error stays generic). These are Node results — NOT Chrome proof.
 
 The suite includes Phase 1–3 regressions and the original 7/7 classifier assertions.
 Earlier Phase 4 run: `npm run build` passed, packaging 18 runtime/data/license files,
@@ -132,7 +163,7 @@ See [TESTING.md](TESTING.md) for fixtures, detailed evidence and reproduction.
 ## Privacy Invariants
 
 - Never transmit raw screenshot, password, known PII or the LOCAL-ONLY preview.
-- Never log/persist raw sensitive values, raw OCR or raw screenshots; never put offending text into errors.
+- Never log/persist raw sensitive values, raw OCR or raw screenshots; never put offending text into errors. Sanitized OCR diagnostics are the sole exception: only `perception/diagnostics.js` logs, and only a stage tag + error class + truncated library message — never page-derived content.
 - Raw OCR stays in trusted local memory until filtered; no raw OCR strings reach popup/files/packages.
 - Temporary field-value strings stay in collector/service-worker privacy work, not OCR-host input or popup. Pixel content may be recognized locally.
 - All labels/DOM/OCR strings are untrusted. Final output must pass the recursive known-value guard; never bypass image-handle validation.
@@ -146,20 +177,23 @@ See [TESTING.md](TESTING.md) for fixtures, detailed evidence and reproduction.
 - `extension/src/content/observe.js`, `privacy/detect.js`, `privacy/collect.js` (under `extension/src/`) — geometry/signals, value-free classification, separate temporary value collection.
 - `extension/src/privacy/{geometry,redact,semantic,guard}.js` — mapping, private image handles/package builder, safe semantics, recursive guard.
 - `extension/src/privacy/{visual,overlap}.js` — post-OCR filtering and sensitive intersection policy.
-- `extension/src/perception/{ocr,normalize,pipeline,bridge,offscreen,cleanup,config}.js` — pixel engine, schema, privacy gateway, lifecycle and explicit local asset paths.
+- `extension/src/perception/{ocr,normalize,pipeline,bridge,offscreen,cleanup,config,diagnostics}.js` — pixel engine, schema, privacy gateway, lifecycle, explicit local asset paths and the single sanitized diagnostics sink.
 - `extension/manifest.json`, `extension/src/popup/`, `extension/vendor/ocr/` — security policy, local results UI, packaged runtime/licenses/hash inventory.
 - `extension/tests/`, `scripts/smoke-ocr.mjs`, `scripts/package-ocr.mjs` — regressions, real Node engine harness, reproducible packaging.
 - `docs/TESTING.md`, `docs/DECISIONS.md` — exact evidence/manual checklist and policy history. Read D23/D24 rather than superseded D21 alone.
 
 ## Git State
 
-Verified pre-documentation checkpoint on 2026-09-10 (not the hash of this file's later commit):
+Checkpoint on 2026-09-10 (a committed file cannot contain its own hash — resolve live):
 
 - Branch: `main`.
-- Latest commit checked: `84c342b57505d48b1e9effe55e81635a87eb05fc` — Phase 4 implementation.
+- Prior Phase 4 implementation commit: `84c342b57505d48b1e9effe55e81635a87eb05fc`.
+- This session's HEAD is the OCR diagnostics commit (subject: `diagnostics: expose real
+  browser OCR failure stage`) — resolve its hash with `git log -1`. It changes no runtime OCR
+  logic; it only makes the swallowed Chrome failure observable.
 - Remote: `origin`, https://github.com/OMgaupale1024/On-device-Visual-Perception-for-Lightweight-Browser-Agents
-- Working tree: clean at that checkpoint; this handoff update is the subsequent documentation commit.
-- HEAD == origin/main: **yes at checkpoint**, also verified against live `git ls-remote`.
+- Working tree: clean after the diagnostics commit; pushed to `origin/main`.
+- HEAD == origin/main: verify live with `git rev-parse HEAD origin/main`.
 
 A committed file cannot contain its own commit hash. Resolve the current latest hash with
 `git log -1` and this handoff's containing commit with `git log -1 -- docs/AI_CONTEXT.md`.
@@ -168,8 +202,13 @@ do not treat this recorded snapshot as a fresh remote check.
 
 ## Exact Next Task
 
-After Phase 4 review/authorization: **Phase 5 — combine safe DOM state and safe visual OCR
-state into a canonical final sanitized agent context. Do not implement the server yet.**
+**Debug the Chrome OCR failure, NOT Phase 5.** The user reloads the extension, runs one
+ANALYZE on the demo, and reports the `[EdgeSight OCR] …` lines from the offscreen page
+console and the service-worker console (chrome://extensions → EdgeSight → Inspect views).
+The last stage before the error names the failing component. Then apply the targeted fix and
+have the user re-verify in Chrome. Only after the Chrome OCR path is confirmed working:
+**Phase 5 — combine safe DOM state and safe visual OCR state into a canonical final sanitized
+agent context. Do not implement the server yet. Do not start Phase 5 before Chrome is fixed.**
 
 ## Do Not Break
 

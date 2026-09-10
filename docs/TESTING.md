@@ -306,7 +306,51 @@ email/phone/employee-ID rules outside fields, fragmented residual leak blocking,
 safe serialization, image-dimension mismatch, timeout and ordinary failure isolation.
 The original Phase 1–3 assertions remain regression coverage.
 
+## Phase 4 Chrome OCR failure + diagnostics checkpoint (2026-09-10)
+
+Real Chrome, user-observed: LOCAL VISUAL PERCEPTION = ERROR, "Local OCR unavailable or timed
+out. Phase 1–3 results remain available." Phases 1–3 pass (5 regions redacted, Outbound SAFE).
+Node/WASM passes but Chrome fails — because the Node worker path (worker_threads + require'd
+core) is a different code path from the Chrome path (same-origin Web Worker that importScripts
+the packaged core and fetches the packaged traineddata under MV3 CSP). Node cannot prove Chrome.
+
+Static review verified every checkable cause CORRECT (so the fault is runtime-only): worker/
+core/lang URLs resolve to real `vendor/ocr/` files; the vendored worker strips a trailing slash
+before appending core/lang filenames (no double-slash); `workerBlobURL:false` gives a
+same-origin worker; CSP already grants `wasm-unsafe-eval`, `worker-src 'self'`,
+`connect-src 'self' data:`. The real error was swallowed by five catch layers, so it needs a
+live Chrome run to localize. Root cause: **UNVERIFIED — not yet identified.**
+
+Automated results after adding diagnostics (Node 24.11.0, Windows):
+
+| Command | Result | Passed | Failed |
+|---|---|---|---|
+| `npm test` | PASS | 57 test entries | 0 |
+| `npm run check` | PASS (JS syntax, manifest, local asset hashes) | all | 0 |
+| `node scripts/smoke-ocr.mjs .browser-test/synthetic.png` | PASS (cold+warm, 5 targets, 1 withheld) | both runs | 0 |
+
+The 57th entry is the new regression: a host failure surfaces a stage-tagged diagnostic while
+the thrown user-facing error stays generic. No root-cause OCR logic changed (see D25).
+
+### P4-M0 — capture the Chrome OCR stage diagnostics (REQUIRED, UNVERIFIED)
+
+The single most useful next step. All logging is sanitized (stage + error class + truncated
+message only; never pixels/text/secrets).
+
+1. Reload EdgeSight at chrome://extensions.
+2. chrome://extensions → EdgeSight → **Inspect views**: open BOTH the offscreen page console
+   (`src/perception/offscreen.html`, appears during analysis) and the **service worker** console.
+3. Run one ANALYZE on the demo page.
+4. Copy every `[EdgeSight OCR] …` line from both consoles. The **last stage before the error**
+   is the failing component:
+   - `OCR_WORKER_CREATE` / `OCR_CORE_LOAD` / `OCR_LANGUAGE_LOAD` — worker spawn or packaged
+     core/traineddata load (CSP, importScripts, fetch, or asset resolution).
+   - `OCR_RECOGNIZE` — engine ran but recognition threw (suspect image input path next).
+   - `OCR_TIMEOUT` — init/recognition genuinely exceeded the 45 s budget (slow cold start),
+     not an immediate fault.
+5. Report the lines; then the targeted fix is applied and re-verified in Chrome. Status: **UNVERIFIED.**
+
 ## Next exact task
 
-Phase 5 — DOM + visual fusion and final sanitized structured agent context.
-Phase 5 has not started. Stop for review and the pending Chrome checks.
+Debug the Chrome OCR failure using P4-M0 above, then apply the targeted fix and re-verify P4-M1–M10.
+Phase 5 (DOM + visual fusion) has NOT started and must not start until Chrome OCR is verified.

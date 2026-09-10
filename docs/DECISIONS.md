@@ -289,3 +289,32 @@ idle timer. Call local getContexts every 10 seconds only while waiting for OCR, 
 clear the interval in finally on success, failure or timeout. No network, storage or
 permanent keepalive is introduced. Chrome 116 remains the minimum supported version.
 See [Chrome lifecycle documentation](https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle).
+
+## D25 — Privacy-safe OCR diagnostics through one audited logging sink
+
+**Problem:** Phase 4 OCR worked in Node/WASM but failed in real Chrome
+("Local OCR unavailable or timed out"). The real browser exception was unknowable because
+five catch layers swallowed it: `ocr.js` rethrew a generic string (and `createWorker` was
+outside its try entirely), `offscreen.js` sent bare `{ ok: false }`, `bridge.js` and
+`pipeline.js` collapsed everything to a generic message, and a no-`console` invariant
+(D14/background test) forbade logging. Static review found every checkable cause correct
+(asset URLs resolve, worker strips trailing slashes, workerBlobURL=false, CSP grants
+wasm-unsafe-eval + connect-src 'self'), so the fault is runtime-only and needs live evidence.
+
+**Decision:** Add stage-tagged diagnostics that expose the failing stage and error class in
+the offscreen and service-worker consoles, without weakening privacy. All logging is
+centralized in one audited sink, `extension/src/perception/diagnostics.js`; every other
+source file remains log-free. The sink emits ONLY `{stage, error name, truncated message}`
+— never screenshot pixels, recognized text, field values or known secrets. `createWorker`
+is now wrapped so init failures surface; Tesseract's own progress logger maps to the stage
+taxonomy (OCR_CORE_LOAD / OCR_LANGUAGE_LOAD / OCR_INIT / OCR_RECOGNIZE); a timeout logs
+OCR_TIMEOUT distinctly from an immediate fault. The popup keeps its generic user message.
+
+**Invariant change:** The "no `console.` anywhere in src" rule (background test) is relaxed
+to "no `console.` outside the single diagnostics sink." Persistence (`chrome.storage`,
+`localStorage`, `indexedDB`) and network transport remain forbidden in every file, including
+the sink. A regression test asserts a host failure surfaces a stage-tagged diagnostic while
+the thrown user-facing error stays generic.
+
+**This is diagnosis, not a fix.** No root-cause code change was made; the actual Chrome fault
+is still UNVERIFIED and will be fixed once the next Chrome run reports the failing stage.

@@ -14,15 +14,22 @@ run tests, update docs/HANDOFF/AI_CONTEXT, inspect status/diff, commit, push nor
 verify HEAD == origin/main and clean working tree, report the hash, then stop. Record only
 manual checks explicitly confirmed by the user. Do not start a later phase automatically.
 
-Documentation-follow-up checkpoint: 56/56 test entries pass; syntax, manifest and asset
-checks pass. No runtime logic changed. The manifest description now accurately describes
-captured local pixels. Phase 4 remains complete in code, awaiting Chrome checks/review.
+OCR diagnostics checkpoint: 57/57 test entries pass; syntax, manifest and asset checks pass;
+the Node/WASM smoke re-passed cold+warm. No root-cause OCR logic changed — this session only
+made the swallowed Chrome failure observable (see D25). Phase 4 is code-complete but FAILING
+in real Chrome; next step is the user's Chrome run to capture the stage diagnostics.
 
 ## State
 
-Phase 4 implemented; Phase 5 not started. The browser-local OCR/CV baseline uses Tesseract.js
-6.0.1 + core 6.1.2 + English data 1.0.0. Do not call it a ViT. Real Node/WASM synthetic
-inference passed; actual Chrome engine/capture/offline/overlay checks remain UNVERIFIED.
+Phase 4 code-complete but FAILING in real Chrome; Phase 5 NOT started. The browser-local
+OCR/CV baseline uses Tesseract.js 6.0.1 + core 6.1.2 + English data 1.0.0. Do not call it a
+ViT. Real Node/WASM synthetic inference passes, but in Chrome LOCAL VISUAL PERCEPTION errors
+("Local OCR unavailable or timed out") while Phases 1–3 still pass. Root cause is UNVERIFIED:
+every statically checkable cause (asset URLs, worker slash-handling, workerBlobURL=false, CSP)
+was verified correct, so the fault is runtime-only. Stage-tagged diagnostics now surface the
+real stage/error in the offscreen + service-worker consoles. Next Chrome run must report the
+`[EdgeSight OCR] …` lines; the last stage before the error names the failing component. Do NOT
+begin Phase 5 until Chrome OCR is fixed and user-verified.
 
 The user reported Phase 3's manual test passed and the privacy display shows sensitive
 information. Do not convert this into unreported count, mask, SAFE, network or HiDPI passes.
@@ -69,6 +76,9 @@ and retained 10 safe lines, including Continue. Cold total 746.38 ms; warm total
 - `privacy/visual.js` + `overlap.js`: remove sensitive intersections/known values/obvious PII,
   then recursively guard safe items and check canonical known values across retained lines.
 - `perception/cleanup.js`: replace retained raster with a blank PNG and unlink /input.
+- `perception/diagnostics.js`: the ONLY source file that logs. Emits a stage tag + error
+  class + truncated message to the console; never pixels, recognized text or secrets. All
+  OCR-path modules route console output through it (D25).
 - `popup/`: actual safe OCR output and local Canvas box overlay; no expected-item checkmarks.
 - `vendor/ocr/`: about 11.1 MB runtime/data/licenses and hash inventory.
 
@@ -95,5 +105,10 @@ still masks known DOM fields only; text heuristics do not add masks for unknown 
 A future quantized ViT/ONNX detector can replace this engine behind the same image-input,
 normalized-box/output-guard interface; none is integrated now.
 
-Next exact task: Phase 5 — DOM + visual fusion and final sanitized structured agent context.
-Do not begin Phase 5 until review. No planner/actions.
+Next exact task: DEBUG the Chrome OCR failure with the new diagnostics — the user reloads the
+extension, runs one ANALYZE, and reports the `[EdgeSight OCR] …` console lines from the
+offscreen page and the service worker (chrome://extensions → EdgeSight → Inspect views). The
+last stage before the error (OCR_WORKER_CREATE / OCR_CORE_LOAD / OCR_LANGUAGE_LOAD /
+OCR_RECOGNIZE / OCR_TIMEOUT) names the failing component; then apply the targeted fix and have
+the user re-verify. Only after Chrome OCR works: Phase 5 — DOM + visual fusion and final
+sanitized structured agent context. Do not begin Phase 5 before Chrome is fixed. No planner/actions.

@@ -36,6 +36,25 @@ test('timeout destroys a hung host so next analysis can retry', async (t) => {
   assert.ok(closed);
 });
 
+test('host failure surfaces a stage-tagged diagnostic while the thrown error stays generic', async () => {
+  // Regression for the Chrome integration black hole: an offscreen fault used to
+  // collapse into { ok: false } with no stage/class, so the real browser error was
+  // unknowable. The stage + error class must now reach the service-worker console.
+  const errors = [];
+  const original = { error: console.error, info: console.info };
+  console.error = (line) => errors.push(String(line));
+  console.info = () => {};
+  try {
+    chrome.runtime.getContexts = async () => [{}];
+    chrome.runtime.sendMessage = async () => ({ ok: false, diag: { stage: 'OCR_WORKER_CREATE', name: 'RuntimeError', message: 'WebAssembly.instantiate failed' } });
+    chrome.offscreen.closeDocument = async () => {};
+    await assert.rejects(inferLocally({ dataUrl: 'x', width: 1, height: 1 }), /Local OCR unavailable or timed out/);
+    assert.ok(errors.some((l) => l.includes('OCR_WORKER_CREATE') && l.includes('RuntimeError')), 'stage + error class logged for Chrome debugging');
+  } finally {
+    console.error = original.error; console.info = original.info;
+  }
+});
+
 test('local pipeline rejects result dimensions inconsistent with capture', async () => {
   chrome.runtime.sendMessage = async () => ({ ok: true, result: { width: 2, height: 1 } });
   const result = await perceiveLocalCapture({ dataUrl: 'data:image/png;base64,AA==', width: 1, height: 1 }, [], []);

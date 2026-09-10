@@ -1,4 +1,5 @@
-// All processing is local. Never log caught browser errors or page-derived content.
+// All processing is local. Only the sanitized diagnostics sink logs, and only a
+// stage tag plus error class/message — never page-derived content or secrets.
 import { MSG } from '../shared/messages.js';
 import { observePage } from '../content/observe.js';
 import { detectSensitiveFields, countSensitive } from '../privacy/detect.js';
