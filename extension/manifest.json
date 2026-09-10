@@ -3,7 +3,7 @@
   "name": "EdgeSight",
   "version": "0.4.0",
   "minimum_chrome_version": "116",
-  "description": "Local privacy filtering and browser-local OCR/WASM perception over sanitized screenshot pixels. No remote model or planner.",
+  "description": "Browser-local OCR/WASM on captured pixels, followed by local privacy filtering. No remote model or planner.",
   "content_security_policy": {
     "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self' data:; worker-src 'self'; img-src 'self' data:; style-src 'self'"
   },

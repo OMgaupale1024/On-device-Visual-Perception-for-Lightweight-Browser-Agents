@@ -70,6 +70,7 @@ Node/WASM smoke result is documented separately from the unrun Chrome harness.
 
 [Architecture](docs/ARCHITECTURE.md) · [Progress](docs/PROGRESS.md) ·
 [Decisions](docs/DECISIONS.md) · [Handoff](docs/HANDOFF.md) ·
+[Claude / Codex AI context](docs/AI_CONTEXT.md) ·
 [OCR assets and licenses](extension/vendor/ocr/README.md)
 
 Next: **Phase 5 — DOM + visual fusion and final sanitized structured agent context.**

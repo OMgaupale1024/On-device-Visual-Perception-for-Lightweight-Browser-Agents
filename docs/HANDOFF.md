@@ -1,5 +1,23 @@
 # EdgeSight — Handoff
 
+## Claude / Codex takeover protocol
+
+Start with [AI_CONTEXT.md](AI_CONTEXT.md), the concise shared state maintained for both AIs.
+Before coding: run git status, git branch, git log --oneline -10, git fetch and
+git pull --ff-only. Read README, ARCHITECTURE, PROGRESS, DECISIONS, HANDOFF, AI_CONTEXT
+and TESTING; inspect the latest commit/diff and relevant implementation. Code, test
+results and Git history are the source of truth when a summary disagrees.
+
+Update AI_CONTEXT before major work if stale, after decisions/blocker changes, before
+phase-completing commits, every session stop and any Claude/Codex handoff. Before stopping:
+run tests, update docs/HANDOFF/AI_CONTEXT, inspect status/diff, commit, push normally,
+verify HEAD == origin/main and clean working tree, report the hash, then stop. Record only
+manual checks explicitly confirmed by the user. Do not start a later phase automatically.
+
+Documentation-follow-up checkpoint: 56/56 test entries pass; syntax, manifest and asset
+checks pass. No runtime logic changed. The manifest description now accurately describes
+captured local pixels. Phase 4 remains complete in code, awaiting Chrome checks/review.
+
 ## State
 
 Phase 4 implemented; Phase 5 not started. The browser-local OCR/CV baseline uses Tesseract.js
