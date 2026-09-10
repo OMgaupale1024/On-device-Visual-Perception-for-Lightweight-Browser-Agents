@@ -11,18 +11,42 @@ import { perceiveLocalCapture } from '../perception/pipeline.js';
 import { sensitiveRegions } from '../privacy/geometry.js';
 import { buildSafeAgentContext } from '../privacy/agent-context.js';
 import { requestPlan } from '../transport/planner-client.js';
+import { ticketForPlan, executeTicket } from '../actions/execute-click.js';
 
 let busy = false;
+let executing = false;
+// The one pending, single-use Phase 7 action. LOCAL ONLY; a new analysis or a
+// completed/attempted execution invalidates it. Lost if the worker is torn down,
+// which is a safe fail-closed (the popup would require a fresh Analyze / Plan).
+let pendingAction = null;
+
+function fromPopup(sender) {
+  return sender.id === chrome.runtime.id && sender.url === chrome.runtime.getURL('src/popup/popup.html');
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type !== MSG.ANALYZE_PAGE) return false;
-  if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL('src/popup/popup.html')) return false;
-  if (busy) { sendResponse({ ok: false, error: 'Analysis already in progress.' }); return false; }
-  busy = true;
-  runAnalysis(message.goal).then(sendResponse).catch(() => sendResponse({
-    ok: false,
-    error: 'Local privacy processing blocked. Keep the page still and retry. Restricted pages cannot be analyzed; local files require Allow access to file URLs.',
-  })).finally(() => { busy = false; });
-  return true;
+  if (!fromPopup(sender)) return false;
+  if (message?.type === MSG.ANALYZE_PAGE) {
+    if (busy) { sendResponse({ ok: false, error: 'Analysis already in progress.' }); return false; }
+    busy = true;
+    runAnalysis(message.goal).then(sendResponse).catch(() => sendResponse({
+      ok: false,
+      error: 'Local privacy processing blocked. Keep the page still and retry. Restricted pages cannot be analyzed; local files require Allow access to file URLs.',
+    })).finally(() => { busy = false; });
+    return true;
+  }
+  if (message?.type === MSG.EXECUTE_ACTION) {
+    if (executing) { sendResponse({ status: 'BLOCKED', reason: 'ACTION_ALREADY_CONSUMED' }); return false; }
+    executing = true;
+    executeTicket(pendingAction, {
+      queryActiveTab: async () => (await chrome.tabs.query({ active: true, currentWindow: true }))[0],
+      getTab: (id) => chrome.tabs.get(id),
+      executeScript: (opts) => chrome.scripting.executeScript(opts),
+    }).then(sendResponse).catch(() => sendResponse({ status: 'BLOCKED', reason: 'EXECUTION_FAILED' }))
+      .finally(() => { executing = false; });
+    return true;
+  }
+  return false;
 });
 
 async function assertActive(tab) {
@@ -53,11 +77,14 @@ function release(snapshot) {
 
 async function runAnalysis(goal) {
   let before, after, rawScreenshot, secrets;
+  // A new analysis always invalidates any prior pending action (Phase 7 replay/stale).
+  pendingAction = null;
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab?.id == null) throw new Error('No active page.');
     before = await snapshot(tab.id);
     const obs = before.observation;
+    const documentId = before.documentId; // observed document identity, kept LOCAL
     if (obs.visualViewport.scale !== 1 || obs.visualViewport.x !== 0 || obs.visualViewport.y !== 0) {
       throw new Error('Unsupported viewport.');
     }
@@ -106,9 +133,17 @@ async function runAnalysis(goal) {
       try { planner = await requestPlan(agent.context); }
       catch { planner = { status: 'UNAVAILABLE', privacy: 'SAFE', bytes: 0, reason: 'Planner unavailable.' }; }
     }
+    // Phase 7: mint a LOCAL single-use ticket only for a validated CLICK bound to this
+    // exact observation, tab and document. sensitiveRegions/bbox stay browser-local.
+    if (planner.status === 'READY') {
+      pendingAction = ticketForPlan(planner.plan, agent.context, {
+        tabId: tab.id, windowId: tab.windowId, documentId, url: tab.url, sensitiveRegions: regions,
+      });
+    }
     return {
       ok: true,
       planner,
+      execution: { available: pendingAction !== null },
       observation: {
         counts: obs.counts, viewport: obs.viewport, devicePixelRatio: obs.devicePixelRatio,
         fields: safeContext.semantic.fields, sensitiveCount: countSensitive(fields),

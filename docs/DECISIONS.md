@@ -529,3 +529,44 @@ OpenAI path is fully removed from the application layer. No screenshots are sent
 NVIDIA in Phase 6B: this remains an LLM over sanitized structured visual context, not
 a VLM. Real server-side smoke and Chrome AI-mode acceptance are still pending (no key
 configured this session).
+
+## D34 — Safe, visually grounded browser execution (Phase 7)
+
+The planner already returns a validated `CLICK visual_N` / `STOP`. Phase 7 executes it
+with a strict split of authority: the SERVER chooses WHAT to click; the BROWSER decides
+WHERE and HOW, entirely locally. The server may never supply a selector, XPath,
+JavaScript, DOM query, coordinates, element HTML, URL or command — the browser already
+holds `visual_N`'s geometry from local pixel perception.
+
+Implementation is two small modules, not an automation framework. `actions/geometry.js`
+is pure math: it converts the LOCAL screenshot-pixel bbox center to a CSS viewport point
+(`scaleX = viewport.width / screenshot.width` per axis; no `devicePixelRatio === 1`
+assumption, since captureVisibleTab images are at the device ratio) and rejects invalid
+or out-of-viewport geometry. `actions/execute-click.js` holds the execution policy and
+the injected page function. A LOCAL, single-use execution ticket binds the action to the
+observation id, target visual id, tab id, window id and document id; it is never sent to
+NVIDIA or FastAPI and never persisted. `ticketForPlan` refuses to mint unless the plan's
+observationId matches the local context and the target exists in `visualElements`
+(defence in depth beyond the transport validator).
+
+`executeTicket` fails closed on a spent/absent ticket, a >60s-old observation (aligned
+with the popup's local-preview lifetime), a missing/inactive/other tab, a navigated URL,
+bad geometry, or a target overlapping a redacted sensitive region. It consumes the ticket
+before dispatching exactly one `chrome.scripting.executeScript` pinned to the observed
+documentId. The injected `clickInPage` re-checks the viewport, runs
+`document.elementFromPoint`, walks up to a supported control (`button`,
+`input[type=button|submit]`, `[role=button]` — no generic clickable rule), validates it
+(connected, enabled, visible, non-zero rect containing the point, not covered, text-
+consistent with the OCR target) and performs one `element.click()`. No
+eval/Function/CDP/Playwright/selector injection; DOM text is only an execution-safety
+signal, never treated as visual evidence.
+
+Trade-offs and boundaries: execution is gated behind an explicit `EXECUTE SUGGESTED
+ACTION` button (Phase 7 introduces side effects; silent auto-click after an AI response
+is avoided). Single-use + new-analysis invalidation prevent replay. Phase 7 performs NO
+re-observation and makes NO success claim — the UI reports "CLICK DISPATCHED" only; goal
+verification is Phase 8. Scope is one guarded click on a button-like target: no typing,
+navigation, scroll, downloads or multi-step actions. Ticket state lives in the service
+worker; a worker teardown drops it, which is a safe fail-closed (re-analyze). Automated
+tests cover geometry, binding, policy, replay and element safety; the manual Chrome
+click demo (positive and stale/wrong-page negative) is pending.

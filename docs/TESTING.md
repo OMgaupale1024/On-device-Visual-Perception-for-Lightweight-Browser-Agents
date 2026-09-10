@@ -604,5 +604,65 @@ errors, semantic model mistakes and account/model availability remain limitation
 NVIDIA data retention is governed by NVIDIA's policy. Note: json_object output does not
 enforce the reason enum provider-side, so an off-enum reason is rejected 502 by design.
 
-Exact next task after review: **PHASE 7 — safe browser action execution using the
-current observation's visual bounding boxes. DO NOT START PHASE 7 here.**
+Exact next task after review (superseded by Phase 7 below): Phase 7 execution.
+
+## Phase 7 — safe visually grounded execution (2026-09-10)
+
+### Automated Phase 7 evidence
+
+| Check | Result |
+| --- | --- |
+| npm test | PASS **152/152** extension entries (120 prior + 32 new Phase 7); all Phase 1–6A/6B regressions intact |
+| .venv/Scripts/python.exe -m unittest discover -s tests (server/) | PASS **50/50** methods (server untouched) |
+| npm run check | PASS syntax, manifest and packaged-OCR asset integrity |
+
+New tests in `extension/tests/action.test.mjs`:
+- Geometry (`toViewportPoint`): 1:1 mapping, 2x pixel density, non-uniform X/Y scaling,
+  bbox-center + fractional coordinates, edge-clamp, invalid screenshot/viewport dims,
+  negative/zero-size bbox (INVALID_GEOMETRY), out-of-viewport (OUT_OF_VIEWPORT);
+  `overlapsSensitive` substantial-overlap/disjoint/below-threshold/zero-size.
+- Ticket binding (`ticketForPlan`): valid CLICK mints; STOP, observation mismatch,
+  unknown / other-observation target, and CLICK-without-target mint nothing.
+- Execution policy (`executeTicket`, mocked chrome deps): one dispatch pinned to the
+  observed documentId; null/consumed → ACTION_ALREADY_CONSUMED; replay executes once;
+  stale TTL → STALE_OBSERVATION; missing/wrong-active tab → TAB_CHANGED; navigated URL →
+  PAGE_CHANGED; invalid geometry and sensitive overlap block before dispatch; a
+  navigated-away document (executeScript throws) → PAGE_CHANGED; injected block reason
+  surfaced without repair. In every blocked case executeScript is NOT called.
+- Element safety (`clickInPage` against a DOM stub): button, span-inside-button, submit
+  input, role=button accepted and clicked once; random div, disabled, aria-disabled,
+  hidden (display:none), zero-size, no-element-at-point, point-outside-rect (covered),
+  materially changed viewport, and clear text mismatch all rejected with no click.
+
+Coordinate formula (screenshot pixels → CSS viewport pixels), for the record:
+`scaleX = viewport.width / screenshot.width`, `scaleY = viewport.height / screenshot.height`;
+`viewportX = (bbox.x + bbox.width/2) * scaleX`, `viewportY = (bbox.y + bbox.height/2) * scaleY`.
+No `devicePixelRatio == 1` assumption — captureVisibleTab yields a viewport image at the
+device pixel ratio, so the scale absorbs it.
+
+### P7-M1 — manual positive demo (PENDING)
+
+1. Start FastAPI (deterministic is sufficient to isolate execution; NVIDIA AI preferred
+   with a real NVIDIA_API_KEY). Reload EdgeSight; reset the Employee Travel Request form.
+2. Goal: Check whether this travel request is complete and submit it. Analyze / Plan.
+3. Confirm Perception READY, Privacy SAFE, Safe context READY, Planner decision
+   CLICK Continue with a valid visual_N, and that the page has NOT changed yet.
+4. Press EXECUTE SUGGESTED ACTION. Confirm the actual Continue button is clicked and the
+   page transitions to the submitted view.
+5. Record ONLY "CLICK executed / page changed." Do NOT claim success verification — that
+   is Phase 8 (fresh perception).
+
+### P7-M2 — manual negative demo (PENDING)
+
+Analyze / Plan, then switch to another tab or navigate the page, then press EXECUTE.
+Expected: Action BLOCKED (e.g. "Page changed — analyze again." / "Active tab changed —
+analyze again."), and NO click occurs. Valuable safe-failure evidence for judges.
+
+**Both P7-M1 and P7-M2 remain PENDING**: the unpacked extension was not loaded in the
+coding shell (loading it needs a native file dialog that cannot be automated here), and no
+NVIDIA_API_KEY was configured. The Phase 7 execution logic is exercised by the automated
+tests above against mocked chrome/DOM; that is not a substitute for the Chrome demo.
+
+Exact next task after review: **PHASE 8 — re-observation and visual verification: fresh
+capture after the Phase 7 click → new observation → local OCR/CV → confirm the outcome
+(e.g. "Travel Request Submitted"). DO NOT START PHASE 8 here.**

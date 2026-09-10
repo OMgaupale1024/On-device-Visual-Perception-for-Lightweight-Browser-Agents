@@ -1,4 +1,4 @@
-# EdgeSight architecture — Phase 6B
+# EdgeSight architecture — Phase 7
 
 SIH26171 / ISRO: on-device visual perception for lightweight browser agents.
 
@@ -17,12 +17,19 @@ structured JSON POST http://127.0.0.1:8000/plan
  → strict FastAPI/Pydantic validation → deterministic planner OR explicit AI mode:
    minimized/revalidated safe input → provider privacy guard → NVIDIA NIM LLM
    → untrusted structured output → strict action/visual-ID validator
- → observation-bound CLICK / STOP → client validation → suggestion display
+ → observation-bound CLICK / STOP → client validation → decision display
+================ BACK IN THE BROWSER (Phase 7, local only) ================
+CLICK visual_N → LOCAL bbox for the SAME observation → screenshot px → CSS viewport px
+ → document.elementFromPoint → clickable-element allowlist + safety validation
+ → ONE guarded, single-use element.click()   (STOP → no browser action)
 ```
 
-Phase 6B calls one real server-side provider adapter; no image upload, browser
-execution or re-observation. Design is recorded in [PHASE_6B_PLAN.md](PHASE_6B_PLAN.md);
-the Phase 6A request/action JSON and local approval architecture remain unchanged.
+Phase 6B calls one real server-side provider adapter; no image upload or re-observation.
+Phase 7 adds LOCAL execution of a validated CLICK: the server chooses WHAT (visual_N),
+the browser resolves WHERE/HOW from the local bbox and clicks once. No screenshot,
+selector, coordinate or code ever comes from the server. Designs are recorded in
+[PHASE_6B_PLAN.md](PHASE_6B_PLAN.md) and [PHASE_7_PLAN.md](PHASE_7_PLAN.md); the Phase
+6A request/action JSON and local approval architecture remain unchanged.
 
 ## Local observation, perception and privacy
 
@@ -162,6 +169,36 @@ server-reported AI failure. Missing/unrecognized mode reports Unknown, never inf
 AI success. No latency metric is added. Explicit Analyze / Plan still initiates all
 browser transport; Phases 1–5 survive planner failure.
 
+## Phase 7 execution boundary
+
+The server chooses WHAT to click (`CLICK visual_N`); the browser decides WHERE and HOW,
+entirely locally. After a validated CLICK, the service worker mints one LOCAL, single-use
+execution ticket (`actions/execute-click.js`) bound to the observation id, target visual
+id, tab id, window id and document id — none of which are ever sent to NVIDIA or FastAPI.
+`ticketForPlan` refuses to mint unless `plan.observationId` matches the local context and
+the target exists in `visualElements` (defence in depth beyond the transport validator);
+STOP mints nothing and performs no action.
+
+`EXECUTE SUGGESTED ACTION` in the popup triggers execution. The policy gates, in order:
+absent/consumed ticket → ACTION_ALREADY_CONSUMED; older than the 60s TTL →
+STALE_OBSERVATION; tab missing or no longer the active/current-window tab → TAB_CHANGED;
+navigated URL → PAGE_CHANGED; bad geometry → INVALID_GEOMETRY/OUT_OF_VIEWPORT; target
+overlapping a redacted sensitive region ≥25% → SENSITIVE_REGION. Only then is the ticket
+consumed and ONE `chrome.scripting.executeScript` dispatched, pinned to the observed
+documentId so a navigated-away document rejects.
+
+Geometry (`actions/geometry.js`) converts the LOCAL screenshot-pixel bbox center to a CSS
+viewport point (`scaleX = viewport.width / screenshot.width`, per axis; no
+devicePixelRatio==1 assumption). The injected `clickInPage` re-checks the viewport (resize
+→ PAGE_CHANGED), runs `document.elementFromPoint`, walks up ≤6 ancestors to a supported
+control (`button`, `input[type=button|submit]`, `[role=button]` — no generic clickable
+rule), and validates it is connected, not `disabled`/`aria-disabled`, has a non-zero
+visible rect containing the point, is not covered by an unrelated element, and is text-
+consistent with the OCR target. It performs exactly one `element.click()` and returns a
+fixed status/reason code — never DOM nodes, HTML or page text. No selector, coordinate or
+code from the server is ever used; no eval/Function/CDP/automation library. Phase 7 does
+NOT re-observe: the UI reports "CLICK DISPATCHED", not task success.
+
 ## Development network policy
 
 One endpoint in config; manifest host permission `http://127.0.0.1/*`, plus CSP
@@ -180,16 +217,25 @@ See official [CORS](https://fastapi.tiangolo.com/tutorial/cors/) and
 
 ## Limits and verification
 
-No general PII detector, unknown pixel masking, iframe/shadow-root traversal,
-face/object detector or browser execution. OCR can miss/misread Continue;
-multiple matches stop. Confidence may be null and is not a calibrated probability.
-Visual text is not proof of a clickable control. Local previews expire on close,
-re-analysis or 60 seconds; nothing is persisted.
+No general PII detector, unknown pixel masking, iframe/shadow-root traversal or
+face/object detector. Phase 7 execution is limited to ONE guarded click on a button-like
+target; no typing, navigation, scroll, downloads or multi-step actions. OCR can miss/
+misread Continue; multiple matches stop. Confidence may be null and is not a calibrated
+probability. Visual text is not proof of a clickable control (hence the local element
+allowlist and validation at click time). Local previews expire on close, re-analysis or
+60 seconds; nothing is persisted.
 
 Phase 6A is user Chrome-verified: POST /plan → FastAPI 200; seven safe fields, five
 sensitive/redacted regions, safe status/false PII flag, five placeholders, retained
 Bengaluru/Conference and working deterministic flow. No unreported checks inferred.
-Phase 6B server-side NVIDIA smoke and Chrome AI/no-click acceptance remain pending
-because no NVIDIA_API_KEY was configured this session (the NVIDIA endpoint itself was
-verified out-of-band by the user). Mock tests and local HTTP missing-key tests are not
-real-model verification. NVIDIA data retention is governed by NVIDIA's policy.
+Phase 6B server-side NVIDIA smoke and Chrome AI acceptance remain pending because no
+NVIDIA_API_KEY was configured this session (the NVIDIA endpoint itself was verified
+out-of-band by the user). Mock tests and local HTTP missing-key tests are not real-model
+verification. NVIDIA data retention is governed by NVIDIA's policy.
+
+Phase 7 execution logic is covered by automated tests (geometry, observation/target
+binding, tab/page/stale policy, replay, and element safety against a DOM stub). The
+manual Chrome click demo — real Analyze/Plan → Execute → the actual Continue button
+clicked → submitted page appears — and the negative stale/wrong-page demo remain PENDING;
+the unpacked extension was not loaded in the coding shell. Deterministic mode is
+sufficient for that manual test when no key is available.

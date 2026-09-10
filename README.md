@@ -3,11 +3,12 @@
 **Privacy-preserving on-device perception for lightweight browser agents.**
 SIH26171 · ISRO · Smart India Hackathon 2026.
 
-**Phase 6B implemented in code:** browser-local OCR and semantic analysis, local
-redaction, privacy-approved SafeAgentContext, FastAPI validation, and one real
-NVIDIA NIM planner adapter. Deterministic mode remains the default. Both modes return
-the exact same observation-bound CLICK/STOP suggestion contract. No browser action
-execution, re-observation, metrics dashboard or Raspberry Pi work.
+**Phase 7 implemented in code:** browser-local OCR and semantic analysis, local
+redaction, privacy-approved SafeAgentContext, FastAPI validation, one real NVIDIA NIM
+planner adapter (deterministic mode is the default), and **safe visually grounded
+execution** — a validated `CLICK visual_N` is turned into ONE guarded, user-triggered
+click on the locally resolved target. No re-observation/success verification (Phase 8),
+metrics dashboard or Raspberry Pi work.
 
 **Phase 6A is manually Chrome-verified by the user:** extension → POST /plan →
 FastAPI HTTP 200; seven fields, five sensitive/redacted regions, safe status,
@@ -44,7 +45,14 @@ alone sends nothing. OCR has a 45s limit; planning through localhost has a 20s l
 The planner panel displays **NVIDIA AI**, **Deterministic**, or **Unknown** based on an
 allowlisted server header. AI failures show unavailable/rejected and never silently
 fall back to deterministic success. Local Phase 1–5 results remain visible.
-**CLICK Continue is a suggestion only. The browser does not execute it.**
+
+For a `CLICK` plan an **EXECUTE SUGGESTED ACTION** button appears (Phase 7). Pressing it
+resolves the chosen `visual_N` locally — screenshot-pixel bbox → CSS viewport point →
+`elementFromPoint` → a small clickable-element allowlist — and performs exactly ONE
+`element.click()`, bound to the same observation, tab and document, single-use. The UI
+then shows **CLICK DISPATCHED**; it does **not** claim the task succeeded (Phase 8 will
+verify by fresh perception). A `STOP` plan performs no action. The server never supplies
+selectors, coordinates or code.
 
 ## Two privacy boundaries
 
@@ -55,7 +63,10 @@ Browser screen → local OCR + semantics → local PII detection/redaction
 FastAPI strict validation → minimized safe planning input → provider guard
 ========== EdgeSight server → NVIDIA NIM (AI mode only) ==========
 LLM → untrusted structured decision → strict action/ID validation
-→ server-owned observation binding → extension validation → suggestion display
+→ server-owned observation binding → extension validation → decision display
+========== back in the browser (Phase 7, local only) ==========
+CLICK visual_N → local bbox → screenshot px → CSS viewport px → elementFromPoint
+→ clickable-element allowlist → ONE guarded, single-use click (or STOP: no action)
 ```
 
 The browser transport still accepts only the exact frozen context approved by the
@@ -92,10 +103,12 @@ Set-Location server
 .venv/Scripts/python.exe -m unittest discover -s tests -v
 ```
 
-Current results: **120/120 extension test entries**, **50/50 server test methods**.
-Both browser transport and provider boundary contamination tests pass with zero
-downstream calls. Real OCR cold/warm smoke and local deterministic/AI-missing-key
-HTTP smoke pass. Mocked AI tests are not real-provider acceptance.
+Current results: **152/152 extension test entries** (32 new Phase 7 geometry, ticket,
+execution-policy and element-safety tests), **50/50 server test methods**. Both browser
+transport and provider boundary contamination tests pass with zero downstream calls.
+Real OCR cold/warm smoke and local deterministic/AI-missing-key HTTP smoke pass. Mocked
+AI tests are not real-provider acceptance; the Phase 7 Chrome click demo is manual and
+still pending (no key/extension load in the coding shell).
 
 With a separately running server, from repository root:
 `node scripts/smoke-planner.mjs` for deterministic mode, or
@@ -105,7 +118,8 @@ synthetic safe fixture. The latter was NOT run — no NVIDIA_API_KEY was configu
 [Architecture](docs/ARCHITECTURE.md) · [Testing](docs/TESTING.md) ·
 [Progress](docs/PROGRESS.md) · [Decisions](docs/DECISIONS.md) ·
 [Handoff](docs/HANDOFF.md) · [AI context](docs/AI_CONTEXT.md) ·
-[Phase 6B plan](docs/PHASE_6B_PLAN.md)
+[Phase 6B plan](docs/PHASE_6B_PLAN.md) · [Phase 7 plan](docs/PHASE_7_PLAN.md)
 
-Exact next phase after review: **Phase 7 — safe browser action execution using the
-current observation's visual bounding boxes. Not started.**
+Exact next phase after review: **Phase 8 — re-observation and visual verification: after
+the Phase 7 click, fresh capture → new observation → local OCR/CV → confirm the outcome
+(e.g. "Travel Request Submitted"). Not started.**

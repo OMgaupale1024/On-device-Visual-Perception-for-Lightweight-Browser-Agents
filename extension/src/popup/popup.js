@@ -5,6 +5,24 @@ const statusEl = byId('status');
 const resultsEl = byId('results');
 const errorEl = byId('error');
 const analyzeBtn = byId('analyze');
+const executeBtn = byId('execute');
+
+// Fixed, safe user-facing text for each execution reason code. Never render a
+// server- or page-derived string here.
+const ACTION_REASON = {
+  PAGE_CHANGED: 'Page changed — analyze again.',
+  TAB_CHANGED: 'Active tab changed — analyze again.',
+  STALE_OBSERVATION: 'Observation expired — analyze again.',
+  ACTION_ALREADY_CONSUMED: 'Already executed — analyze again.',
+  SENSITIVE_REGION: 'Blocked: target overlaps a sensitive region.',
+  NO_ELEMENT_AT_POINT: 'Blocked: no element at the target point.',
+  UNSAFE_ELEMENT: 'Blocked: target is not a safe clickable control.',
+  DISABLED_ELEMENT: 'Blocked: target control is disabled.',
+  INVALID_GEOMETRY: 'Blocked: invalid target geometry.',
+  OUT_OF_VIEWPORT: 'Blocked: target is outside the viewport.',
+  EXECUTION_FAILED: 'Blocked: action could not be executed.',
+};
+const GUARDED_NOTE = 'One guarded click on the suggested target. No other browser action. Success is not verified yet (Phase 8).';
 
 // Fixed, internal display names — safe to render as-is (not page-derived).
 const ROLE_LABEL = {
@@ -71,6 +89,7 @@ function render(res) {
   renderPerception(res.perception, res.safeContext?.image);
   renderAgentContext(res);
   renderPlanner(res);
+  renderAction(res);
   previewTimer = setTimeout(clearPreviews, 60_000);
   if (cap.ok) {
     byId('cap-status').textContent = 'Ready';
@@ -149,8 +168,46 @@ function renderPlanner(res) {
   byId('planner-decision').textContent = plan ?
     (plan.action === 'CLICK' ? `CLICK ${target.text}` : 'STOP') : '–';
   // Never render arbitrary server reason strings. The local target text was guarded.
-  byId('planner-note').textContent = plan ? 'Suggestion only. No browser action was executed.' : planner?.reason || '';
+  byId('planner-note').textContent = plan ? 'Suggestion only. Press Execute to act on it.' : planner?.reason || '';
 }
+
+function renderAction(res) {
+  const planner = res.planner;
+  const plan = planner?.plan;
+  const target = res.agentContext?.visualElements.find((v) => v.id === plan?.target);
+  hide(executeBtn);
+  executeBtn.disabled = false;
+  byId('action-target').textContent = '–';
+  byId('action-note').textContent = GUARDED_NOTE;
+  if (planner?.status === 'READY' && plan?.action === 'STOP') {
+    byId('action-status').textContent = 'No action required';
+    byId('action-note').textContent = 'Planner chose STOP; no browser action.';
+    return;
+  }
+  if (planner?.status === 'READY' && plan?.action === 'CLICK' && res.execution?.available && target) {
+    byId('action-status').textContent = 'Ready';
+    byId('action-target').textContent = target.text; // local, already-guarded OCR text
+    show(executeBtn);
+    return;
+  }
+  byId('action-status').textContent = 'Waiting for plan';
+}
+
+executeBtn.addEventListener('click', async () => {
+  executeBtn.disabled = true;
+  byId('action-status').textContent = 'Executing…';
+  let res;
+  try { res = await chrome.runtime.sendMessage({ type: MSG.EXECUTE_ACTION }); }
+  catch { res = null; }
+  hide(executeBtn);
+  if (res?.status === 'EXECUTED') {
+    byId('action-status').textContent = 'CLICK DISPATCHED';
+    byId('action-note').textContent = 'Click dispatched. Task success is NOT verified yet (Phase 8).';
+  } else {
+    byId('action-status').textContent = 'BLOCKED';
+    byId('action-note').textContent = ACTION_REASON[res?.reason] || 'Blocked: action unavailable.';
+  }
+});
 
 function renderSensitive(fields, count) {
   const listEl = byId('sensitive-list');
