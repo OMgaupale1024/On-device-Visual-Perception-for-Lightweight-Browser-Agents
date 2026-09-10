@@ -1,0 +1,52 @@
+import { prepareAgentContextForTransport } from '../privacy/agent-context.js';
+import { PLANNER_CONFIG } from './config.js';
+
+// No page, OCR, image or secret inputs. Only builder-approved SafeAgentContext.
+export function validatePlannerResponse(value, context) {
+  if (!value || Object.getPrototypeOf(value) !== Object.prototype ||
+      Object.keys(value).sort().join(',') !== 'action,observationId,reason,schemaVersion,target' ||
+      value.schemaVersion !== 1 || value.observationId !== context.observation.id ||
+      !['CLICK', 'STOP'].includes(value.action) || typeof value.reason !== 'string' ||
+      !value.reason.trim() || value.reason.length > 200) throw new Error('Plan rejected.');
+  if (value.action === 'STOP') {
+    if (value.target !== null) throw new Error('Plan rejected.');
+  } else if (typeof value.target !== 'string' || !/^visual_[1-9]\d*$/.test(value.target) ||
+      context.visualElements.filter((v) => v.id === value.target).length !== 1) {
+    throw new Error('Plan rejected.');
+  }
+  return Object.freeze({ schemaVersion: 1, observationId: value.observationId,
+    action: value.action, target: value.target, reason: value.reason });
+}
+
+export async function requestPlan(context, { fetchImpl = globalThis.fetch,
+  timeoutMs = PLANNER_CONFIG.timeoutMs } = {}) {
+  let body;
+  try { body = prepareAgentContextForTransport(context); }
+  catch { return { status: 'BLOCKED', privacy: 'BLOCKED', bytes: 0, reason: 'Privacy gate blocked planning.' }; }
+  const bytes = new TextEncoder().encode(body).length;
+  const base = { privacy: 'SAFE', bytes };
+  const controller = new AbortController();
+  let timer;
+  let timedOut = false;
+  try {
+    // Race also bounds stalled response-body reads and uncooperative fetch doubles.
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(() => { timedOut = true; controller.abort(); reject(new Error('Timeout')); },
+        Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.min(timeoutMs, PLANNER_CONFIG.timeoutMs) : PLANNER_CONFIG.timeoutMs);
+    });
+    const operation = async () => {
+      const response = await fetchImpl(PLANNER_CONFIG.url, { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal,
+        credentials: 'omit', redirect: 'error', cache: 'no-store', referrerPolicy: 'no-referrer' });
+      if (!response.ok) return { ...base, status: response.status >= 500 ? 'UNAVAILABLE' : 'REJECTED',
+        reason: response.status >= 500 ? 'Planner unavailable.' : 'Plan rejected.' };
+      try {
+        const plan = validatePlannerResponse(await response.json(), context);
+        return { ...base, status: 'READY', plan };
+      } catch { return { ...base, status: 'REJECTED', reason: 'Plan rejected.' }; }
+    };
+    return await Promise.race([operation(), deadline]);
+  } catch {
+    return { ...base, status: 'UNAVAILABLE', reason: timedOut ? 'Planner unavailable: timeout.' : 'Planner unavailable.' };
+  } finally { clearTimeout(timer); }
+}

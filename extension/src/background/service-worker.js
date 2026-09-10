@@ -1,4 +1,5 @@
-// All processing is local. Only the sanitized diagnostics sink logs, and only a
+// Perception/privacy processing is local. Only guarded context reaches the planner.
+// Only the sanitized diagnostics sink logs, and only a
 // stage tag plus error class/message — never page-derived content or secrets.
 import { MSG } from '../shared/messages.js';
 import { observePage } from '../content/observe.js';
@@ -9,6 +10,7 @@ import { redactScreenshot, buildOutboundPackage, sanitizedImageForPerception } f
 import { perceiveLocalCapture } from '../perception/pipeline.js';
 import { sensitiveRegions } from '../privacy/geometry.js';
 import { buildSafeAgentContext } from '../privacy/agent-context.js';
+import { requestPlan } from '../transport/planner-client.js';
 
 let busy = false;
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -96,8 +98,17 @@ async function runAnalysis(goal) {
         });
       } catch { agent = { status: 'ERROR' }; }
     }
+    // Drop known-value references before transport. Its only application argument
+    // is the exact approved context, never this function's local result envelope.
+    secrets.fill(''); secrets = null;
+    let planner = { status: 'BLOCKED', privacy: 'BLOCKED', bytes: 0, reason: 'Privacy gate blocked planning.' };
+    if (agent.status === 'READY') {
+      try { planner = await requestPlan(agent.context); }
+      catch { planner = { status: 'UNAVAILABLE', privacy: 'SAFE', bytes: 0, reason: 'Planner unavailable.' }; }
+    }
     return {
       ok: true,
+      planner,
       observation: {
         counts: obs.counts, viewport: obs.viewport, devicePixelRatio: obs.devicePixelRatio,
         fields: safeContext.semantic.fields, sensitiveCount: countSensitive(fields),

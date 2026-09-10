@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "observation": {
+    "id": "obs_demo-abc",
+    "capturedAt": "2026-09-10T00:00:00.000Z",
+    "viewport": {
+      "width": 800,
+      "height": 600
+    },
+    "image": {
+      "width": 800,
+      "height": 600,
+      "redactedRegions": 5
+    },
+    "coordinateSystem": "screenshot-pixels"
+  },
+  "goal": "Check whether this travel request is complete and submit it.",
+  "privacy": {
+    "status": "safe",
+    "sensitiveFieldCount": 5,
+    "redactedRegionCount": 5,
+    "rawPiiIncluded": false
+  },
+  "fields": [
+    {
+      "id": "field_1",
+      "role": "name",
+      "sensitive": true,
+      "filled": true,
+      "value": "[NAME]",
+      "source": "semantic"
+    },
+    {
+      "id": "field_2",
+      "role": "email",
+      "sensitive": true,
+      "filled": true,
+      "value": "[EMAIL]",
+      "source": "semantic"
+    },
+    {
+      "id": "field_3",
+      "role": "phone",
+      "sensitive": true,
+      "filled": true,
+      "value": "[PHONE]",
+      "source": "semantic"
+    },
+    {
+      "id": "field_4",
+      "role": "employee_id",
+      "sensitive": true,
+      "filled": true,
+      "value": "[EMPLOYEE_ID]",
+      "source": "semantic"
+    },
+    {
+      "id": "field_5",
+      "role": "password",
+      "sensitive": true,
+      "filled": true,
+      "value": "[PASSWORD]",
+      "source": "semantic"
+    },
+    {
+      "id": "field_6",
+      "role": "destination",
+      "sensitive": false,
+      "filled": true,
+      "value": "Bengaluru",
+      "source": "semantic"
+    },
+    {
+      "id": "field_7",
+      "role": "purpose",
+      "sensitive": false,
+      "filled": true,
+      "value": "Conference",
+      "source": "semantic"
+    }
+  ],
+  "visualElements": [
+    {
+      "id": "visual_12",
+      "text": "Continue",
+      "bbox": {
+        "x": 10,
+        "y": 200,
+        "width": 100,
+        "height": 30
+      },
+      "confidence": 0.95,
+      "source": "visual"
+    }
+  ],
+  "redactionScheme": {
+    "[NAME]": "filled personal name hidden locally",
+    "[EMAIL]": "filled email address hidden locally",
+    "[PHONE]": "filled phone number hidden locally",
+    "[EMPLOYEE_ID]": "filled employee identifier hidden locally",
+    "[PASSWORD]": "filled password hidden locally"
+  }
+}

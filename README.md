@@ -1,82 +1,91 @@
 # EdgeSight
 
-**Privacy-preserving on-device perception layer for lightweight browser agents.**
+**Privacy-preserving on-device perception for lightweight browser agents.**
+SIH26171 · ISRO · Smart India Hackathon 2026.
 
-Smart India Hackathon 2026 · SIH26171 · ISRO · Software · Smart Automation.
+**Phase 6A implemented:** browser-local Tesseract.js/WASM OCR and semantic analysis,
+local PII detection/redaction, privacy-guarded SafeAgentContext, localhost FastAPI,
+and a deterministic planner returning validated CLICK/STOP suggestions.
+No real LLM/VLM, browser action execution, or re-observation exists.
 
-**Phases 4–5 implemented.** EdgeSight runs a **browser-local OCR/CV visual perception
-baseline** over locally captured screenshot pixels (Tesseract.js 6.0.1, WASM core 6.1.2,
-packaged English data — OCR, not a Vision Transformer), then **fuses** its safe DOM semantics
-and safe visual perception into one privacy-guarded **SafeAgentContext** — the single structure
-a future server would consume. Sensitive fields become `[ROLE]` placeholders; nothing is transmitted.
+The user confirmed the current Chrome flow works before Phase 6A. The new
+Chrome-to-server demo and detailed privacy/network checks remain **pending**.
+Automated evidence is in [Testing](docs/TESTING.md).
 
-Real Tesseract/WASM inference passed on a synthetic image under Node. Actual Chrome
-MV3 inference, offline operation and demo recognition still require manual verification.
-The user reported the Phase 3 manual test passed and sensitive information appeared in
-the privacy display; only that specific report is recorded in [Testing](docs/TESTING.md).
+## Run on Windows
 
-## Run locally
+From the repository root in PowerShell (Python 3.10+):
 
-1. Reload/load unpacked `extension/` at `chrome://extensions` (Chrome 116+).
-2. Enable Allow access to file URLs and open `demo-page/index.html` (fake data only).
-3. Keep all seven fields visible; open EdgeSight and click **ANALYZE PAGE**.
-4. Inspect Local visual perception and the **Safe agent context** panel (Status, observation
-   id, safe fields, structured size); expand its preview to see the exact sanitized structure.
-
-All OCR runtime assets are committed under `extension/vendor/ocr/`; loading the extension
-requires no npm install and no runtime download. Engine processing has a 45-second deadline.
-The popup displays actual OCR output, confidence, boxes, cold/warm timing, and a local box
-overlay. Sensitive-region lines and recognized private text are withheld; missing text is
-never fabricated or replaced with DOM text. Empty and error states are explicit.
-
-## Privacy order
-
-```text
-local raw screenshot → local OCR worker (PNG bytes only) → raw local visual result
-→ sensitive-region + text privacy filter → safe visual result
-local raw screenshot → Phase 3 field masks → separate sanitized-image handle
+```powershell
+py -3.10 -m venv server/.venv
+server/.venv/Scripts/python.exe -m pip install -r server/requirements.txt
+$env:EDGESIGHT_EXTENSION_ORIGIN = "chrome-extension://YOUR_EXTENSION_ID"
+Set-Location server
+.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-OCR can recognize sensitive values locally. Raw OCR never reaches the popup, logs, files
-or outbound builder. Only image bytes/dimensions reach the OCR engine; DOM geometry and
-known-value strings are used afterwards in the trusted worker privacy filter. Whole OCR
-lines touching sensitive boxes (plus a two-pixel margin) are omitted. Known values and
-obvious email/phone/employee-ID patterns are removed elsewhere too. Other actual text is
-retained, with observation-scoped IDs, pixel boxes and actual engine confidence.
+Replace YOUR_EXTENSION_ID with EdgeSight's 32-letter ID from chrome://extensions.
+The app reads process environment; it does not auto-load .env. No API key is needed.
+See [server/README.md](server/README.md) for configuration, schema and troubleshooting.
 
-The raw worker raster is replaced with a tiny blank after each inference and its input
-file is removed; the model remains loaded for warm runs. This is reference/resource
-cleanup, not secure memory erasure. The original local preview still hides passwords.
-Previews expire after 60 seconds, re-analysis or close. Nothing is sent off-device.
+1. Load/reload unpacked `extension/` at chrome://extensions (Chrome 116+).
+2. Enable Allow access to file URLs and open `demo-page/index.html` (fake data only).
+3. Keep all seven fields and Continue visible. Use the default travel-request goal.
+4. Click **ANALYZE / PLAN**. Local OCR has a 45-second deadline; planning has five seconds.
+5. Inspect local privacy, Safe agent context and Planner server panels.
+6. Inspect **service worker DevTools → Network → POST /plan → Payload**.
+   Only structured sanitized context should appear. Both image previews stay local.
+7. A complete form with one recognized Continue yields **Planner decision: CLICK Continue**.
+   The browser does **not** click. Server failure preserves the local results.
 
-A residual known-value leak blocks the visual result, candidate package AND the SafeAgentContext
-(fail closed). Ordinary OCR failures preserve Phase 1–3 results. Only the Phase 3 private
-sanitized-image handle can enter the outbound builder or supply sanitized image bytes; the
-SafeAgentContext itself carries image metadata only. All runtime assets are extension-local; CSP
-permits self scripts/workers, self/data reads and local WASM compilation. No transport, server,
-LLM, planner or browser actions exist — Phase 5 fusion is local-only.
+Nothing is sent when the popup merely opens. Every explicit Analyze / Plan performs
+a new local observation, then sends its approved context if the privacy gate passes.
 
-Expected demo OCR targets include Destination, Bengaluru, Purpose, Conference and Continue.
-The static fake-data form is the supported prototype scope. Unknown PII, OCR errors,
-shadow DOM/iframes, image-only secrets and complete arbitrary-site privacy are not solved.
+## Privacy boundary
 
-## Development and tests
+```text
+Browser screen → local semantic analysis + local pixel OCR
+→ local PII detection / field masks / OCR filtering
+→ SafeAgentContext → final local privacy guard
+========== NETWORK BOUNDARY (localhost JSON only) ==========
+FastAPI → deterministic planner → strict observation-bound CLICK / STOP
+→ local response validation → suggested action display
+```
 
-- `npm ci --ignore-scripts --no-audit --no-fund` (development dependency download only).
-- `npm run build`: package the pinned runtime, embedded-WASM cores, English data and licenses.
-- `npm test`: pure logic, API-double integration and Phase 1–3 regressions.
-- `npm run check`: syntax, manifest and packaged asset SHA-256 checks.
-- Real browser harness: `chrome-extension://<id>/tests/ocr-browser.html`.
-  Browser checks remain UNVERIFIED; see the exact [test plan](docs/TESTING.md).
+Only the exact frozen context approved by the Phase 5 privacy builder can be sent.
+The transport takes no raw screenshot, raw OCR, DOM observation, secret list,
+image handle, or local preview envelope. A private WeakMap approval binds object
+identity to the bytes that passed the final known-value guard. Copies and contaminated
+candidates are rejected before fetch. It retains safe bytes only, never raw secrets.
 
-`node_modules`, caches and temporary test images are ignored and not committed. The genuine
-Node/WASM smoke result is documented separately from the unrun Chrome harness.
+**Image upload is deferred to Phase 6B.** The existing Phase 3 sanitized-image
+capability remains local. Observation image metadata (dimensions/redaction count) is
+in the JSON; no image bytes are sent. Server validation is defence in depth and
+does not replace browser sanitization.
+
+The demo privacy scope is known visible DOM fields and conservative text filtering.
+Unknown/transformed PII, OCR mistakes, image-only secrets, iframes and shadow DOM
+remain limitations; this is not general arbitrary-site privacy certification.
+
+## Development
+
+```powershell
+npm ci --ignore-scripts --no-audit --no-fund
+npm test
+npm run check
+server/.venv/Scripts/python.exe -m pip install -r server/requirements-dev.txt
+Set-Location server
+.venv/Scripts/python.exe -m unittest discover -s tests -v
+```
+
+From the repository root, with FastAPI running: `node scripts/smoke-planner.mjs`.
+`npm run build` repackages pinned OCR assets; no npm install is needed to load
+the committed extension. No runtime OCR/model downloads.
 
 [Architecture](docs/ARCHITECTURE.md) · [Progress](docs/PROGRESS.md) ·
 [Decisions](docs/DECISIONS.md) · [Handoff](docs/HANDOFF.md) ·
-[Claude / Codex AI context](docs/AI_CONTEXT.md) ·
-[OCR assets and licenses](extension/vendor/ocr/README.md)
+[AI context](docs/AI_CONTEXT.md) · [Phase 6A plan](docs/PHASE_6A_PLAN.md)
 
-Next: **Phase 6 — privacy-safe server transport + planner** (consumes the SafeAgentContext only).
-Later: 7 safe actions, 8 re-observe/verify, 9 metrics, 10 polish. Chrome verification of Phases 4–5 is user-pending.
-.
+Next after review: **Phase 6B — ONE real server-side LLM/VLM planner**, preserving
+the privacy-safe request and strict response schema. Phase 7 execution and Phase 8
+re-observation remain separate future work.

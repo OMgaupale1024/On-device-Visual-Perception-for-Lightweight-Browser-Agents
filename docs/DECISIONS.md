@@ -2,6 +2,10 @@
 
 Chronological record of significant technical decisions.
 
+Current Phase 6A policy is D28–D30 below. Earlier phase-local statements such as
+"no transport" are historical; D28 supersedes the old D2 planner-mode scaffold,
+D5 broader action list, and D9/D20 network permission scope for this checkpoint.
+
 ---
 
 ## D1 — Chrome Manifest V3 extension for the prototype
@@ -387,3 +391,55 @@ confidence), and `redactionScheme` (present placeholders → fixed descriptions,
 
 **No network/server/LLM/actions** are introduced. Phase 6 transport, when it exists, must
 consume `agentContext` only, and obtain the sanitized image solely through the handle path.
+
+## D28 — Phase 6A structured-only transport with private context approval
+
+The user confirmed the current Chrome flow works and explicitly authorized Phase 6A.
+Only that general report is recorded; detailed unreported manual checks stay pending.
+Inspected/synchronized baseline: ae4e37e. Design is in PHASE_6A_PLAN.md.
+
+The existing final local known-value guard remains primary. After it passes, the
+Phase 5 builder freezes the context and records identity → exact safe JSON in a
+private WeakMap. The transport preparation function verifies that immutable approval
+at send time. No registration/cast API and no retained secret list. The service worker
+clears known values before requestPlan(agent.context). Transport imports only approval
+and config; raw OCR/images/DOM/local envelopes are not normal inputs. Clones and all
+20 requested contaminated candidates fail before fetch.
+
+Send readable structured JSON only. Although the Phase 3 image accessor is safe by
+capability, actual image transfer adds another schema/size/pixel-validation path and
+is unnecessary for the deterministic planner. Defer upload to Phase 6B; preserve the
+private handle as the sole future sanitized-image source. Never substitute raw pixels.
+
+## D29 — Minimal localhost server, strict validation and explicit dev origin
+
+FastAPI/Pydantic/Uvicorn, no model/framework/provider/persistence. Strict nested models
+reject unexpected keys, invalid types/IDs/geometry/confidence, policy and summary
+inconsistency. Null confidence preserves Phase 5's unknown-confidence representation.
+Server canary/pattern checks provide defence in depth. Custom 422 errors omit rejected
+input rather than exposing FastAPI's default input-bearing validation errors.
+
+One configured exact Chrome extension origin; no wildcard/credentials; supplied
+disallowed origins are blocked before planning. Requests without Origin support local
+clients; CORS is not authentication. Bind 127.0.0.1 only. Loopback host permission is
+needed for cross-origin extension fetch; port 8000 is restricted by connect-src CSP.
+Self/data local OCR access and existing script/WASM/worker policy remain intact.
+
+The transport has one configured URL, no credentials/cache/referrer, redirects disabled,
+and a five-second deadline including body parsing. Opening the popup sends nothing;
+Analyze / Plan explicitly initiates it. Offline/timeouts/5xx yield unavailable,
+4xx/malformed responses yield rejected, preserving the local results.
+
+## D30 — Deterministic, observation-bound suggestions only
+
+This checkpoint supports only CLICK and STOP (superseding the broader historical D5
+action list for Phase 6A). Match the normalized travel demo goal, require exactly one
+filled non-withheld field per required role, and exactly one visual text equal to
+Continue after trim/case folding. Return its supplied ID or STOP/null. Always echo
+the submitted observation ID; never return selectors, code or arbitrary coordinates.
+
+Client rejects wrong versions/keys/actions/types, stale observation IDs and missing/
+unknown/ambiguous targets. Popup displays local safe target text and suggestion-only
+wording; arbitrary server reasons are not rendered. There is no execution or later
+live-page freshness guarantee. Real model integration is Phase 6B; execution is Phase 7;
+re-observation is Phase 8. Stop after Phase 6A commit/push and await review.

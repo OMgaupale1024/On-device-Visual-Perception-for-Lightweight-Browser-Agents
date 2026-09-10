@@ -1,7 +1,10 @@
 # EdgeSight — Testing
 
 Test log. One row per check. Do not claim something works without testing it.
-Historical phase checks are retained below; current Phase 3 evidence and pending manual checks follow.
+Historical phase checks are retained below. The latest Phase 6A checkpoint and manual
+procedure are at the end; old "no transport" and awaiting-reload statements describe
+their historical phase. The user now confirms the current Chrome flow works, without
+individually confirming every detailed historical check.
 
 ## Phase 0 — foundation verification
 
@@ -419,9 +422,96 @@ context** and confirm it shows `[NAME]`/`[EMAIL]`/`[PHONE]`/`[EMPLOYEE_ID]`/`[PA
 the real values), `Bengaluru`/`Conference`, and a `Continue` visual element with a bbox. Status:
 **UNVERIFIED** until the user confirms.
 
-## Next exact task
+## Historical next task at the Phase 5 checkpoint (superseded by Phase 6A below)
 
 User Chrome-verifies P4-M0 (OCR initializes, no createWorker SyntaxError) and P5-M0
 (SafeAgentContext READY, placeholders, ~2 KB). Do not mark either PASSED until the user confirms.
 Phase 6 (privacy-safe server transport + planner) has NOT started and must not start until
 reviewed and until Chrome verification is done; it must consume the `agentContext` only.
+
+## Phase 6A — privacy-safe transport and deterministic planner (2026-09-10)
+
+User-confirmed evidence: **the current Chrome flow is working**, as stated in the
+Phase 6A instruction. No new individual mask alignment, exact OCR recognition, timing,
+offline, payload inspection or HiDPI pass is inferred. The old general awaiting-Chrome-
+reload status is superseded by this report; detailed unreported checks remain pending.
+
+| Check | Actual result |
+|---|---|
+| `npm test` | PASS: 115/115 Node test entries, including all Phase 1–5 regressions and original 7/7 classifier assertions |
+| `npm run check` | PASS: JS/test/script syntax, manifest JSON and pinned OCR asset SHA-256 |
+| `.venv/Scripts/python.exe -m unittest discover -s tests -v` from server/ | PASS: 24/24 methods, plus parameterized validation/privacy/planner/CORS subcases |
+| `.venv/Scripts/python.exe -m compileall -q app tests` | PASS: Python syntax |
+| `.venv/Scripts/python.exe -m pip check` | PASS: no broken requirements |
+| Uvicorn bound to 127.0.0.1:8000 + `node scripts/smoke-planner.mjs` | PASS: real HTTP health, actual requestPlan CLICK/STOP and observation binding; 1553-byte approved synthetic context |
+| `node scripts/smoke-ocr.mjs .browser-test/synthetic.png` | PASS: real Node/WASM cold+warm, five safe targets including Continue, one synthetic sensitive-region line withheld |
+| `git diff --check` | PASS |
+
+Server runtime tested: Python 3.10.11, FastAPI 0.141.1, Pydantic 2.13.5,
+Uvicorn 0.52.4. Test dependency httpx 0.28.1 works with the installed Starlette
+1.6.0 but emits a TestClient deprecation warning; no failed assertions.
+The HTTP smoke uses synthetic safe JSON, not a Chrome screenshot or a manual demo.
+The OCR smoke uses the existing ignored synthetic fixture; it does not claim new
+Chrome timings. No raw screenshot artifact or PII dump is added.
+
+### Transport boundary proof
+
+`extension/tests/transport.test.mjs` contains 44 test entries. The exact intercepted
+POST body equals JSON.stringify of the actual builder-approved context. The server
+fixture is also checked against that builder to prevent request-schema drift.
+Body has image metadata only, no localPreview/dataUrl/raw OCR/raw DOM/raw screenshot.
+
+All five controlled fake values (`Rahul Sharma`, `rahul@example.com`, `9876543210`,
+`EMP1024`, `secret123`) are absent from valid transmitted bytes. Each fake value is
+injected separately at goal, semantic field, visual element and nested metadata:
+**20/20 cases return privacy BLOCKED, bytes=0 and fetch count=0**. Copies cannot
+carry the private approval; frozen approved originals cannot be mutated. A separate
+test exercises the actual builder's known-value failure (including a non-demo secret),
+then proves transport still cannot fetch. No secret list is passed into transport.
+
+Coverage includes endpoint/config/privacy options, forged clean contexts, raw strings,
+proxies/accessors, strict CLICK/STOP, HTTP 400/403/422/500, network failure, malformed
+JSON, unknown action/target, stale/missing observation, missing target, extra selector/
+coordinate keys, and both fetch/body deadlines with an aborted signal. Worker
+integration proves no network on module load, no request on revoked OCR, a request
+bound to the actual emitted context and preserved local output when the server is offline.
+
+Server tests cover health, schema types/version, bounded goal, false-only PII flag,
+safe status, 20 fake-PII/location cases, other obvious patterns, missing/malformed
+observation metadata, bbox/confidence, null confidence, extra raw keys at five schema
+locations, duplicate IDs, fixed redaction/field policy, CLICK/STOP conditions,
+target-supply/observation binding across 14 IDs, invalid response fields, malformed
+JSON and exact-origin CORS. Invalid input yields a generic 422 body without input values.
+
+### P6A-M1 — manual Chrome/server demo (PENDING user confirmation)
+
+1. Start FastAPI using the exact Windows commands in server/README.md; configure
+   EdgeSight's actual extension origin. Confirm GET /health returns status ok.
+2. Reload EdgeSight at chrome://extensions; allow file URL access.
+3. Open Employee Travel Request (demo-page/index.html), with all fields and Continue visible.
+4. Enter: **Check whether this travel request is complete and submit it.**
+5. Open the extension's **service worker DevTools → Network** and click **ANALYZE / PLAN**.
+6. Confirm local perception succeeds.
+7. Confirm local privacy **SAFE**.
+8. Confirm Safe agent context **READY**.
+9. Confirm the server receives **POST /plan** (inspect the service worker Network request;
+   access logging is disabled, so no payload logging is needed).
+10. Inspect Payload as readable JSON. Verify it contains none of Rahul Sharma,
+    rahul@example.com, 9876543210, EMP1024, secret123; no image bytes/raw OCR/DOM envelope.
+11. Inspect response: **CLICK**, target is the actual Continue visual ID from this
+    request, and observationId equals the request observation.id.
+12. Confirm popup shows **Planner decision: CLICK Continue**.
+13. Confirm the browser **DOES NOT CLICK** and the travel form remains on screen.
+
+All 13 steps remain **PENDING** for this new integration. Do not mark passed until
+the user confirms. If OCR does not yield one exact Continue text match, STOP is
+the honest expected rule outcome; do not fabricate a visual ID or recognition success.
+
+Additional pending manual checks: opening popup alone creates no /plan request;
+stop server and Analyze / Plan again → Planner unavailable while local privacy/
+perception/context remain visible. Inspect for zero external OCR/model/CDN requests;
+the authorized localhost /plan request is now expected. No Phase 7 execution is implemented.
+
+Exact next implementation task after review: **Phase 6B — ONE real server-side
+LLM/VLM planner**, preserving the same privacy-safe request and strict response schema.
+Do not implement Phase 6B, Phase 7 or Phase 8 in this checkpoint.

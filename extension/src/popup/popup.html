@@ -17,7 +17,7 @@
     <input id="goal" class="goal" type="text"
            value="Check whether this travel request is complete and submit it." />
 
-    <button id="analyze" class="btn">ANALYZE PAGE</button>
+    <button id="analyze" class="btn">ANALYZE / PLAN</button>
 
     <p class="status">Status: <span id="status">Ready</span></p>
 
@@ -61,8 +61,17 @@
       <div class="row"><span>Privacy check</span><b id="ac-guard">–</b></div>
       <div class="row"><span>Structured size</span><b id="ac-size">–</b></div>
       <div class="row"><span>Safe context ready</span><b id="ac-ready">–</b></div>
-      <p class="note">Local only — nothing is transmitted. This is the exact structure a future server would receive.</p>
+      <p class="note">Only this privacy-guarded structure is sent to the local planner when you Analyze / Plan.</p>
       <details><summary>Preview safe agent context</summary><pre id="ac-preview"></pre></details>
+
+      <h2>Planner server</h2>
+      <div class="row"><span>Status</span><b id="planner-status">–</b></div>
+      <div class="row"><span>Privacy gate</span><b id="planner-privacy">–</b></div>
+      <div class="row"><span>Payload</span><b id="planner-size">–</b></div>
+      <div class="row"><span>Server</span><b id="planner-server">–</b></div>
+      <div class="row"><span>Planner</span><b>Deterministic</b></div>
+      <div class="row"><span>Planner decision</span><b id="planner-decision">–</b></div>
+      <p id="planner-note" class="note"></p>
 
       <details id="previews">
         <summary>Compare local previews</summary>
@@ -75,7 +84,7 @@
         <details><summary>Sanitized semantic context</summary><pre id="semantic-preview"></pre></details>
       </details>
 
-      <p class="note">Both previews stay local. Nothing is transmitted. Previews clear after 60 seconds, on re-analysis, or when this popup closes.</p>
+      <p class="note">Both image previews stay local. Only guarded structured context is sent to localhost. Previews clear after 60 seconds, on re-analysis, or when this popup closes.</p>
     </section>
 
     <p id="error" class="error hidden"></p>

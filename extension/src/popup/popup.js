@@ -35,7 +35,7 @@ analyzeBtn.addEventListener('click', async () => {
   clearPreviews();
   hide(resultsEl);
   hide(errorEl);
-  setStatus('Analyzing locally… OCR may take up to 45 seconds.');
+  setStatus('Analyzing locally (up to 45s), then planning on localhost (up to 5s)…');
   try {
     const res = await chrome.runtime.sendMessage({ type: MSG.ANALYZE_PAGE, goal: byId('goal').value });
     if (!res || !res.ok) throw new Error(res?.error || 'Analysis failed.');
@@ -70,6 +70,7 @@ function render(res) {
   }
   renderPerception(res.perception, res.safeContext?.image);
   renderAgentContext(res);
+  renderPlanner(res);
   previewTimer = setTimeout(clearPreviews, 60_000);
   if (cap.ok) {
     byId('cap-status').textContent = 'Ready';
@@ -132,6 +133,21 @@ function renderAgentContext(res) {
   byId('ac-ready').textContent = 'Yes';
   // The SAME object future transport would serialize — sanitized by construction, never raw PII.
   byId('ac-preview').textContent = JSON.stringify(ctx, null, 2);
+}
+
+function renderPlanner(res) {
+  const planner = res.planner;
+  const plan = planner?.plan;
+  byId('planner-status').textContent = planner?.status === 'READY' ? 'READY' :
+    planner?.status === 'UNAVAILABLE' ? 'Planner unavailable' : 'Plan rejected';
+  byId('planner-privacy').textContent = planner?.privacy || 'BLOCKED';
+  byId('planner-size').textContent = `${((planner?.bytes || 0) / 1024).toFixed(1)} KB`;
+  byId('planner-server').textContent = planner?.status === 'READY' ? 'Connected' : 'Unavailable / rejected';
+  const target = res.agentContext?.visualElements.find((v) => v.id === plan?.target);
+  byId('planner-decision').textContent = plan ?
+    (plan.action === 'CLICK' ? `CLICK ${target.text}` : 'STOP') : '–';
+  // Never render arbitrary server reason strings. The local target text was guarded.
+  byId('planner-note').textContent = plan ? 'Suggestion only. No browser action was executed.' : planner?.reason || '';
 }
 
 function renderSensitive(fields, count) {

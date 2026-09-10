@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
   "name": "EdgeSight",
-  "version": "0.4.0",
+  "version": "0.6.0",
   "minimum_chrome_version": "116",
-  "description": "Browser-local OCR/WASM on captured pixels, followed by local privacy filtering. No remote model or planner.",
+  "description": "Local OCR and privacy filtering with a localhost deterministic planner. Suggestions only; no browser actions.",
   "content_security_policy": {
-    "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self' data:; worker-src 'self'; img-src 'self' data:; style-src 'self'"
+    "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self' data: http://127.0.0.1:8000; worker-src 'self'; img-src 'self' data:; style-src 'self'"
   },
   "action": {
     "default_title": "EdgeSight",
@@ -15,5 +15,6 @@
     "service_worker": "src/background/service-worker.js",
     "type": "module"
   },
-  "permissions": ["activeTab", "scripting", "offscreen"]
+  "permissions": ["activeTab", "scripting", "offscreen"],
+  "host_permissions": ["http://127.0.0.1/*"]
 }

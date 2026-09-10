@@ -14,6 +14,18 @@ import { checkOutbound } from './guard.js';
 
 export const SCHEMA_VERSION = 1;
 const MAX_GOAL = 500;
+// In-process proof of the final known-value check. Stores SAFE bytes only; no raw
+// values retained. There is no public registration/cast API for arbitrary objects.
+const approvedContexts = new WeakMap();
+
+export function prepareAgentContextForTransport(context) {
+  const approved = approvedContexts.get(context);
+  if (!approved || !Object.isFrozen(context) || !checkOutbound(context, []).safe ||
+      serializeSafeAgentContext(context) !== approved) {
+    throw new Error('Safe agent context rejected by privacy guard.');
+  }
+  return approved;
+}
 
 // Fixed legend so future server reasoning can interpret placeholders WITHOUT the
 // original values. Keyed by the exact placeholder sanitizeSemantics emits ([ROLE]).
@@ -126,5 +138,7 @@ export function buildSafeAgentContext({ goal, semantic, visualState, image, obse
 
   const freeze = (v) => { if (v && typeof v === 'object') { Object.values(v).forEach(freeze); Object.freeze(v); } return v; };
   // Serialized byte size for future client/network efficiency evaluation (Phase 9).
-  return { status: 'READY', context: freeze(context), bytes: new TextEncoder().encode(serialized).length };
+  freeze(context);
+  approvedContexts.set(context, serialized);
+  return { status: 'READY', context, bytes: new TextEncoder().encode(serialized).length };
 }
