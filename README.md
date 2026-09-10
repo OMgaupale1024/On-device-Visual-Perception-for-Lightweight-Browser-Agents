@@ -75,3 +75,4 @@ Node/WASM smoke result is documented separately from the unrun Chrome harness.
 
 Next: **Phase 5 — DOM + visual fusion and final sanitized structured agent context.**
 Later: Phase 6 planner, 7 safe actions, 8 re-observe/verify, 9 metrics, 10 polish.
+.
