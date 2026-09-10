@@ -40,13 +40,20 @@ export async function redactScreenshot(raw, fields, viewport) {
   }
 }
 
-// Mandatory future outbound gateway. No transport exists in Phase 3.
-// Validate, snapshot, then check the full package; caller mutations cannot taint it.
-export function buildOutboundPackage(handle, semantic, sensitiveValues) {
+// Read only an already-redacted image for the local perception path.
+export function sanitizedImageForPerception(handle) {
+  const image = sanitizedImages.get(handle);
+  if (!image) throw new Error('Sanitized image required.');
+  return image;
+}
+
+// Mandatory future outbound gateway: validate, clone and guard every representation.
+export function buildOutboundPackage(handle, semantic, sensitiveValues, visualState) {
   const image = sanitizedImages.get(handle);
   if (!image) throw new Error('Sanitized image required.');
   if (!checkOutbound(semantic, sensitiveValues).safe) throw new Error('Sensitive data detected in outbound payload');
   const context = { semantic: structuredClone(semantic), image: { ...image }, scope: 'visible-dom-fields' };
+  if (visualState !== undefined) context.visual = structuredClone(visualState);
   if (!checkOutbound(context, sensitiveValues).safe) throw new Error('Sensitive data detected in outbound payload');
   const freeze = (value) => {
     if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); }

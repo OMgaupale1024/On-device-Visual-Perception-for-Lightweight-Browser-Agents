@@ -21,7 +21,11 @@ function clearPreviews() {
   clearTimeout(previewTimer);
   byId('original-preview').removeAttribute('src');
   byId('sanitized-preview').removeAttribute('src');
+  byId('sanitized-preview').onload = null;
   byId('semantic-preview').textContent = '';
+  const canvas = byId('ocr-overlay');
+  canvas.width = 0; canvas.height = 0;
+  hide(byId('overlay-figure'));
 }
 window.addEventListener('pagehide', clearPreviews);
 
@@ -30,7 +34,7 @@ analyzeBtn.addEventListener('click', async () => {
   clearPreviews();
   hide(resultsEl);
   hide(errorEl);
-  setStatus('Analyzing…');
+  setStatus('Analyzing locally… OCR may take up to 45 seconds.');
   try {
     const res = await chrome.runtime.sendMessage({ type: MSG.ANALYZE_PAGE });
     if (!res || !res.ok) throw new Error(res?.error || 'Analysis failed.');
@@ -58,9 +62,12 @@ function render(res) {
   byId('visual-status').textContent = res.privacy.visual;
   byId('semantic-status').textContent = res.privacy.semantic;
   byId('guard-status').textContent = res.privacy.outbound;
-  byId('original-preview').src = res.localPreview.original;
-  byId('sanitized-preview').src = res.safeContext.image.dataUrl;
-  byId('semantic-preview').textContent = JSON.stringify(res.safeContext.semantic, null, 2);
+  if (res.safeContext) {
+    byId('original-preview').src = res.localPreview.original;
+    byId('sanitized-preview').src = res.safeContext.image.dataUrl;
+    byId('semantic-preview').textContent = JSON.stringify(res.safeContext.semantic, null, 2);
+  }
+  renderPerception(res.perception, res.safeContext?.image);
   previewTimer = setTimeout(clearPreviews, 60_000);
   if (cap.ok) {
     byId('cap-status').textContent = 'Ready';
@@ -71,6 +78,36 @@ function render(res) {
     if (cap.error) showError('Capture: ' + cap.error);
   }
   show(resultsEl);
+}
+
+function renderPerception(perception, image) {
+  const value = perception?.value;
+  byId('ocr-status').textContent = perception?.status || 'Unavailable';
+  byId('ocr-privacy').textContent = perception?.privacy || (perception?.status === 'UNSAFE' ? 'BLOCKED' : 'Unavailable');
+  byId('ocr-time').textContent = value ? `${Math.round(value.processingMs)} ms` : '–';
+  byId('ocr-count').textContent = value ? value.items.length : '–';
+  byId('ocr-note').textContent = value ? `${value.withheldItems} untrusted text lines withheld. English OCR baseline; not a ViT.` : perception?.reason || '';
+  byId('ocr-timing').textContent = value ? `${value.timing.cold ? 'Cold' : 'Warm'} run · initialization ${Math.round(value.timing.initializationMs)} ms · inference ${Math.round(value.timing.inferenceMs)} ms · total ${Math.round(value.timing.totalMs)} ms` : '';
+  const list = byId('ocr-items'); list.textContent = '';
+  if (!value) return;
+  for (const item of value.items) {
+    const row = document.createElement('p');
+    row.className = 'ocr-item';
+    const { x, y, width, height } = item.bbox;
+    row.textContent = `${item.text} · ${item.confidence === null ? 'confidence unavailable' : (item.confidence * 100).toFixed(1) + '%'} · (${x}, ${y}, ${width}, ${height})`;
+    list.append(row);
+  }
+  const preview = byId('sanitized-preview');
+  const draw = () => {
+    if (!preview.getAttribute('src')) return;
+    const canvas = byId('ocr-overlay'); canvas.width = image.width; canvas.height = image.height;
+    const ctx = canvas.getContext('2d'); ctx.drawImage(preview, 0, 0);
+    ctx.strokeStyle = '#ff4d24'; ctx.lineWidth = Math.max(2, image.width / 600);
+    for (const item of value.items) { const b = item.bbox; ctx.strokeRect(b.x, b.y, b.width, b.height); }
+    show(byId('overlay-figure'));
+  };
+  preview.onload = draw;
+  if (preview.complete && preview.naturalWidth) draw();
 }
 
 function renderSensitive(fields, count) {

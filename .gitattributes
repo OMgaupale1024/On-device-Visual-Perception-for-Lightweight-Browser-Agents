@@ -1,1 +1,9 @@
 * text=auto eol=lf
+# Preserve upstream runtime/license bytes so packaged SHA-256 checks survive checkout.
+extension/vendor/ocr/** -text
+scripts/licenses/** -text
+# Generated/minified upstream payloads are reviewed via pinned sources and hashes.
+extension/vendor/ocr/*.js -diff
+extension/vendor/ocr/core/*.js -diff
+extension/vendor/ocr/licenses/*.txt -diff
+scripts/licenses/*.txt -diff

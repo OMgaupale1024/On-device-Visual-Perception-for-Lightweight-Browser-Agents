@@ -1,39 +1,42 @@
 # EdgeSight — Progress
 
 CURRENT PHASE:
-Phase 3 complete. Phase 4 not started.
+Phase 4 implementation complete. Browser acceptance checks pending. Phase 5 not started.
 
 STATUS:
-Phase 3 local visual redaction + outbound privacy guard implemented; automated checks
-pass. Real Chrome popup/Canvas/manual visual checks remain UNVERIFIED. Phase 2 passed
-technical review; no new Phase 2 manual confirmation was supplied. Only historic
-Phase 1 M1–M4 are user-verified (2026-09-10).
+Browser-local OCR/CV perception baseline implemented with Tesseract.js 6.0.1, core 6.1.2,
+English data 1.0.0. Genuine Node/WASM synthetic inference passed, including boxes/confidence.
+Chrome MV3, actual demo recognition, offline operation and browser timing remain UNVERIFIED.
+
+MANUAL EVIDENCE:
+The user reported the Phase 3 manual test passed and sensitive information appeared in the
+privacy display. No exact counts, individual masks, preserved pixels or network results were
+confirmed. Detailed checks remain pending in TESTING.md. Historic Phase 1 M1–M4 are preserved.
 
 COMPLETED:
-- Phases 0–2: foundation, observation/capture, signal-only detection.
-- Stable field IDs and viewport CSS rectangles; actual screenshot scaling and clamping.
-- Opaque local Canvas masks; raw/local-preview/sanitized image trust separation.
-- Semantic placeholders, filled status, demo value allowlist; untrusted text omitted.
-- Recursive guard, private sanitized-image handle, frozen future outbound package.
-- Password-safe original preview and sanitized comparison; 60-second cleanup.
-- Snapshot stability checks, generic errors, temporary local raw values.
-- Known sensitive body/title text outside masks blocks; no network transport, connection CSP.
-- Node unit/regression/integration tests and a runnable real-Canvas browser harness.
-
-CURRENT WORK:
-Phase 3 implementation finished. User manual verification remains pending.
+- Phases 0–3 foundations, value-free detection, local capture/redaction and privacy guard.
+- Packaged local OCR runtime/worker, embedded-WASM SIMD and non-SIMD LSTM cores, English data.
+- Offscreen worker host, local-only CSP, warm worker reuse, idle disposal, 45-second timeout.
+- PNG-only inference interface; no DOM text, selectors, labels or fallback inside OCR.
+- Actual line boxes/confidence/timing normalization and conservative OCR output sanitizer.
+- Known-value guard (including case/spacing variants); unsafe output revokes image package.
+- Local text/details UI and bounding-box overlay; graceful OCR-only failure state.
+- 49 automated test entries pass; build, syntax, asset hashes and regression checks pass.
+- Real Node/WASM smoke: all 11 synthetic lines recognized; known demo PII absent.
 
 REMAINING:
-- Confirm Phase 3 manual tests in TESTING.md.
-- Phase 4: core on-device visual perception over captured pixels.
-- Phase 5: merged sanitized state; 6: planner; 7: safe actions;
-  8: re-observe/verify; 9: metrics; 10: polish.
+- User Chrome checks P4-M1 through P4-M10 and real browser harness.
+- Phase 5: spatial DOM/visual fusion into a sanitized structured UI state.
+- Phase 6 planner; 7 safe actions; 8 re-observe/verify; 9 metrics; 10 polish.
 
-BLOCKERS:
-No implementation blocker. Browser visual verification outstanding, not claimed complete.
+KNOWN LIMITS:
+English text baseline, not ViT/object detection. Fixed output vocabulary withholds unknown
+lines; no general privacy certification. No screenshot resizing; images over 20 MP are rejected
+for OCR only. Chrome behavior/latency not yet measured; browser automation reported no surfaces.
 
 NEXT EXACT TASK:
-Phase 4 — core on-device visual perception over captured pixels.
+Phase 5 — spatially match OCR text/boxes with DOM field/action geometry and assemble a
+sanitized structured UI state, preserving privacy guards. Do not implement planner/actions.
 
 LAST UPDATED:
-2026-09-10 — Phase 3 complete; manual verification pending.
+2026-09-10 — Phase 4 implemented; browser acceptance pending.

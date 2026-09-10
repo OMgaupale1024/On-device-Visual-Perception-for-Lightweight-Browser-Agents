@@ -144,7 +144,13 @@ results above remain historical. No manual visual redaction pass is claimed.
 This synthetic harness tests the real redaction module but not captureVisibleTab or
 alignment with the demo DOM; the following manual procedure is also required.
 
-### Exact Phase 3 manual procedure — all UNVERIFIED
+### Exact Phase 3 manual procedure — detailed checks pending
+
+User report before Phase 4: "manual test paseed its shows sensistive in privacy data".
+Recorded confirmation: user reports the manual test passed and the privacy display
+shows sensitive information. This authorizes Phase 4. No exact count, individual mask
+alignment, preserved Destination/Purpose pixels, SAFE indicator or Network-panel result
+was explicitly reported; the detailed checks below remain UNVERIFIED.
 
 Use only the existing fake data. For file://, enable Allow access to file URLs. Size or
 zoom the window so all seven fields fit; if a field is offscreen it is intentionally
@@ -178,6 +184,99 @@ Runtime network count and actual demo redaction are pending user verification. A
 static checks establish no network API implementation and a connection-blocking CSP;
 they do not replace runtime observation.
 
-## Next phase
 
-Phase 4 — core on-device visual perception over captured pixels. Not started.
+
+## Phase 4 — automated and actual-engine evidence
+
+User authorized Phase 4 after reporting the Phase 3 manual test passed and sensitive
+information appeared in the privacy display. Only that report is recorded above; no
+unreported detailed Phase 3 check is promoted to PASS.
+
+`npm test`: **49/49 test entries PASS**, including all Phase 1–3 regressions and the original
+7/7 detection tests. New coverage: actual-output normalization, clamped/rejected boxes,
+confidence conversion/null behavior, empty/malformed output, unknown-line withholding,
+all five known-value contamination cases, canonical case/spacing checks, serialization,
+local-only paths, capability rejection, absence of DOM-text access in OCR, offscreen reuse,
+failure cleanup and timeout. Worker integration also proves UNSAFE revokes image packaging
+and ordinary missing-OCR capability preserves Phase 1–3 results. These integration tests use
+API doubles and are not claims that Chrome inference passed.
+
+`npm run build`: PASS; 18 runtime/data/license files, 11,090,774 bytes (inventory/README extra).
+`npm run check`: PASS; JS syntax, manifest parse and every packaged SHA-256/byte count.
+`git diff --check`: PASS. No node_modules/cache/temp PNG/real PII files are staged.
+
+### Genuine Tesseract/WASM smoke run — Node, not Chrome
+
+Executed `node scripts/smoke-ocr.mjs .browser-test/synthetic.png` under Node 24.11.0 on
+Windows. The local synthetic image was 1000×750, with Arial 28-pixel safe labels and five
+opaque rectangles. It contained no raw user data and was not committed. It was rendered
+with System.Drawing, not obtained from the DOM. The test used the real pinned Tesseract
+worker/core and locally packaged traineddata, not an OCR mock. This does NOT verify the
+browser bundle, MV3 CSP, offscreen messaging, actual demo pixels or internet-disconnected
+Chrome operation. Those remain manual checks.
+
+Actual detected lines: Employee Travel Request; Employee Name; Email; Phone; Employee ID;
+Destination; Bengaluru; Purpose; Conference; Password; Continue. All 11 had engine line
+bounding boxes and confidence .95 or .96. Actual examples (x,y,width,height):
+
+| Text | Screenshot-pixel box | Confidence |
+|---|---|---|
+| Destination | 42,326,138,20 | .96 |
+| Bengaluru | 42,386,126,26 | .96 |
+| Purpose | 42,446,103,26 | .95 |
+| Conference | 41,506,145,20 | .96 |
+| Continue | 41,626,112,20 | .96 |
+
+| Node synthetic run | Initialization | Inference | Total |
+|---|---|---|---|
+| Cold | 758.37 ms | 500.52 ms | 1258.90 ms |
+| Warm | 0 ms (reused) | 289.97 ms | 289.97 ms |
+
+The actual result passed the output sanitizer and guard using the five existing fake
+sensitive values extracted locally from demo-page/index.html; none appeared in released
+output. Contaminated fixtures separately prove blocking. These timings are measured
+Node test values, NOT browser or real-demo performance. Browser cold/warm timing is unmeasured.
+
+Reproduce: `powershell -File scripts/create-ocr-fixture.ps1`, then
+`node scripts/smoke-ocr.mjs .browser-test/synthetic.png`. The generated PNG is ignored.
+
+### Browser-local real engine harness — UNVERIFIED
+
+Browser automation inventory returned no available browser surfaces in this session.
+No Chrome or manual result is claimed from it.
+
+1. Reload EdgeSight and copy its extension ID from chrome://extensions.
+2. Open `chrome-extension://<id>/tests/ocr-browser.html`.
+3. Click Run cold / warm OCR test. This draws synthetic text into Canvas, applies the
+   real Phase 3 masks, and passes only resulting image bytes to the real browser engine.
+4. Expected: PASS for Destination, Bengaluru, Purpose, Conference, Continue; actual cold
+   and warm results/boxes/confidence/timing appear. Inspect the drawn boxes visually.
+5. This harness contains no raw PII and checks no real demo capture. Test actual demo
+   privacy and offline operation separately below. Harness result remains UNVERIFIED.
+
+### Phase 4 manual procedure — all UNVERIFIED
+
+Reload the extension with its packaged assets. Use only the existing fake demo data.
+Keep all fields visible; expand OCR details and Compare local previews promptly.
+
+| ID | Procedure / expected result | Status |
+|---|---|---|
+| P4-M1 | Extension loads with packaged local OCR assets; no manifest/engine errors | UNVERIFIED |
+| P4-M2 | Disconnect internet after loading (before first OCR); analysis still works from local assets | UNVERIFIED |
+| P4-M3 | ANALYZE PAGE on sanitized Employee Travel Request screenshot; OCR status Ready or honest Empty/Error | UNVERIFIED |
+| P4-M4 | Actual OCR visibly recognizes Destination, Bengaluru, Purpose, Conference, Continue; record actual misses rather than forcing PASS | UNVERIFIED |
+| P4-M5 | OCR overlay bounding boxes align with recognized text in sanitized screenshot | UNVERIFIED |
+| P4-M6 | OCR output has none of the five raw fake sensitive values; privacy SAFE | UNVERIFIED |
+| P4-M7 | Worker/offscreen DevTools Network shows zero external OCR/model/CDN requests (chrome-extension local reads are allowed) | UNVERIFIED |
+| P4-M8 | Second Analyze within two minutes succeeds; warm timing is shown; record actual times | UNVERIFIED |
+| P4-M9 | Phase 3 still masks all five fields correctly; Destination/Purpose pixels remain visible | UNVERIFIED |
+| P4-M10 | Simulate a missing asset in a disposable extension copy, reload and analyze: OCR reports unavailable/error within deadline while Phase 1–3 counts/redaction remain usable; restore copy after test | UNVERIFIED |
+
+Also pending: close popup during OCR and reopen/retry, simultaneous Analyze rejection,
+empty screenshot behavior, timeout recovery, 120-second idle disposal and HiDPI overlay.
+All browser/manual timings and network observations remain UNVERIFIED.
+
+## Next exact task
+
+Phase 5 — spatially match OCR text/boxes with DOM field/action geometry and assemble a
+sanitized structured UI state, preserving privacy guards. No planner or autonomous actions.

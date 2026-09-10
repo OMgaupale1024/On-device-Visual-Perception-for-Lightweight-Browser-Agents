@@ -210,3 +210,52 @@ These checks do not make DOM/capture atomic. No masks for unknown PII in arbitra
 pixels, images/canvas/iframes/shadow DOM are claimed. Phase 3 is the static demo's
 privacy filter; Phase 4 remains the core perception phase. Node doubles prove code
 paths, not real browser pixels. Chrome visual/manual checks remain UNVERIFIED.
+
+## D18 — One lightweight local OCR baseline for the deadline
+
+Select Tesseract.js 6.0.1 with compatible core 6.1.2 and English data 1.0.0. Installed
+package source was inspected for exact filenames, OEM selection, blocks output, cache
+behavior and worker paths. Use English LSTM-only and sparse-text PSM=11. This is honestly
+called a browser-local OCR/CV perception baseline, not a Vision Transformer. Large ViT,
+OmniParser, cloud VLM, ONNX and extra frameworks add deadline risk and are excluded.
+A future quantized model can implement the same image-in/normalized-items-out interface.
+
+## D19 — Commit a reproducible extension-local runtime
+
+Copy explicit pinned assets into extension/vendor/ocr and verify their hashes. Include
+runtime, worker, both LSTM SIMD/non-SIMD embedded-WASM cores, English data and licenses.
+Installed core 6.1.2 `.wasm.js` files contain their WASM bytes, not external binary links.
+Override all remote defaults with local URLs; workerBlobURL=false; cacheMethod=none.
+Do not commit node_modules, source maps, caches or test PNGs. Full asset/license provenance
+is in vendor/ocr/README.md, including npm English MIT metadata versus Apache upstream data.
+
+## D20 — Offscreen host and minimum MV3 policy adjustment
+
+Add offscreen permission and Chrome 116 minimum for runtime.getContexts. The offscreen
+page owns the local Web Worker and survives popup close. CSP adds wasm-unsafe-eval and
+worker-src self, and changes connect-src none to self + data: for local language and embedded-WASM reads. It never
+allows external origins, unsafe-eval or blob workers. This supersedes Phase 3's strict
+connect-src none without introducing an outbound transport. Runtime asset reads can appear
+in DevTools as chrome-extension URLs; external model/CDN requests must remain zero.
+
+Inspection of core 6.1.2 also found its loader first uses fetch on the embedded WASM
+data URI before a byte-decoding fallback. The data: connection allowance avoids a CSP
+failure on that local in-memory read; it grants no remote origin access.
+
+## D21 — Sanitized pixels first; untrusted OCR output second
+
+The OCR application entry accepts only the Phase 3 sanitized-image capability. It forwards
+only PNG bytes/dimensions, never DOM labels/values. Post-inference output is guarded against
+locally held known values before and after normalization; canonical comparison also handles
+case and whitespace/punctuation changes. Conservative output vocabulary withholds unknown
+lines and never inserts text. Unsafe OCR revokes the whole candidate image package/previews;
+ordinary OCR errors keep Phase 1–3 results. Phase 5 fusion is deliberately not implemented.
+
+## D22 — Measured timing, bounded work and honest evidence
+
+Record actual initialization/inference/total times, distinguish cold from warm, dispose
+worker after 120 seconds idle and close its host after a 45-second processing deadline.
+No resizing until demonstrated necessary; cap OCR at 20 MP and retain original pixel boxes.
+Return actual engine confidence divided by 100, or null if unavailable. Node/WASM synthetic
+inference is real engine evidence but not Chrome evidence. All manual P4 checks stay
+UNVERIFIED until the user actually reports them; no browser latency is fabricated.

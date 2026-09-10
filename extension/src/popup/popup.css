@@ -75,5 +75,7 @@ figure { margin: 10px 0; }
 figcaption { font-size: 10px; font-weight: 700; margin-bottom: 5px; }
 figure img { display: block; width: 100%; height: auto; border: 1px solid var(--line); }
 figure img:not([src]) { display: none; }
+figure canvas { display: block; width: 100%; height: auto; }
+.ocr-item { font-size: 11px; overflow-wrap: anywhere; border-bottom: 1px solid var(--line); padding-bottom: 5px; }
 .filter-arrow { text-align: center; color: var(--accent); font-size: 10px; }
 pre { font-size: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }

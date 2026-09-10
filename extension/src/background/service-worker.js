@@ -5,6 +5,7 @@ import { detectSensitiveFields, countSensitive } from '../privacy/detect.js';
 import { collectLocalValues } from '../privacy/collect.js';
 import { sanitizeSemantics } from '../privacy/semantic.js';
 import { redactScreenshot, buildOutboundPackage } from '../privacy/redact.js';
+import { perceiveSanitized } from '../perception/pipeline.js';
 
 let busy = false;
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -66,7 +67,13 @@ async function runAnalysis() {
     rawScreenshot = null;
     secrets = before.values.filter((v) => fields.some((f) => f.id === v.id && f.sensitive)).map((v) => v.value);
     const semantic = sanitizeSemantics(fields, obs.fieldSignals, before.values);
-    const safeContext = buildOutboundPackage(visual.handle, semantic, secrets);
+    let safeContext = buildOutboundPackage(visual.handle, semantic, secrets);
+    release(before); release(after);
+    before = after = null; // Only the known sensitive strings remain until OCR guarding.
+    const perception = await perceiveSanitized(visual.handle, secrets);
+    if (perception.privacy === 'SAFE') {
+      safeContext = buildOutboundPackage(visual.handle, semantic, secrets, perception.value);
+    }
     return {
       ok: true,
       observation: {
@@ -74,10 +81,13 @@ async function runAnalysis() {
         fields: safeContext.semantic.fields, sensitiveCount: countSensitive(fields),
       },
       capture: { ok: true, width: visual.width, height: visual.height },
-      privacy: { redactedRegions: visual.redactedRegions, visual: 'Sanitized', semantic: 'Sanitized', outbound: 'SAFE' },
+      privacy: { redactedRegions: visual.redactedRegions, visual: 'Sanitized', semantic: 'Sanitized', outbound: perception.status === 'UNSAFE' ? 'BLOCKED' : 'SAFE' },
       // LOCAL-ONLY sibling. Never passed to buildOutboundPackage.
-      localPreview: { original: visual.originalPreview },
-      safeContext,
+      localPreview: perception.status === 'UNSAFE' ? {} : { original: visual.originalPreview },
+      // A privacy failure also revokes the image package: don't leave an eligible
+      // screenshot behind if OCR discovered known sensitive text outside the masks.
+      safeContext: perception.status === 'UNSAFE' ? null : safeContext,
+      perception,
     };
   } finally {
     rawScreenshot = null;

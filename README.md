@@ -4,57 +4,65 @@
 
 Smart India Hackathon 2026 · SIH26171 · ISRO · Software · Smart Automation.
 
-**Phase 3 complete. Phase 4 not started.** EdgeSight captures the active viewport locally,
-uses DOM geometry to mask sensitive fields with Canvas, sanitizes semantic context, and
-guards a future outbound package. Chrome manual visual verification remains UNVERIFIED.
+**Phase 4 implemented. Phase 5 not started.** EdgeSight now runs a **browser-local
+OCR/CV perception baseline** over sanitized screenshot pixels using Tesseract.js 6.0.1,
+WASM core 6.1.2 and packaged English data. This is OCR, not a Vision Transformer.
+
+Real Tesseract/WASM inference passed on a synthetic image under Node. Actual Chrome
+MV3 inference, offline operation and demo recognition still require manual verification.
+The user reported the Phase 3 manual test passed and sensitive information appeared in
+the privacy display; only that specific report is recorded in [Testing](docs/TESTING.md).
 
 ## Run locally
 
-1. Load unpacked `extension/` at `chrome://extensions` in Developer mode.
-2. Enable **Allow access to file URLs** for EdgeSight.
-3. Open `demo-page/index.html` (Employee Travel Request, fake data only).
-4. Keep all seven fields visible, open the popup, and click **ANALYZE PAGE**.
-5. Expand **Compare local previews**: ORIGINAL → LOCAL PRIVACY FILTER → SANITIZED.
+1. Reload/load unpacked `extension/` at `chrome://extensions` (Chrome 116+).
+2. Enable Allow access to file URLs and open `demo-page/index.html` (fake data only).
+3. Keep all seven fields visible; open EdgeSight and click **ANALYZE PAGE**.
+4. Inspect Local visual perception and expand detected text/positions and local previews.
 
-Expected demo: 7 inputs, 1 button, 7 labels; 5 sensitive fields and masks for Name,
-Email, Phone, Employee ID and Password. Destination (Bengaluru) and Purpose (Conference)
-remain visible. Actual Chrome results await [manual verification](docs/TESTING.md).
+All OCR runtime assets are committed under `extension/vendor/ocr/`; loading the extension
+requires no npm install and no runtime download. Engine processing has a 45-second deadline.
+The popup displays actual OCR output, confidence, boxes, cold/warm timing, and a local box
+overlay. Unknown OCR lines are withheld by the prototype output policy; missing text is
+never fabricated or replaced with DOM text. Empty and error states are explicit.
 
-The ORIGINAL — LOCAL ONLY preview always hides the password region. The SANITIZED —
-SAFE CONTEXT preview is scoped to detected visible DOM fields. Previews clear after
-60 seconds, on re-analysis, or on popup close. Neither preview is transmitted.
-
-## Privacy flow
+## Privacy order
 
 ```text
-value-free observation + classifier → IDs + viewport CSS rectangles
-local screenshot → actual-dimension scaling → Canvas masks → private sanitized-image handle
-local temporary values → semantic placeholders → recursive privacy guard
-sanitized-image handle + guarded semantics → frozen future outbound package
+local raw screenshot → Phase 3 field masks → private sanitized-image handle
+→ local OCR worker (PNG bytes only) → output sanitizer + known-value guard
+→ safe visual result, separate from DOM semantics (Phase 5 fusion later)
 ```
 
-Raw screenshot strings and forged image handles cannot enter the package builder.
-Sensitive semantics contain placeholders and filled status, never raw values.
-Arbitrary labels/titles/text are omitted; unknown values are withheld. Only the narrow
-Destination/Purpose demo vocabulary may retain values. The guard rejects known raw
-sensitive strings anywhere in outgoing JSON keys or values. No package is sent.
+Raw field-value strings never reach OCR or the popup. They stay temporarily in the trusted
+worker for privacy checks. Raw screenshots cannot enter the OCR application gateway or
+outbound builder. The original preview is local-only and always hides passwords. Previews
+expire after 60 seconds, on re-analysis or close. Neither image is sent off-device.
 
-There is no server, network transport, LLM, OCR, CV model, Raspberry Pi or autonomous
-action. Extension CSP blocks network connections. Actual local visual perception over
-captured pixels is **Phase 4**, not implemented yet. Current masking does not certify
-arbitrary websites or recognize unknown PII in images, canvas, iframes or shadow DOM.
+Known sensitive OCR text makes the visual result UNSAFE: no OCR text, previews or candidate
+outbound package are released. Ordinary OCR failures preserve Phase 1–3 results. All runtime
+assets resolve to extension-local URLs; CSP permits self scripts/workers, self/data reads
+and local WASM compilation. There is no remote transport, server, LLM, planner or action agent.
 
-## Tests and documentation
+Expected demo OCR targets include Destination, Bengaluru, Purpose, Conference and Continue.
+The static fake-data form is the supported prototype scope. Unknown PII, OCR errors,
+shadow DOM/iframes, image-only secrets and complete arbitrary-site privacy are not solved.
 
-Run `node --test extension/tests/*.test.mjs` (Node 24; no dependencies/server).
-Node verifies logic and browser API doubles. A real Canvas pixel harness is supplied
-as a local extension page; its execution and manual demo checks remain UNVERIFIED.
+## Development and tests
 
-- `extension/`: MV3 client, permissions activeTab + scripting.
-- `demo-page/`: fake-data form. `server/`: documentation only; planner is Phase 6.
-- [Architecture](docs/ARCHITECTURE.md), [Progress](docs/PROGRESS.md),
-  [Decisions](docs/DECISIONS.md), [Handoff](docs/HANDOFF.md), [Testing](docs/TESTING.md).
+- `npm ci --ignore-scripts --no-audit --no-fund` (development dependency download only).
+- `npm run build`: package the pinned runtime, embedded-WASM cores, English data and licenses.
+- `npm test`: pure logic, API-double integration and Phase 1–3 regressions.
+- `npm run check`: syntax, manifest and packaged asset SHA-256 checks.
+- Real browser harness: `chrome-extension://<id>/tests/ocr-browser.html`.
+  Browser checks remain UNVERIFIED; see the exact [test plan](docs/TESTING.md).
 
-Roadmap: 0 foundation → 1 observation/capture → 2 detection → 3 redaction/guard (complete)
-→ **4 core local visual perception** → 5 merged sanitized state → 6 planner → 7 safe actions
-→ 8 re-observe/verify → 9 metrics → 10 polish.
+`node_modules`, caches and temporary test images are ignored and not committed. The genuine
+Node/WASM smoke result is documented separately from the unrun Chrome harness.
+
+[Architecture](docs/ARCHITECTURE.md) · [Progress](docs/PROGRESS.md) ·
+[Decisions](docs/DECISIONS.md) · [Handoff](docs/HANDOFF.md) ·
+[OCR assets and licenses](extension/vendor/ocr/README.md)
+
+Next: **Phase 5 — spatial DOM/visual fusion into a sanitized structured UI state.**
+Later: Phase 6 planner, 7 safe actions, 8 re-observe/verify, 9 metrics, 10 polish.

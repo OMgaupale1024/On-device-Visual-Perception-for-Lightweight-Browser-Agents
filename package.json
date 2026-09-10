@@ -1,0 +1,16 @@
+{
+  "name": "edgesight-local-perception",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/package-ocr.mjs",
+    "test": "node --test extension/tests/*.test.mjs",
+    "check": "node scripts/check.mjs"
+  },
+  "devDependencies": {
+    "@tesseract.js-data/eng": "1.0.0",
+    "tesseract.js": "6.0.1",
+    "tesseract.js-core": "6.1.2"
+  }
+}

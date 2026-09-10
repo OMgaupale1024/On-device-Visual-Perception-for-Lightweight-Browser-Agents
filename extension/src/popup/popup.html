@@ -41,13 +41,24 @@
       <div class="row"><span>Visual context</span><b id="visual-status">–</b></div>
       <div class="row"><span>Semantic context</span><b id="semantic-status">–</b></div>
       <div class="row"><span>Outbound privacy check</span><b id="guard-status">–</b></div>
+      <h2>Local visual perception</h2>
+      <div class="row"><span>Engine</span><b>Browser-local OCR / WASM</b></div>
+      <div class="row"><span>Status</span><b id="ocr-status">–</b></div>
+      <div class="row"><span>Visual privacy check</span><b id="ocr-privacy">–</b></div>
+      <div class="row"><span>Processing</span><b id="ocr-time">–</b></div>
+      <div class="row"><span>Visual items</span><b id="ocr-count">–</b></div>
+      <p id="ocr-note" class="note"></p>
+      <details><summary>Detected visual text and positions</summary>
+        <p id="ocr-timing" class="note"></p><div id="ocr-items"></div>
+      </details>
       <details id="previews">
         <summary>Compare local previews</summary>
         <figure><figcaption>ORIGINAL — LOCAL ONLY</figcaption><img id="original-preview" alt="Local page capture with password region hidden" /></figure>
         <p class="note">Password regions are always hidden, including in this original preview.</p>
         <p class="filter-arrow">↓ LOCAL PRIVACY FILTER ↓</p>
         <figure><figcaption>SANITIZED — SAFE CONTEXT</figcaption><img id="sanitized-preview" alt="Local screenshot with sensitive form regions masked" /></figure>
-        <p class="note">Scope: detected visible DOM fields. No pixel perception yet.</p>
+        <figure id="overlay-figure" class="hidden"><figcaption>LOCAL OCR — ACTUAL TEXT BOXES</figcaption><canvas id="ocr-overlay"></canvas></figure>
+        <p class="note">Masks cover detected visible DOM fields. OCR runs on sanitized pixels; unknown OCR strings are withheld.</p>
         <details><summary>Sanitized semantic context</summary><pre id="semantic-preview"></pre></details>
       </details>
 

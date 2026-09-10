@@ -1,71 +1,73 @@
 # EdgeSight — Handoff
 
-## Current state
+## State
 
-**Phase 3 complete. Phase 4 not started.** Phase 2 passed technical review. No new
-manual checks were confirmed. Historic Phase 1 M1–M4 remain user-verified; Phase 1
-M5–M8 and all Phase 2/3 popup checks remain pending as listed in TESTING.md.
+Phase 4 implemented; Phase 5 not started. The browser-local OCR/CV baseline uses Tesseract.js
+6.0.1 + core 6.1.2 + English data 1.0.0. Do not call it a ViT. Real Node/WASM synthetic
+inference passed; actual Chrome engine/capture/offline/overlay checks remain UNVERIFIED.
 
-ANALYZE PAGE observes/classifies visible DOM fields, captures the tab, checks snapshot
-stability, masks sensitive rectangles locally, sanitizes semantics and guards a frozen
-future outbound package. The popup shows privacy status plus collapsible ORIGINAL —
-LOCAL ONLY / SANITIZED — SAFE CONTEXT previews. Passwords are masked in both; previews
-clear after 60 seconds, on re-analysis or close. No server/network/LLM/OCR/CV/planner/
-actions/Pi. Do not begin Phase 4 as part of this change.
+The user reported Phase 3's manual test passed and the privacy display shows sensitive
+information. Do not convert this into unreported count, mask, SAFE, network or HiDPI passes.
+Exact evidence and historic Phase 1 confirmations are preserved in TESTING.md.
 
 ## Repository and run
 
-`main`, tracking `origin/main`.
-https://github.com/OMgaupale1024/On-device-Visual-Perception-for-Lightweight-Browser-Agents
+`main`, tracking `origin/main`. Phase 4 commit subject:
+`feat: add browser-local visual perception`. Final report records hash/push verification.
+Use `git log -1` and `git rev-parse HEAD origin/main` to inspect current state.
 
-Phase 3 commit subject: `feat: add local visual redaction and privacy guard`.
-Use `git log -1` and `git rev-parse HEAD origin/main` for hash/sync state. The task's
-final report records actual push verification.
+Reload unpacked `extension/` in Chrome 116+. Assets are already packaged: npm is not needed
+for the demo. Enable file URL access, open `demo-page/index.html`, keep all seven fields
+visible and ANALYZE PAGE. Inspect OCR status, text, boxes, confidence, timing and overlay.
+First initialization can take longer; deadline is 45 seconds. Repeated runs within two
+minutes reuse the worker. The worker is disposed after two minutes idle or any host failure.
 
-Reload unpacked `extension/`; enable Allow access to file URLs; open
-`demo-page/index.html`. Keep all seven fields visible and ANALYZE PAGE.
-Expected: 7/1/7 counts, 5 sensitive fields and masks, sanitized semantic/visual state,
-SAFE guard, Destination/Purpose visible. Actual Chrome results remain UNVERIFIED.
+Development: `npm ci --ignore-scripts --no-audit --no-fund`, `npm run build`, `npm test`,
+`npm run check`. Build copies pinned assets/licenses and writes SHA-256 inventory. No
+node_modules/cache/temp images are committed. The data package has differing npm MIT
+metadata/upstream Apache-2.0 data licensing, explicitly recorded in vendor/ocr/README.md.
 
-Automated: `node --test extension/tests/*.test.mjs` (Node 24, no dependencies).
-Real Canvas harness: `chrome-extension://<extension-id>/tests/redaction-browser.html`.
-This uses synthetic pixels and no server. It has not been run. Follow TESTING.md and
-record only actually confirmed checks.
+Browser harness: `chrome-extension://<id>/tests/ocr-browser.html` → Run cold / warm OCR test.
+This actually invokes browser Tesseract on Canvas-generated, Phase-3-masked synthetic pixels.
+It has not been run here: browser automation reported no enabled browser surfaces. Use the
+separate P4-M1–M10 manual procedure for the actual demo, offline/network and failure checks.
 
-## Code map
+Genuine Node smoke: `node scripts/smoke-ocr.mjs <local-synthetic-PNG>`; it is not Chrome proof.
+The previous run recognized 11 lines, confidence .95–.96. Cold init/inference/total:
+758.37/500.52/1258.90 ms; warm inference/total 289.97 ms. See TESTING for scope and reproduction.
 
-Paths relative to `extension/src/`:
+## Code boundaries
 
-- `content/observe.js`: value-free signals, stable IDs, CSS rectangles.
-- `privacy/detect.js`: unchanged Phase 2 classifier.
-- `privacy/collect.js`: separate temporary values and repeated-sensitive-text block.
-- `privacy/geometry.js`: measured scaling, rounding/clamping.
-- `privacy/semantic.js`: placeholders and demo vocabulary, untrusted labels omitted.
-- `privacy/guard.js`: recursive JSON/key guard with generic failure.
-- `privacy/redact.js`: Canvas masks, private handles, frozen package gateway.
-- `background/service-worker.js`: orchestration, stability, cleanup; no transport.
-- `popup/`: local privacy results/previews.
-- `extension/tests/` (repo-relative): unit/regression tests and browser pixel harness.
+- Phase 1–3 observer/classifier/geometry/semantic pipeline remains intact.
+- `privacy/redact.js`: private sanitized-image registry and outbound builder. The new
+  accessor rejects raw strings/forged handles. Optional visual output is separately guarded.
+- `perception/pipeline.js`: sanitized capability → local inference → visual output sanitizer.
+- `perception/bridge.js`: MV3 offscreen creation/messaging, 45-second timeout, host cleanup.
+- `perception/offscreen.*`: packaged worker host; no page DOM access; sender checks, busy state.
+- `perception/ocr.js`: PNG bytes only, explicit local URLs, LSTM English, sparse-text mode.
+- `perception/normalize.js`: line boxes, actual confidence / 100, timings and schema.
+- `privacy/visual.js`: known-value guard before/after normalization, conservative safe words.
+- `popup/`: actual safe OCR output and local Canvas box overlay; no expected-item checkmarks.
+- `vendor/ocr/`: about 11.1 MB runtime/data/licenses and hash inventory.
 
-## Preserve these boundaries
+Raw screenshots never enter OCR. Raw known-value strings stay in the worker privacy
+transaction until output checking and are dropped in finally, never OCR/popup/log/storage.
+OCR data is untrusted. An UNSAFE result revokes candidate safeContext and previews while
+retaining safe structural counts. Ordinary OCR errors leave Phase 1–3 context available.
+Future transport must consume only guarded safeContext, never the full local response.
 
-Classifier/observer never read values. Only collector and trusted worker privacy work
-handle raw strings; never popup/logs/errors/storage/files/transmission. All labels/text
-are untrusted until sanitized. Future goals/action labels must pass the same gateway.
+CSP adjustment: `wasm-unsafe-eval` for local WASM; `worker-src 'self'`; connect-src changes
+from none to self + data: for extension-local traineddata and embedded-WASM reads. No remote origins, blob worker,
+unsafe-eval, broad hosts or script relaxations. Added offscreen permission only.
 
-The raw screenshot cannot enter buildOutboundPackage; only redaction mints its private
-sanitized-image handle. The original preview is a separate local-only sibling. Future
-Phase 6 transport must consume only guarded safeContext, never the full response.
-Keep activeTab/scripting permissions, value-free detection, network CSP and tests intact.
+## Limits and next task
 
-## Known limits
+No actual Chrome verification/latency claim yet. English OCR only, conservative word
+allowlist, uncertain accuracy on small fonts, no PII/object/face recognition guarantee,
+no resizing (20 MP cap), no atomic DOM+capture guarantee. Warm WASM may retain last
+sanitized image in engine memory until reuse/disposal. No secure JS memory-erasure claim.
+A future quantized ViT/ONNX detector can replace this engine behind the same image-input,
+normalized-box/output-guard interface; none is integrated now.
 
-Chrome visual alignment and runtime zero-network observation await manual checks.
-Node Canvas doubles are not pixel proof. The supplied browser harness is UNVERIFIED.
-Masks cover detected visible standard DOM fields; no unknown PII recognition in arbitrary
-text/images/canvas/iframes/shadow DOM. Pinch zoom blocks. Snapshot checks cannot eliminate
-every transient race. JS cleanup is not secure memory wiping. Use the static fake-data demo.
-
-## Next exact task
-
-Phase 4 — core on-device visual perception over captured pixels.
+Next exact task: Phase 5 — spatially match OCR text/boxes with DOM field/action geometry
+and assemble a sanitized structured UI state, preserving privacy guards. No planner/actions.

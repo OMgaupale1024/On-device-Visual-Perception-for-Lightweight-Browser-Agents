@@ -7,6 +7,8 @@
 
 # Node (extension / tooling)
 node_modules/
+.npm-cache/
+.browser-test/
 dist/
 build/
 *.log

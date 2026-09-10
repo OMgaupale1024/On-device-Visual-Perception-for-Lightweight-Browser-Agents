@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>EdgeSight real local OCR test</title></head>
+<body>
+  <h1>Real browser-local OCR/WASM test</h1>
+  <p>Only synthetic pixels are drawn. No DOM text is sent to OCR. No external assets or server.</p>
+  <button id="run">Run cold / warm OCR test</button>
+  <p id="status">Ready to test</p>
+  <canvas id="overlay"></canvas><pre id="result"></pre>
+  <script type="module" src="ocr-browser.js"></script>
+</body></html>

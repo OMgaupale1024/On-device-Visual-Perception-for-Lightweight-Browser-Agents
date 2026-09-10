@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
   "name": "EdgeSight",
-  "version": "0.3.0",
-  "description": "EdgeSight Phase 3: local visual redaction, sanitized semantic context, and an outbound privacy guard. No network transport.",
+  "version": "0.4.0",
+  "minimum_chrome_version": "116",
+  "description": "Local privacy filtering and browser-local OCR/WASM perception over sanitized screenshot pixels. No remote model or planner.",
   "content_security_policy": {
-    "extension_pages": "default-src 'self'; script-src 'self'; object-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self'"
+    "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self' data:; worker-src 'self'; img-src 'self' data:; style-src 'self'"
   },
   "action": {
     "default_title": "EdgeSight",
@@ -14,5 +15,5 @@
     "service_worker": "src/background/service-worker.js",
     "type": "module"
   },
-  "permissions": ["activeTab", "scripting"]
+  "permissions": ["activeTab", "scripting", "offscreen"]
 }

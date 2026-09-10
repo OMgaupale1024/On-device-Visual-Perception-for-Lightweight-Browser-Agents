@@ -1,13 +1,14 @@
 # EdgeSight extension
 
-Chrome MV3 Phase 3: local DOM observation, signal-only detection, visible-tab capture,
-Canvas redaction, semantic sanitization and outbound privacy guard. No network transport,
-planner, OCR/CV model or action execution.
+Phase 4 browser-local OCR/CV perception baseline: Tesseract.js 6.0.1 / core 6.1.2 / English
+1.0.0. OCR consumes only Phase-3-sanitized PNG pixels. It never reads observed DOM text.
 
-Load unpacked this folder at chrome://extensions. Enable Allow access to file URLs,
-open the local demo and ANALYZE PAGE. Expand Compare local previews. Both remain local;
-password regions are masked even in the original. Images expire after 60 seconds.
-Chrome visual checks remain UNVERIFIED.
+Load/reload unpacked this folder in Chrome 116+. Runtime assets are committed in vendor/ocr;
+no runtime npm/CDN/model download is required. Open the local fake-data demo and ANALYZE PAGE.
+Inspect actual OCR text, confidence, boxes, timing and local overlay. Browser manual tests
+remain UNVERIFIED. The user confirmed only a general Phase 3 manual pass/sensitive display.
 
-Run `node --test extension/tests/*.test.mjs` from the repository root.
-See [Architecture](../docs/ARCHITECTURE.md) and [Testing](../docs/TESTING.md).
+From repo root: npm run build; npm test; npm run check.
+Actual browser harness: chrome-extension://<id>/tests/ocr-browser.html.
+[Architecture](../docs/ARCHITECTURE.md) · [Testing](../docs/TESTING.md) ·
+[Assets/licenses](vendor/ocr/README.md). Phase 5 fusion is not implemented.
