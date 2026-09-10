@@ -1,5 +1,6 @@
 import { createWorker } from '../../vendor/ocr/tesseract.esm.min.js';
 import { localOptions } from './config.js';
+import { clearWorkerImage } from './cleanup.js';
 
 // PIXELS ONLY. No observed DOM, field metadata, labels, hints or fallback text input.
 // Hosted in an offscreen extension page; all engine URLs resolve to this extension.
@@ -22,13 +23,18 @@ export async function recognizePixels(image) {
   try {
     const { data } = await worker.recognize(bytes, {}, { text: true, blocks: true });
     const finished = performance.now();
+    await clearWorkerImage(worker);
+    const cleared = performance.now();
     // Raw OCR data stays in trusted extension memory pending the output privacy guard.
     return { data, width: image.width, height: image.height,
-      timing: { cold, initializationMs: initialized - start, inferenceMs: finished - initialized, totalMs: finished - start } };
+      timing: { cold, initializationMs: initialized - start, inferenceMs: finished - initialized,
+        cleanupMs: cleared - finished, totalMs: cleared - start } };
+  } catch {
+    await disposeEngine();
+    throw new Error('Local OCR processing unavailable.');
   } finally {
     bytes.fill(0);
-    // Remove the sanitized image file from the worker's in-memory FS. Language stays warm.
-    await worker?.removeFile('/input');
+    image = null;
   }
 }
 

@@ -62,16 +62,35 @@ test('worker integration: guarded result, repeat run, changed page and capture f
   chrome.runtime.getContexts = async () => [{}];
   chrome.offscreen = { createDocument: async () => {}, closeDocument: async () => {} };
   chrome.runtime.sendMessage = async ({ image, target }) => {
-    assert.equal(target, 'ocr-host'); assert.notEqual(image.dataUrl, raw);
-    return { ok: true, result: { data: { text: known }, width: 200, height: 100 } };
+    assert.equal(target, 'ocr-host'); assert.equal(image.dataUrl, raw);
+    return { ok: true, result: { data: { text: known, blocks: [{ paragraphs: [{ lines: [
+      { text: known, confidence: 90, bbox: { x0: 10, y0: 10, x1: 60, y1: 30 } },
+      { text: 'Continue', confidence: 95, bbox: { x0: 5, y0: 60, x1: 60, y1: 80 } },
+    ] }] }] }, width: 200, height: 100,
+    timing: { cold: true, initializationMs: 10, inferenceMs: 10, totalMs: 20 } } };
   };
-  const unsafe = await analyze();
-  assert.equal(unsafe.ok, true);
-  assert.equal(unsafe.perception.status, 'UNSAFE');
-  assert.equal(unsafe.privacy.outbound, 'BLOCKED');
-  assert.equal(unsafe.safeContext, null);
-  assert.deepEqual(unsafe.localPreview, {});
-  assert.ok(!JSON.stringify(unsafe).includes(known));
+  const filtered = await analyze();
+  assert.equal(filtered.ok, true);
+  assert.equal(filtered.perception.status, 'Ready');
+  assert.equal(filtered.privacy.outbound, 'SAFE');
+  assert.equal(filtered.perception.value.withheldItems, 1);
+  assert.deepEqual(filtered.safeContext.visual.items.map((item) => item.text), ['Continue']);
+  assert.notEqual(filtered.safeContext.image.dataUrl, raw);
+  assert.ok(!JSON.stringify(filtered).includes(known));
+  await new Promise((resolve) => setImmediate(resolve));
+  // A known value fragmented across individually retained lines still revokes the
+  // candidate package and previews at the final privacy gateway.
+  chrome.runtime.sendMessage = async () => ({ ok: true, result: { width: 200, height: 100,
+    timing: { cold: false, initializationMs: 0, inferenceMs: 10, totalMs: 10 },
+    data: { text: known, blocks: [{ paragraphs: [{ lines: known.split('@').map((text) => ({
+      text, confidence: 90, bbox: { x0: 5, y0: 60, x1: 195, y1: 80 },
+    })) }] }] } } });
+  const blocked = await analyze();
+  assert.equal(blocked.perception.status, 'UNSAFE');
+  assert.equal(blocked.privacy.outbound, 'BLOCKED');
+  assert.equal(blocked.safeContext, null);
+  assert.deepEqual(blocked.localPreview, {});
+  assert.ok(!JSON.stringify(blocked).includes(known));
   await new Promise((resolve) => setImmediate(resolve));
   let finishOcr;
   chrome.runtime.sendMessage = async () => new Promise((resolve) => { finishOcr = resolve; });
@@ -82,7 +101,7 @@ test('worker integration: guarded result, repeat run, changed page and capture f
   finishOcr({ ok: true, result: { width: 200, height: 100,
     timing: { cold: false, initializationMs: 0, inferenceMs: 10, totalMs: 10 },
     data: { text: 'Continue', blocks: [{ paragraphs: [{ lines: [{ text: 'Continue', confidence: 95,
-      bbox: { x0: 5, y0: 5, x1: 50, y1: 20 } }] }] }] } } });
+      bbox: { x0: 5, y0: 60, x1: 50, y1: 80 } }] }] }] } } });
   const ready = await running;
   assert.equal(ready.perception.status, 'Ready');
   assert.equal(ready.safeContext.visual.items[0].text, 'Continue');

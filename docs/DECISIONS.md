@@ -242,7 +242,7 @@ Inspection of core 6.1.2 also found its loader first uses fetch on the embedded 
 data URI before a byte-decoding fallback. The data: connection allowance avoids a CSP
 failure on that local in-memory read; it grants no remote origin access.
 
-## D21 — Sanitized pixels first; untrusted OCR output second
+## D21 — Sanitized pixels first; untrusted OCR output second (superseded by D23)
 
 The OCR application entry accepts only the Phase 3 sanitized-image capability. It forwards
 only PNG bytes/dimensions, never DOM labels/values. Post-inference output is guarded against
@@ -259,3 +259,33 @@ No resizing until demonstrated necessary; cap OCR at 20 MP and retain original p
 Return actual engine confidence divided by 100, or null if unavailable. Node/WASM synthetic
 inference is real engine evidence but not Chrome evidence. All manual P4 checks stay
 UNVERIFIED until the user actually reports them; no browser latency is fabricated.
+
+## D23 — Raw pixels are permitted inside the trusted local OCR boundary
+
+The revised Phase 4 instruction supersedes D21's sanitized-input-only policy. Captured
+raw PNG pixels may reach the extension-local OCR worker; raw OCR remains local and is
+never sent to the popup, logs, files or an outbound package. Phase 3 still independently
+produces the sanitized image through its unchanged private handle/builder boundary.
+The existing Tesseract.js 6.0.1 / core 6.1.2 / English 1.0.0 assets and CSP are retained.
+
+Map sensitive CSS rectangles with the existing Phase 3 scaling function. After inference,
+omit any OCR line intersecting a sensitive image rectangle (2-pixel safety padding).
+Also omit known sensitive values and conservative email/phone/employee-ID patterns.
+Release other actual OCR text, not a fixed UI vocabulary. Apply the recursive guard to
+the final safe representation, plus canonical matching across retained text. A residual
+leak blocks output without identifying offending text. Keep observation-scoped IDs,
+screenshot-pixel boxes and real confidence divided by 100 for future Phase 5 consumption.
+
+Clear the worker's in-memory raw input file and replace the engine's retained raster
+with a tiny blank image after each inference; keep one initialized language/worker for
+warm runs. Reference cleanup is not secure memory zeroization. Chrome checks remain
+UNVERIFIED until confirmed; do not turn Node or mocked tests into browser evidence.
+
+## D24 — Bound service-worker activity to the local OCR transaction
+
+Chrome normally stops an inactive service worker after 30 seconds, shorter than the
+45-second OCR budget. Its documented Chrome 110+ extension-API activity resets that
+idle timer. Call local getContexts every 10 seconds only while waiting for OCR, and
+clear the interval in finally on success, failure or timeout. No network, storage or
+permanent keepalive is introduced. Chrome 116 remains the minimum supported version.
+See [Chrome lifecycle documentation](https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle).

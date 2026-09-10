@@ -5,7 +5,8 @@ import { detectSensitiveFields, countSensitive } from '../privacy/detect.js';
 import { collectLocalValues } from '../privacy/collect.js';
 import { sanitizeSemantics } from '../privacy/semantic.js';
 import { redactScreenshot, buildOutboundPackage } from '../privacy/redact.js';
-import { perceiveSanitized } from '../perception/pipeline.js';
+import { perceiveLocalCapture } from '../perception/pipeline.js';
+import { sensitiveRegions } from '../privacy/geometry.js';
 
 let busy = false;
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -64,13 +65,14 @@ async function runAnalysis() {
     const fields = detectSensitiveFields(obs.fieldSignals);
     const geometry = fields.map((f) => ({ ...f, rect: obs.fieldSignals.find((s) => s.id === f.id).rect }));
     const visual = await redactScreenshot(rawScreenshot, geometry, obs.viewport);
-    rawScreenshot = null;
+    const regions = sensitiveRegions(geometry, obs.viewport, { width: visual.width, height: visual.height });
     secrets = before.values.filter((v) => fields.some((f) => f.id === v.id && f.sensitive)).map((v) => v.value);
     const semantic = sanitizeSemantics(fields, obs.fieldSignals, before.values);
     let safeContext = buildOutboundPackage(visual.handle, semantic, secrets);
     release(before); release(after);
     before = after = null; // Only the known sensitive strings remain until OCR guarding.
-    const perception = await perceiveSanitized(visual.handle, secrets);
+    const perception = await perceiveLocalCapture({ dataUrl: rawScreenshot, width: visual.width, height: visual.height }, secrets, regions);
+    rawScreenshot = null;
     if (perception.privacy === 'SAFE') {
       safeContext = buildOutboundPackage(visual.handle, semantic, secrets, perception.value);
     }

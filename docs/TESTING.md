@@ -192,20 +192,16 @@ User authorized Phase 4 after reporting the Phase 3 manual test passed and sensi
 information appeared in the privacy display. Only that report is recorded above; no
 unreported detailed Phase 3 check is promoted to PASS.
 
-`npm test`: **49/49 test entries PASS**, including all Phase 1–3 regressions and the original
-7/7 detection tests. New coverage: actual-output normalization, clamped/rejected boxes,
-confidence conversion/null behavior, empty/malformed output, unknown-line withholding,
-all five known-value contamination cases, canonical case/spacing checks, serialization,
-local-only paths, capability rejection, absence of DOM-text access in OCR, offscreen reuse,
-failure cleanup and timeout. Worker integration also proves UNSAFE revokes image packaging
-and ordinary missing-OCR capability preserves Phase 1–3 results. These integration tests use
-API doubles and are not claims that Chrome inference passed.
+The revised local-raw-pixel path replaces the earlier sanitized-input-only OCR path.
+Automated API doubles prove captured raw PNG bytes reach OCR locally, sensitive OCR is
+removed before popup/package output, and the packaged image remains Phase-3-sanitized.
+No mocked inference result is evidence that Chrome OCR works.
 
-`npm run build`: PASS; 18 runtime/data/license files, 11,090,774 bytes (inventory/README extra).
-`npm run check`: PASS; JS syntax, manifest parse and every packaged SHA-256/byte count.
-`git diff --check`: PASS. No node_modules/cache/temp PNG/real PII files are staged.
+Current automated results are recorded in the revision checkpoint below. The original
+Phase 1–3 test files and seven detection assertions are retained. Build verifies the
+same 18 packaged runtime/data/license assets (11,090,774 bytes), not new remote assets.
 
-### Genuine Tesseract/WASM smoke run — Node, not Chrome
+### Previous genuine Tesseract/WASM smoke run — Node, not Chrome
 
 Executed `node scripts/smoke-ocr.mjs .browser-test/synthetic.png` under Node 24.11.0 on
 Windows. The local synthetic image was 1000×750, with Arial 28-pixel safe labels and five
@@ -234,7 +230,8 @@ bounding boxes and confidence .95 or .96. Actual examples (x,y,width,height):
 
 The actual result passed the output sanitizer and guard using the five existing fake
 sensitive values extracted locally from demo-page/index.html; none appeared in released
-output. Contaminated fixtures separately prove blocking. These timings are measured
+output. At that earlier checkpoint, contaminated fixtures separately proved blocking. The revised
+policy now removes individual sensitive lines before guarding the retained result. These timings are measured
 Node test values, NOT browser or real-demo performance. Browser cold/warm timing is unmeasured.
 
 Reproduce: `powershell -File scripts/create-ocr-fixture.ps1`, then
@@ -247,10 +244,12 @@ No Chrome or manual result is claimed from it.
 
 1. Reload EdgeSight and copy its extension ID from chrome://extensions.
 2. Open `chrome-extension://<id>/tests/ocr-browser.html`.
-3. Click Run cold / warm OCR test. This draws synthetic text into Canvas, applies the
-   real Phase 3 masks, and passes only resulting image bytes to the real browser engine.
+3. Click Run cold / warm OCR test. This draws synthetic text plus a harmless PRIVATE FIELD
+   TEXT phrase inside a sensitive test box. The raw Canvas PNG goes to actual browser OCR.
+   Phase 3 separately masks the preview. Post-OCR geometry filtering must remove the phrase.
 4. Expected: PASS for Destination, Bengaluru, Purpose, Conference, Continue; actual cold
-   and warm results/boxes/confidence/timing appear. Inspect the drawn boxes visually.
+   and warm results/boxes/confidence/timing appear; withheldItems is positive. The private
+   synthetic phrase is absent from safe output. Inspect boxes on the sanitized preview.
 5. This harness contains no raw PII and checks no real demo capture. Test actual demo
    privacy and offline operation separately below. Harness result remains UNVERIFIED.
 
@@ -263,10 +262,10 @@ Keep all fields visible; expand OCR details and Compare local previews promptly.
 |---|---|---|
 | P4-M1 | Extension loads with packaged local OCR assets; no manifest/engine errors | UNVERIFIED |
 | P4-M2 | Disconnect internet after loading (before first OCR); analysis still works from local assets | UNVERIFIED |
-| P4-M3 | ANALYZE PAGE on sanitized Employee Travel Request screenshot; OCR status Ready or honest Empty/Error | UNVERIFIED |
+| P4-M3 | ANALYZE PAGE on Employee Travel Request; capture Ready, inputs 7/buttons 1/labels 7, Sensitive 5, local OCR Ready with actual items and processing time (Empty/Error is explicit, not a passing recognition check) | UNVERIFIED |
 | P4-M4 | Actual OCR visibly recognizes Destination, Bengaluru, Purpose, Conference, Continue; record actual misses rather than forcing PASS | UNVERIFIED |
 | P4-M5 | OCR overlay bounding boxes align with recognized text in sanitized screenshot | UNVERIFIED |
-| P4-M6 | OCR output has none of the five raw fake sensitive values; privacy SAFE | UNVERIFIED |
+| P4-M6 | Safe OCR output has none of the five existing raw fake values in demo-page/index.html; privacy SAFE; detections in sensitive boxes are withheld, never printed | UNVERIFIED |
 | P4-M7 | Worker/offscreen DevTools Network shows zero external OCR/model/CDN requests (chrome-extension local reads are allowed) | UNVERIFIED |
 | P4-M8 | Second Analyze within two minutes succeeds; warm timing is shown; record actual times | UNVERIFIED |
 | P4-M9 | Phase 3 still masks all five fields correctly; Destination/Purpose pixels remain visible | UNVERIFIED |
@@ -276,7 +275,38 @@ Also pending: close popup during OCR and reopen/retry, simultaneous Analyze reje
 empty screenshot behavior, timeout recovery, 120-second idle disposal and HiDPI overlay.
 All browser/manual timings and network observations remain UNVERIFIED.
 
+## Phase 4 raw-local-OCR revision checkpoint (2026-09-10)
+
+`npm test`: **56/56 test entries PASS**, including all Phase 1–3 regressions and
+the original 7/7 detection assertions. `npm run build`: PASS (18 local assets/licenses,
+11,090,774 bytes). `npm run check`: PASS (JS syntax, manifest and packaged asset hashes).
+`git diff --check`: PASS. These are automated results, not manual Chrome confirmations.
+
+Real pinned Tesseract/WASM executed again using the same ignored synthetic 1000×750 PNG.
+For this test only, the harmless Employee Name line was treated as a sensitive region
+(x=30,y=75,width=300,height=45). All 11 actual lines had boxes/confidence; the filter omitted
+that one line and retained 10, including all five required safe targets. Their boxes and
+confidence match the earlier table. No known fake sensitive value entered safe serialization.
+This tests real engine output plus geometry filtering without storing a PII screenshot.
+It does not prove real Chrome capture/masking accuracy or raw-PII OCR accuracy.
+
+| Node synthetic run | Initialization | Inference | Raster cleanup | Total |
+|---|---|---|---|---|
+| Cold | 466.91 ms | 277.58 ms | 1.89 ms | 746.38 ms |
+| Warm | 0 ms (reused) | 188.67 ms | 1.20 ms | 189.87 ms |
+
+The real worker accepted the blank-image replacement and /input unlink, then successfully
+performed warm OCR. No model reload occurred between runs. Timings are actual Node values,
+not manually measured Chrome latency. Browser cold/warm timing remains UNVERIFIED.
+
+Pure/API-double coverage additionally includes partial overlap and two-pixel padding,
+HiDPI sensitive mapping, missing/malformed geometry, observation-scoped IDs with preserved
+boxes, arbitrary non-sensitive text retention, all five known-value removals, obvious
+email/phone/employee-ID rules outside fields, fragmented residual leak blocking, narrow
+safe serialization, image-dimension mismatch, timeout and ordinary failure isolation.
+The original Phase 1–3 assertions remain regression coverage.
+
 ## Next exact task
 
-Phase 5 — spatially match OCR text/boxes with DOM field/action geometry and assemble a
-sanitized structured UI state, preserving privacy guards. No planner or autonomous actions.
+Phase 5 — DOM + visual fusion and final sanitized structured agent context.
+Phase 5 has not started. Stop for review and the pending Chrome checks.

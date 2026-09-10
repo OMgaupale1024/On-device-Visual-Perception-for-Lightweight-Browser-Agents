@@ -5,7 +5,7 @@
 Smart India Hackathon 2026 · SIH26171 · ISRO · Software · Smart Automation.
 
 **Phase 4 implemented. Phase 5 not started.** EdgeSight now runs a **browser-local
-OCR/CV perception baseline** over sanitized screenshot pixels using Tesseract.js 6.0.1,
+OCR/CV visual perception baseline** over locally captured screenshot pixels using Tesseract.js 6.0.1,
 WASM core 6.1.2 and packaged English data. This is OCR, not a Vision Transformer.
 
 Real Tesseract/WASM inference passed on a synthetic image under Node. Actual Chrome
@@ -23,26 +23,34 @@ the privacy display; only that specific report is recorded in [Testing](docs/TES
 All OCR runtime assets are committed under `extension/vendor/ocr/`; loading the extension
 requires no npm install and no runtime download. Engine processing has a 45-second deadline.
 The popup displays actual OCR output, confidence, boxes, cold/warm timing, and a local box
-overlay. Unknown OCR lines are withheld by the prototype output policy; missing text is
+overlay. Sensitive-region lines and recognized private text are withheld; missing text is
 never fabricated or replaced with DOM text. Empty and error states are explicit.
 
 ## Privacy order
 
 ```text
-local raw screenshot → Phase 3 field masks → private sanitized-image handle
-→ local OCR worker (PNG bytes only) → output sanitizer + known-value guard
-→ safe visual result, separate from DOM semantics (Phase 5 fusion later)
+local raw screenshot → local OCR worker (PNG bytes only) → raw local visual result
+→ sensitive-region + text privacy filter → safe visual result
+local raw screenshot → Phase 3 field masks → separate sanitized-image handle
 ```
 
-Raw field-value strings never reach OCR or the popup. They stay temporarily in the trusted
-worker for privacy checks. Raw screenshots cannot enter the OCR application gateway or
-outbound builder. The original preview is local-only and always hides passwords. Previews
-expire after 60 seconds, on re-analysis or close. Neither image is sent off-device.
+OCR can recognize sensitive values locally. Raw OCR never reaches the popup, logs, files
+or outbound builder. Only image bytes/dimensions reach the OCR engine; DOM geometry and
+known-value strings are used afterwards in the trusted worker privacy filter. Whole OCR
+lines touching sensitive boxes (plus a two-pixel margin) are omitted. Known values and
+obvious email/phone/employee-ID patterns are removed elsewhere too. Other actual text is
+retained, with observation-scoped IDs, pixel boxes and actual engine confidence.
 
-Known sensitive OCR text makes the visual result UNSAFE: no OCR text, previews or candidate
-outbound package are released. Ordinary OCR failures preserve Phase 1–3 results. All runtime
-assets resolve to extension-local URLs; CSP permits self scripts/workers, self/data reads
-and local WASM compilation. There is no remote transport, server, LLM, planner or action agent.
+The raw worker raster is replaced with a tiny blank after each inference and its input
+file is removed; the model remains loaded for warm runs. This is reference/resource
+cleanup, not secure memory erasure. The original local preview still hides passwords.
+Previews expire after 60 seconds, re-analysis or close. Nothing is sent off-device.
+
+A residual known-value leak blocks the visual result and candidate package. Ordinary OCR
+failures preserve Phase 1–3 results. Only the Phase 3 private sanitized-image handle can
+enter the outbound builder. All runtime assets are extension-local; CSP permits self
+scripts/workers, self/data reads and local WASM compilation. No transport, server, LLM,
+planner, browser actions or Phase 5 fusion exists.
 
 Expected demo OCR targets include Destination, Bengaluru, Purpose, Conference and Continue.
 The static fake-data form is the supported prototype scope. Unknown PII, OCR errors,
@@ -64,5 +72,5 @@ Node/WASM smoke result is documented separately from the unrun Chrome harness.
 [Decisions](docs/DECISIONS.md) · [Handoff](docs/HANDOFF.md) ·
 [OCR assets and licenses](extension/vendor/ocr/README.md)
 
-Next: **Phase 5 — spatial DOM/visual fusion into a sanitized structured UI state.**
+Next: **Phase 5 — DOM + visual fusion and final sanitized structured agent context.**
 Later: Phase 6 planner, 7 safe actions, 8 re-observe/verify, 9 metrics, 10 polish.

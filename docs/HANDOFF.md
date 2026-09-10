@@ -28,30 +28,36 @@ node_modules/cache/temp images are committed. The data package has differing npm
 metadata/upstream Apache-2.0 data licensing, explicitly recorded in vendor/ocr/README.md.
 
 Browser harness: `chrome-extension://<id>/tests/ocr-browser.html` → Run cold / warm OCR test.
-This actually invokes browser Tesseract on Canvas-generated, Phase-3-masked synthetic pixels.
+This invokes browser Tesseract on raw synthetic Canvas pixels, filters a test sensitive
+region afterwards, and displays only safe boxes over a separately masked preview.
 It has not been run here: browser automation reported no enabled browser surfaces. Use the
 separate P4-M1–M10 manual procedure for the actual demo, offline/network and failure checks.
 
 Genuine Node smoke: `node scripts/smoke-ocr.mjs <local-synthetic-PNG>`; it is not Chrome proof.
-The previous run recognized 11 lines, confidence .95–.96. Cold init/inference/total:
-758.37/500.52/1258.90 ms; warm inference/total 289.97 ms. See TESTING for scope and reproduction.
+The revised smoke recognized 11 lines, withheld one synthetic sensitive-region line,
+and retained 10 safe lines, including Continue. Cold total 746.38 ms; warm total 189.87 ms
+(including raster cleanup). See TESTING for scope; these are NOT Chrome timings.
 
 ## Code boundaries
 
 - Phase 1–3 observer/classifier/geometry/semantic pipeline remains intact.
 - `privacy/redact.js`: private sanitized-image registry and outbound builder. The new
   accessor rejects raw strings/forged handles. Optional visual output is separately guarded.
-- `perception/pipeline.js`: sanitized capability → local inference → visual output sanitizer.
+- `perception/pipeline.js`: raw local image → inference → geometry/text output sanitizer.
 - `perception/bridge.js`: MV3 offscreen creation/messaging, 45-second timeout, host cleanup.
 - `perception/offscreen.*`: packaged worker host; no page DOM access; sender checks, busy state.
 - `perception/ocr.js`: PNG bytes only, explicit local URLs, LSTM English, sparse-text mode.
 - `perception/normalize.js`: line boxes, actual confidence / 100, timings and schema.
-- `privacy/visual.js`: known-value guard before/after normalization, conservative safe words.
+- `privacy/visual.js` + `overlap.js`: remove sensitive intersections/known values/obvious PII,
+  then recursively guard safe items and check canonical known values across retained lines.
+- `perception/cleanup.js`: replace retained raster with a blank PNG and unlink /input.
 - `popup/`: actual safe OCR output and local Canvas box overlay; no expected-item checkmarks.
 - `vendor/ocr/`: about 11.1 MB runtime/data/licenses and hash inventory.
 
-Raw screenshots never enter OCR. Raw known-value strings stay in the worker privacy
-transaction until output checking and are dropped in finally, never OCR/popup/log/storage.
+Raw screenshots enter ONLY extension-local OCR. Raw recognized text stays in the host and
+service-worker privacy transaction; it never reaches popup/logs/files/storage/packages.
+Explicit raw field-value strings stay in the service-worker privacy transaction until
+output checking and are dropped in finally; they are never sent as text to the OCR host.
 OCR data is untrusted. An UNSAFE result revokes candidate safeContext and previews while
 retaining safe structural counts. Ordinary OCR errors leave Phase 1–3 context available.
 Future transport must consume only guarded safeContext, never the full local response.
@@ -62,12 +68,14 @@ unsafe-eval, broad hosts or script relaxations. Added offscreen permission only.
 
 ## Limits and next task
 
-No actual Chrome verification/latency claim yet. English OCR only, conservative word
-allowlist, uncertain accuracy on small fonts, no PII/object/face recognition guarantee,
-no resizing (20 MP cap), no atomic DOM+capture guarantee. Warm WASM may retain last
-sanitized image in engine memory until reuse/disposal. No secure JS memory-erasure claim.
+No actual Chrome verification/latency claim yet. English OCR only, uncertain accuracy on
+small fonts, no complete unknown-PII/object/face recognition guarantee, no resizing (20 MP
+cap), no atomic DOM+capture guarantee. Whole-line overlap filtering can omit nearby safe
+labels. Two-pixel padding is a prototype margin. Raw raster is replaced after every run;
+the language model stays warm. No secure JS/WASM memory-erasure claim. The sanitized image
+still masks known DOM fields only; text heuristics do not add masks for unknown pixel PII.
 A future quantized ViT/ONNX detector can replace this engine behind the same image-input,
 normalized-box/output-guard interface; none is integrated now.
 
-Next exact task: Phase 5 — spatially match OCR text/boxes with DOM field/action geometry
-and assemble a sanitized structured UI state, preserving privacy guards. No planner/actions.
+Next exact task: Phase 5 — DOM + visual fusion and final sanitized structured agent context.
+Do not begin Phase 5 until review. No planner/actions.

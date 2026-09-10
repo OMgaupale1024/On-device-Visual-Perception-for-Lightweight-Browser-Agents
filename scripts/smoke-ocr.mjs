@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createWorker } from 'tesseract.js';
 import { sanitizeVisual } from '../extension/src/privacy/visual.js';
+import { clearWorkerImage } from '../extension/src/perception/cleanup.js';
 const filename = process.argv[2];
 if (!filename) throw new Error('Supply a local synthetic PNG fixture.');
 const image = await readFile(filename);
@@ -22,13 +23,20 @@ try {
     const start = performance.now();
     const { data } = await worker.recognize(image, {}, { text: true, blocks: true });
     const inferenceMs = performance.now() - start;
+    const cleanupStart = performance.now();
+    await clearWorkerImage(worker);
+    const cleanupMs = performance.now() - cleanupStart;
+    // Treat the harmless Employee Name label as a synthetic sensitive region to
+    // exercise real OCR -> geometry filtering without persisting PII pixels.
+    const regions = [{ x: 30, y: 75, width: 300, height: 45 }];
     const result = sanitizeVisual({ data, width, height, timing: {
       cold: run === 0, initializationMs: run === 0 ? initializationMs : 0,
-      inferenceMs, totalMs: inferenceMs + (run === 0 ? initializationMs : 0),
-    } }, secrets);
+      inferenceMs, cleanupMs, totalMs: inferenceMs + cleanupMs + (run === 0 ? initializationMs : 0),
+    } }, secrets, regions);
     if (result.privacy !== 'SAFE') throw new Error('Real engine output blocked or malformed.');
     const text = result.value.items.map((item) => item.text).join(' ');
     if (!['Destination', 'Bengaluru', 'Purpose', 'Conference', 'Continue'].every((word) => text.includes(word))) throw new Error('Actual OCR missed required synthetic strings.');
+    if (text.includes('Employee Name') || result.value.withheldItems !== 1) throw new Error('Real OCR geometry filtering failed.');
     console.log(JSON.stringify({ environment: 'Node WASM synthetic fixture, NOT Chrome', ...result }, null, 2));
   }
 } finally { await worker.terminate(); secrets.fill(''); }

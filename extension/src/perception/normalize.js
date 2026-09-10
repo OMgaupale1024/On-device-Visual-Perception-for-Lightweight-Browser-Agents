@@ -15,7 +15,7 @@ export function normalizeResult(result) {
   const { data, width, height, timing } = result ?? {};
   if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width <= 0 || height <= 0 ||
       !data || typeof data.text !== 'string' || !timing || typeof timing.cold !== 'boolean' ||
-      ![timing.initializationMs, timing.inferenceMs, timing.totalMs].every((n) => Number.isFinite(n) && n >= 0)) {
+      ![timing.initializationMs, timing.inferenceMs, timing.cleanupMs ?? 0, timing.totalMs].every((n) => Number.isFinite(n) && n >= 0)) {
     throw new Error('Malformed OCR result.');
   }
   const blocks = data.blocks ?? [];
@@ -37,5 +37,5 @@ export function normalizeResult(result) {
   }
   return { engine: ENGINE, engineVersion: ENGINE_VERSION, width, height, coordinateSystem: 'screenshot-pixels',
     processingMs: timing.totalMs, timing: { cold: timing.cold, initializationMs: timing.initializationMs,
-      inferenceMs: timing.inferenceMs, totalMs: timing.totalMs }, items };
+      inferenceMs: timing.inferenceMs, cleanupMs: timing.cleanupMs ?? 0, totalMs: timing.totalMs }, items };
 }

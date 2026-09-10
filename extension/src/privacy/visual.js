@@ -1,31 +1,32 @@
 import { checkOutbound } from './guard.js';
 import { normalizeResult } from '../perception/normalize.js';
+import { overlapsSensitive, validateRegions } from './overlap.js';
 
-// OUTPUT policy only. Never fed into inference as prompts, labels or recognition hints.
-// The prototype releases only actual OCR lines composed of this safe UI vocabulary.
-const SAFE_WORDS = new Set('employee travel request name email phone id destination bengaluru purpose conference password continue demo form fake data only used to exercise edgesight perception'.split(' '));
 const canonical = (text) => text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+const blocked = () => ({ status: 'UNSAFE', reason: 'Visual privacy check blocked output.' });
+const obviousPII = (text) => /[\p{L}\p{N}._%+-]+\s*@\s*[\p{L}\p{N}.-]+\s*\.\s*[a-z]{2,}/iu.test(text) ||
+  /(?:\+?\d[\s().-]*){7,}/u.test(text) || /\bEMP[\s-]*\d{3,}\b/i.test(text);
 
-export function sanitizeVisual(result, sensitiveValues) {
-  // Scan ALL OCR strings before dropping anything, then scan normalized strings as defense
-  // against whitespace/case splitting. Return no engine text on a privacy failure.
-  if (!checkOutbound(result, sensitiveValues).safe) return { status: 'UNSAFE', reason: 'Visual privacy check blocked output.' };
+// Raw engine output is trusted-local ONLY. Copy a narrow schema, then filter lines.
+// Geometry is used after recognition; it never supplies text to the OCR engine.
+export function sanitizeVisual(result, sensitiveValues, regions) {
   try {
+    validateRegions(regions);
+    if (!Array.isArray(sensitiveValues) || sensitiveValues.some((v) => typeof v !== 'string')) return blocked();
     const normalized = normalizeResult(result);
-    const rawText = [result.data.text, ...normalized.items.map((i) => i.text)].join(' ');
-    const comparable = canonical(rawText);
-    if (sensitiveValues.some((value) => canonical(value) && comparable.includes(canonical(value)))) {
-      return { status: 'UNSAFE', reason: 'Visual privacy check blocked output.' };
-    }
+    const known = sensitiveValues.map(canonical).filter(Boolean);
+    const containsKnown = (text) => known.some((value) => canonical(text).includes(value));
     let withheldItems = 0;
     const items = normalized.items.flatMap((item) => {
       const text = item.text.normalize('NFKC').replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim();
-      const words = text.toLowerCase().replace(/[.,:;!—–-]/g, ' ').split(/\s+/).filter(Boolean);
-      if (!words.length || words.some((word) => !SAFE_WORDS.has(word))) { withheldItems++; return []; }
+      if (!text || overlapsSensitive(item.bbox, regions) || containsKnown(text) || obviousPII(text)) {
+        withheldItems++; return [];
+      }
       return [{ ...item, text }];
     });
     const value = { ...normalized, items, withheldItems };
-    if (!checkOutbound(value, sensitiveValues).safe) return { status: 'UNSAFE', reason: 'Visual privacy check blocked output.' };
+    // Catch known values fragmented across retained lines, and all outgoing strings.
+    if (containsKnown(items.map((item) => item.text).join(' ')) || !checkOutbound(value, sensitiveValues).safe) return blocked();
     return { status: items.length ? 'Ready' : 'Empty', privacy: 'SAFE', value };
   } catch {
     return { status: 'ERROR', reason: 'Visual result unavailable.' };

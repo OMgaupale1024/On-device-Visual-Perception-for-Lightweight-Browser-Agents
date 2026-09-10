@@ -7,14 +7,19 @@ async function ensureHost() {
   const contexts = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'], documentUrls: [chrome.runtime.getURL(HOST_PATH)] });
   if (contexts.length) return;
   if (!creating) creating = chrome.offscreen.createDocument({
-    url: HOST_PATH, reasons: ['WORKERS'], justification: 'Run packaged local OCR WebAssembly on sanitized screenshot pixels.',
+    url: HOST_PATH, reasons: ['WORKERS'], justification: 'Run packaged OCR WebAssembly on local screenshot pixels before privacy filtering.',
   }).finally(() => { creating = undefined; });
   await creating;
 }
 
 export async function inferLocally(image) {
-  let timer;
+  let timer, activity;
   try {
+    // Chrome 110+ extension API calls reset the 30-second service-worker idle
+    // timer. Keep only this bounded transaction active, even if the popup closes.
+    activity = setInterval(() => {
+      chrome.runtime.getContexts?.({ contextTypes: ['OFFSCREEN_DOCUMENT'] }).catch(() => {});
+    }, 10_000);
     return await Promise.race([
       (async () => {
         await ensureHost();
@@ -28,5 +33,5 @@ export async function inferLocally(image) {
     // Closing the host kills even an initialization-hung worker whose handle never resolved.
     try { await chrome.offscreen?.closeDocument(); } catch { /* host may not exist */ }
     throw new Error('Local OCR unavailable or timed out.');
-  } finally { clearTimeout(timer); }
+  } finally { clearTimeout(timer); clearInterval(activity); }
 }

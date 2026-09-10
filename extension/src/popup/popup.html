@@ -58,7 +58,7 @@
         <p class="filter-arrow">↓ LOCAL PRIVACY FILTER ↓</p>
         <figure><figcaption>SANITIZED — SAFE CONTEXT</figcaption><img id="sanitized-preview" alt="Local screenshot with sensitive form regions masked" /></figure>
         <figure id="overlay-figure" class="hidden"><figcaption>LOCAL OCR — ACTUAL TEXT BOXES</figcaption><canvas id="ocr-overlay"></canvas></figure>
-        <p class="note">Masks cover detected visible DOM fields. OCR runs on sanitized pixels; unknown OCR strings are withheld.</p>
+        <p class="note">OCR reads captured pixels locally. Sensitive regions and recognized private text are filtered before these results appear. The overlay uses the sanitized image.</p>
         <details><summary>Sanitized semantic context</summary><pre id="semantic-preview"></pre></details>
       </details>
 

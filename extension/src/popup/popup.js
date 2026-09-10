@@ -86,8 +86,8 @@ function renderPerception(perception, image) {
   byId('ocr-privacy').textContent = perception?.privacy || (perception?.status === 'UNSAFE' ? 'BLOCKED' : 'Unavailable');
   byId('ocr-time').textContent = value ? `${Math.round(value.processingMs)} ms` : '–';
   byId('ocr-count').textContent = value ? value.items.length : '–';
-  byId('ocr-note').textContent = value ? `${value.withheldItems} untrusted text lines withheld. English OCR baseline; not a ViT.` : perception?.reason || '';
-  byId('ocr-timing').textContent = value ? `${value.timing.cold ? 'Cold' : 'Warm'} run · initialization ${Math.round(value.timing.initializationMs)} ms · inference ${Math.round(value.timing.inferenceMs)} ms · total ${Math.round(value.timing.totalMs)} ms` : '';
+  byId('ocr-note').textContent = value ? `${value.withheldItems} sensitive or empty text lines withheld. English OCR baseline; not a ViT.` : perception?.reason || '';
+  byId('ocr-timing').textContent = value ? `${value.timing.cold ? 'Cold' : 'Warm'} run · initialization ${Math.round(value.timing.initializationMs)} ms · inference ${Math.round(value.timing.inferenceMs)} ms · cleanup ${Math.round(value.timing.cleanupMs)} ms · total ${Math.round(value.timing.totalMs)} ms` : '';
   const list = byId('ocr-items'); list.textContent = '';
   if (!value) return;
   for (const item of value.items) {

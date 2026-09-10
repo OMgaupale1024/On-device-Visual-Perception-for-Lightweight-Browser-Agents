@@ -62,7 +62,9 @@ rejected. Ordinary browser zoom uses measured ratios. DPR is diagnostic only.
 | Representation | Lifetime/location | Future outbound |
 |---|---|---|
 | Raw values | local collector + worker transaction | Never |
-| Raw captured PNG | worker/redaction call | Never |
+| Raw captured PNG | local worker/redaction/OCR transaction | Never |
+| Raw OCR blocks/text | offscreen engine + local privacy transaction | Never |
+| Safe visual state | post-inference geometry/text filter + guard | Separate guarded candidate |
 | Local original preview | password-masked popup PNG, at most 60 seconds | Never |
 | Source labels/title/signals | local transaction, untrusted | Never copied directly |
 | Sanitized image handle | private redaction WeakMap | Required builder input |
@@ -126,12 +128,12 @@ The prototype uses Tesseract.js **6.0.1**, tesseract.js-core **6.1.2**, and
 @tesseract.js-data/eng **1.0.0**, pinned in package-lock.json. It is an English LSTM OCR
 baseline running through WebAssembly, not a ViT or general UI/object detector. This one
 engine meets the deadline without adding a second inference framework. Future quantized
-ViT/ONNX models can replace it behind the same sanitized-image → normalized-items interface.
+ViT/ONNX models can replace it behind the same image-input → normalized-items → privacy-filter interface.
 
 ### Local runtime and CSP
 
 An offscreen extension document hosts the Web Worker because MV3 service workers cannot
-construct it. Only sanitized image metadata/PNG bytes cross into that host. Worker/core/
+construct it. Only captured image dimensions/PNG bytes cross into that host. Worker/core/
 language paths all resolve to this extension. The installed 6.x getCore implementation
 selects `tesseract-core-lstm.wasm.js` or `tesseract-core-simd-lstm.wasm.js` for OEM=1 with
 legacyCore=false. These 6.1.2 files embed their WASM bytes, so no separate binary download
@@ -159,31 +161,51 @@ and [MV3 CSP guidance](https://developer.chrome.com/docs/extensions/reference/ma
 
 ```text
 captureVisibleTab raw PNG
-  → Phase 3 Canvas masks
-  → private sanitized-image capability
   → offscreen host → decode PNG base64 to Uint8Array → worker.recognize(bytes)
-  → untrusted real OCR data (text + blocks)
-  → known-value guard → normalization → conservative output sanitizer → guard
-  → separately packaged visual state (no DOM/visual fusion yet)
+  → untrusted raw OCR data (text + blocks), extension-local only
+  → normalize line boxes/confidence → sensitive image-region overlap filter
+  → known-value and obvious-PII filtering → final recursive/canonical guard
+  → safe visual state (no DOM/visual fusion yet)
+captureVisibleTab raw PNG
+  → Phase 3 Canvas masks → private sanitized-image capability → guarded package
 ```
 
-`ocr.js` imports no observer/classifier and accepts no DOM strings, field labels, vocabulary,
-selectors or recognition hints. Sparse-text PSM=11 is a layout setting. No fallback exists.
-The output sanitizer's fixed safe vocabulary is applied only AFTER inference; it never
-feeds the engine or invents text. It retains actual OCR lines whose words fit the prototype
-UI vocabulary, withholding other lines and counting them. This limits arbitrary text
-exposure but is intentionally not a complete PII classifier. Unknown PII recognition,
-misrecognitions and encoded/transformed secrets are limitations.
+The latest user instruction permits raw pixels inside trusted local OCR, superseding the
+previous sanitized-input-only policy (D23). Phase 3 redaction runs first operationally to
+obtain measured dimensions and previews, but OCR receives the captured raw PNG unchanged.
+Only the sanitized-image capability can enter image packaging. No raw OCR result is sent
+to the popup, persisted, logged or packaged. Extension-internal messages carry raw image
+bytes to the offscreen host and raw recognition data back to the service worker locally.
 
-Raw known values remain only in the local worker privacy transaction for up to the OCR
-45-second budget, never in the OCR host/engine or popup. Before releasing any output, the
-guard checks the complete engine result, including fields that will later be discarded.
-An additional canonical comparison tolerates case, whitespace and punctuation differences.
-It then validates/guards the normalized representation. No offending text enters errors.
-UNSAFE revokes both visual output and candidate image package/previews; safe counts remain.
-Ordinary engine errors/timeouts retain the original Phase 1–3 results without visual data.
+`ocr.js` imports no observer/classifier and accepts no DOM strings, labels, vocabulary,
+selectors or recognition hints. Sparse-text PSM=11 is a layout setting; no fallback exists.
+Tests assert the captured bytes reach inference, no geometry/value list reaches the host,
+and the OCR implementation contains no DOM-text access. DOM signals enter only the
+post-inference privacy filter; safe OCR text is actual engine output, never DOM text.
+
+The existing Phase 3 mapping converts sensitive CSS rectangles using measured screenshot
+width/viewport width and height/viewport height, rounded outward and clamped. For each
+normalized OCR line, any positive intersection with a sensitive image rectangle expanded
+by two image pixels removes the entire line. This intentionally errs toward withholding
+nearby safe text. No resizing occurs. Invalid geometry or mismatched dimensions fail closed.
+Known sensitive values (NFKC/case/punctuation/whitespace normalized), obvious email strings,
+seven-or-more-digit phone-like strings and EMP-number patterns also remove whole lines
+outside the boxes. No vocabulary allowlist remains. These rules are conservative and do
+not identify every unknown name, address, secret or misrecognized/encoded PII string.
+
+The privacy layer copies only supported fields, discarding full engine text, nested raw
+blocks and other raw outputs. Known values are checked across retained lines to catch
+fragmented leaks, and the final safe schema passes the recursive Phase 3 guard. A residual
+UNSAFE result revokes visual output and candidate package/previews; safe counts remain.
+Ordinary engine errors/timeouts preserve Phase 1–3 results without visual data. Explicit
+raw field-value strings remain in the service-worker privacy transaction, never the OCR
+host; their visual pixel content may of course be recognized by the local engine.
 
 ### Phase 5-ready result
+
+The raw local engine envelope is `{data:{text,blocks}, width, height, timing}`; blocks
+contain paragraphs and lines with engine text, bbox `{x0,y0,x1,y1}` and confidence.
+This envelope is consumed only by the privacy layer and is never an outbound schema.
 
 The separate `safeContext.visual` contains engine/version, image dimensions, timing,
 processingMs, coordinateSystem=screenshot-pixels, withheldItems and line-level items:
@@ -196,21 +218,32 @@ Empty recognition produces Empty, not invented targets or checkmarks.
 No resize is performed; OCR boxes already share the screenshot pixel frame. Images over
 20 million pixels are rejected for OCR only, rather than risking excessive memory. DOM
 rectangles remain viewport CSS pixels from the observer; Phase 5 must use the Phase 3
-mapping before spatial matching. Full fusion/action IDs are not implemented in Phase 4.
+mapping before spatial matching. Visual IDs are observation-scoped: visual_1, visual_2, etc. Filtering preserves IDs and
+boxes (gaps are allowed); IDs are not stable after a new observation. Full fusion and
+actions are not implemented in Phase 4.
 
 ### Timing, lifecycle and UI
 
-performance.now measures actual initialization, inference and total engine processing.
+performance.now measures actual initialization, inference, cleanup and total engine processing.
 Cold includes worker/language initialization; warm reuses the loaded worker. Timing excludes
 capture, redaction, messaging and post-OCR sanitization. The warm worker is disposed after
-120 seconds idle; the last sanitized raster may remain in WASM memory until then. Its
-/input MEMFS file is removed after recognition. No browser storage is used.
+120 seconds idle. After every inference, the engine receives a constant 16×16 white PNG
+with text/blocks output disabled. Inspected 6.0.1 source sets that image but skips recognition,
+replacing the retained raw raster without reloading English data. The /input MEMFS file is
+then removed. Cleanup failure terminates the engine and returns no raw result. Total engine
+time includes cleanupMs; no browser storage or secure memory-zeroization claim is used.
 
 A 45-second host deadline handles missing language/core files, WASM failure and unreasonable
 inference. Timeout closes the offscreen host, terminating even an initialization-hung worker;
 subsequent analysis can recreate it. Unsupported offscreen capability reports unavailable.
 Worker and host busy checks serialize analyses. Popup closure does not interrupt trusted
 processing; a later popup may retry after the run, without storing the closed popup's result.
+While that bounded transaction is pending, the bridge calls the local getContexts API
+every 10 seconds and clears this activity on every completion/failure/timeout. Chrome
+documents a 30-second idle limit and that extension API calls reset it (Chrome 110+):
+[service-worker lifecycle](https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle).
+This avoids relying on a silent 45-second pending response. No idle keepalive or storage
+is introduced; browser lifecycle behavior is still part of the pending manual checks.
 
 The popup displays real safe OCR lines, confidence, boxes and cold/warm timing. A Canvas
 overlay draws returned boxes on the sanitized image only. Nothing is transmitted. The
