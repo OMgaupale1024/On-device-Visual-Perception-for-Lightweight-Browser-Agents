@@ -1,4 +1,9 @@
-import { createWorker } from '../../vendor/ocr/tesseract.esm.min.js';
+// The vendored Tesseract.js 6.0.1 browser bundle exposes ONLY a default export
+// (`export { tesseract_min as default }`); createWorker is a property of it, not a
+// named export. A named import throws "does not provide an export named createWorker"
+// during Chrome's ESM linking, before any code runs. See ocr-import.test.mjs.
+import Tesseract from '../../vendor/ocr/tesseract.esm.min.js';
+const { createWorker } = Tesseract;
 import { localOptions } from './config.js';
 import { clearWorkerImage } from './cleanup.js';
 import { sanitizeError, logError, logStage } from './diagnostics.js';

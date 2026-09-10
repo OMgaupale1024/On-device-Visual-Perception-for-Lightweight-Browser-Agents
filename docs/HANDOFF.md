@@ -14,22 +14,28 @@ run tests, update docs/HANDOFF/AI_CONTEXT, inspect status/diff, commit, push nor
 verify HEAD == origin/main and clean working tree, report the hash, then stop. Record only
 manual checks explicitly confirmed by the user. Do not start a later phase automatically.
 
-OCR diagnostics checkpoint: 57/57 test entries pass; syntax, manifest and asset checks pass;
-the Node/WASM smoke re-passed cold+warm. No root-cause OCR logic changed — this session only
-made the swallowed Chrome failure observable (see D25). Phase 4 is code-complete but FAILING
-in real Chrome; next step is the user's Chrome run to capture the stage diagnostics.
+Chrome OCR import-fix checkpoint: 59/59 test entries pass; syntax, manifest and asset checks
+pass; the Node/WASM smoke re-passed cold+warm. Root cause of the Chrome failure was IDENTIFIED
+and FIXED this session (D26): ocr.js imported a named `createWorker` the vendored default-only
+Tesseract bundle never exported, so Chrome threw a load-time ESM SyntaxError before any OCR ran
+(which is why the D25 runtime diagnostics never fired). Import corrected; a new regression
+(ocr-import.test.mjs) guards the contract. Phase 4 is code-complete; NOT yet Chrome-verified —
+next step is the user's Chrome reload to confirm OCR now initializes.
 
 ## State
 
-Phase 4 code-complete but FAILING in real Chrome; Phase 5 NOT started. The browser-local
-OCR/CV baseline uses Tesseract.js 6.0.1 + core 6.1.2 + English data 1.0.0. Do not call it a
-ViT. Real Node/WASM synthetic inference passes, but in Chrome LOCAL VISUAL PERCEPTION errors
-("Local OCR unavailable or timed out") while Phases 1–3 still pass. Root cause is UNVERIFIED:
-every statically checkable cause (asset URLs, worker slash-handling, workerBlobURL=false, CSP)
-was verified correct, so the fault is runtime-only. Stage-tagged diagnostics now surface the
-real stage/error in the offscreen + service-worker consoles. Next Chrome run must report the
-`[EdgeSight OCR] …` lines; the last stage before the error names the failing component. Do NOT
-begin Phase 5 until Chrome OCR is fixed and user-verified.
+Phase 4 code-complete; Chrome root cause FIXED in code but NOT yet Chrome-verified; Phase 5
+NOT started. The browser-local OCR/CV baseline uses Tesseract.js 6.0.1 + core 6.1.2 + English
+data 1.0.0. Do not call it a ViT. Real Node/WASM synthetic inference passes. In Chrome, LOCAL
+VISUAL PERCEPTION had errored ("Local OCR unavailable or timed out") while Phases 1–3 passed;
+the Chrome run showed the actual cause was a load-time ESM SyntaxError — ocr.js imported a
+named `createWorker`, but the vendored bundle exports only a default (createWorker is a
+property of it). It was NOT runtime-only, which is why the statically-checked causes (asset
+URLs, worker slash-handling, workerBlobURL=false, CSP) were all fine and the D25 diagnostics
+never fired. The import is corrected (default import + destructure; D26) and guarded by
+ocr-import.test.mjs. Next Chrome run must confirm the SyntaxError is gone and OCR initializes;
+any new `[EdgeSight OCR] …` stage error is a separate second bug. Do NOT begin Phase 5 until
+Chrome OCR is fixed and user-verified.
 
 The user reported Phase 3's manual test passed and the privacy display shows sensitive
 information. Do not convert this into unreported count, mask, SAFE, network or HiDPI passes.
@@ -105,10 +111,12 @@ still masks known DOM fields only; text heuristics do not add masks for unknown 
 A future quantized ViT/ONNX detector can replace this engine behind the same image-input,
 normalized-box/output-guard interface; none is integrated now.
 
-Next exact task: DEBUG the Chrome OCR failure with the new diagnostics — the user reloads the
-extension, runs one ANALYZE, and reports the `[EdgeSight OCR] …` console lines from the
-offscreen page and the service worker (chrome://extensions → EdgeSight → Inspect views). The
-last stage before the error (OCR_WORKER_CREATE / OCR_CORE_LOAD / OCR_LANGUAGE_LOAD /
-OCR_RECOGNIZE / OCR_TIMEOUT) names the failing component; then apply the targeted fix and have
-the user re-verify. Only after Chrome OCR works: Phase 5 — DOM + visual fusion and final
-sanitized structured agent context. Do not begin Phase 5 before Chrome is fixed. No planner/actions.
+Next exact task: VERIFY the import fix in real Chrome. The user reloads the extension
+(chrome://extensions → EdgeSight → Reload), runs one ANALYZE on the demo, and confirms the
+offscreen page and service-worker consoles no longer show `does not provide an export named
+'createWorker'` and that LOCAL VISUAL PERCEPTION initializes. If a NEW `[EdgeSight OCR] …`
+stage error appears (OCR_WORKER_CREATE / OCR_CORE_LOAD / OCR_LANGUAGE_LOAD / OCR_RECOGNIZE /
+OCR_TIMEOUT), that is a separate second bug to debug next — one bug at a time. Do not mark
+Chrome OCR PASSED until the user confirms. Only after Chrome OCR works: Phase 5 — DOM + visual
+fusion and final sanitized structured agent context. Do not begin Phase 5 before Chrome is
+verified. No planner/actions.

@@ -1,8 +1,10 @@
 # EdgeSight — Progress
 
 CURRENT PHASE:
-Phase 4 code complete but FAILING in real Chrome. Root cause not yet identified; stage
-diagnostics added to expose it on the next Chrome run. Phase 5 not started.
+Phase 4 code complete. Chrome root cause IDENTIFIED and FIXED in code: ocr.js imported a
+named `createWorker` that the vendored default-export-only Tesseract bundle never provided,
+so Chrome threw a load-time ESM SyntaxError before any OCR ran. Import corrected; awaiting the
+user's Chrome reload to confirm OCR now initializes. NOT yet Chrome-verified. Phase 5 not started.
 
 STATUS:
 Browser-local OCR/CV perception baseline implemented with Tesseract.js 6.0.1, core 6.1.2,
@@ -12,10 +14,13 @@ timed out"); Phases 1-3 still pass (5 regions redacted, Outbound SAFE). The fail
 swallowed at four catch layers with no logging. Static review verified every checkable
 cause is CORRECT: worker/core/lang URLs resolve to real packaged files, the vendored worker
 strips trailing slashes before appending filenames, workerBlobURL=false gives a same-origin
-worker, and CSP already grants wasm-unsafe-eval + connect-src 'self'. So the fault is
-runtime-only. Privacy-safe, stage-tagged diagnostics were added so one Chrome run names the
-failing stage and real error class. Actual root cause, demo recognition, offline operation
-and browser timing remain UNVERIFIED.
+worker, and CSP already grants wasm-unsafe-eval + connect-src 'self'. The Chrome run then
+revealed the fault was NOT runtime: `ocr.js` used a named `createWorker` import, but the
+vendored Tesseract.js 6.0.1 browser bundle exports only a default (`createWorker` is a
+property of it), so Chrome threw a load-time ESM SyntaxError during module linking — before
+any OCR code, and before the D25 diagnostics could run. The import is now corrected (default
+import + destructure); see D26. Demo recognition, offline operation and browser timing in
+Chrome remain UNVERIFIED pending the user's reload.
 
 MANUAL EVIDENCE:
 The user reported the Phase 3 manual test passed and sensitive information appeared in the
@@ -32,10 +37,13 @@ COMPLETED:
 - Blank raster replacement and input-file cleanup while preserving a warm OCR model.
 - Known-value guard (including case/spacing variants); unsafe output revokes image package.
 - Local text/details UI and bounding-box overlay; graceful OCR-only failure state.
-- 57/57 automated test entries pass, including Phase 1–3 regressions and 7/7 detection assertions.
+- 59/59 automated test entries pass, including Phase 1–3 regressions and 7/7 detection assertions.
 - Stage-tagged, privacy-safe OCR diagnostics: a single audited sink (perception/diagnostics.js)
   logs only stage + error class/short message to the offscreen and service-worker consoles;
   every other source file stays log-free. New regression asserts the failure stage is surfaced.
+- Chrome OCR import fix (D26): ocr.js now imports the vendored bundle by its real default
+  export instead of a nonexistent named `createWorker`. New regression (ocr-import.test.mjs,
+  2 entries) links the bundle the way Chrome does and fails if that SyntaxError ever returns.
 - Build, JS syntax, manifest and packaged asset integrity checks pass; see TESTING checkpoint.
 - Real Node/WASM smoke: 11 synthetic lines recognized, one test-region line withheld,
   10 safe lines retained including Continue; known demo PII absent.
@@ -51,12 +59,14 @@ safe text; simple text rules do not guarantee detection of unknown PII. No scree
 for OCR only. Chrome behavior/latency not yet measured; browser automation reported no surfaces.
 
 NEXT EXACT TASK:
-Debug the Chrome OCR failure with the new diagnostics. User reloads the extension, runs one
-ANALYZE on the demo, and reports the `[EdgeSight OCR] …` lines from the offscreen page console
-and the service-worker console (chrome://extensions → EdgeSight → Inspect views). The last
-stage before the error names the failing component (OCR_WORKER_CREATE / OCR_CORE_LOAD /
-OCR_LANGUAGE_LOAD / OCR_RECOGNIZE / OCR_TIMEOUT). Then apply the targeted fix.
+Verify the import fix in real Chrome. User reloads the extension (chrome://extensions →
+EdgeSight → Reload), runs one ANALYZE on the demo, and confirms the offscreen/service-worker
+consoles no longer show the `does not provide an export named 'createWorker'` SyntaxError and
+that LOCAL VISUAL PERCEPTION now initializes. If a NEW `[EdgeSight OCR] …` stage error appears
+(e.g. OCR_CORE_LOAD / OCR_LANGUAGE_LOAD / OCR_RECOGNIZE / OCR_TIMEOUT), that is a separate
+second bug — report it and debug it next. Do NOT mark Chrome OCR PASSED until the user confirms.
 Phase 5 (DOM + visual fusion) remains NOT STARTED — do not begin it until Chrome OCR is verified.
 
 LAST UPDATED:
-2026-09-10 — Phase 4 Chrome OCR failing; stage diagnostics added to localize the fault.
+2026-09-10 — Phase 4 Chrome OCR root cause found + fixed (D26: vendored bundle is default-export
+only; ocr.js now imports it correctly). Awaiting user's Chrome reload to verify.

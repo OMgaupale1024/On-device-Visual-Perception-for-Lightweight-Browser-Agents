@@ -318,3 +318,32 @@ the thrown user-facing error stays generic.
 
 **This is diagnosis, not a fix.** No root-cause code change was made; the actual Chrome fault
 is still UNVERIFIED and will be fixed once the next Chrome run reports the failing stage.
+
+## D26 — Import the vendored Tesseract runtime by its actual (default-only) export
+
+**Root cause (identified from the Chrome run):** the browser threw, before any OCR code ran,
+`Uncaught SyntaxError: The requested module '../../vendor/ocr/tesseract.esm.min.js' does not
+provide an export named 'createWorker'`. `ocr.js` used a NAMED import,
+`import { createWorker } from '.../tesseract.esm.min.js'`, but the vendored Tesseract.js 6.0.1
+browser bundle exposes only a default export (`export { tesseract_min as default }`);
+`createWorker` is a property of that default object, not a named export. Named-import binding
+is resolved during ESM *linking*, before evaluation — so the module never executed and the
+D25 stage diagnostics never ran (they instrument runtime failures; this preceded runtime).
+The earlier "Node worker path vs Chrome Web Worker/WASM/CSP" hypothesis was WRONG: Node
+"passed" only because no Node test ever linked the browser bundle — `smoke-ocr.mjs` imports
+`createWorker` from the `tesseract.js` PACKAGE (its Node build has the named export) and
+`perception.test.mjs` reads `ocr.js` as text. Nothing to do with worker_threads, WASM or CSP.
+
+**Decision:** import the vendored bundle by its real contract —
+`import Tesseract from '.../tesseract.esm.min.js'; const { createWorker } = Tesseract;`. No
+change to the engine, version, worker/core/lang paths, timeout, CSP or offscreen lifecycle;
+those were already correct. Do not add a wrapper module to fake a named export — that would
+hide the real contract from the next maintainer.
+
+**Regression guard:** `extension/tests/ocr-import.test.mjs` links the vendored bundle the way
+Chrome does (ESM linking is spec-defined, so Node reproduces it) and asserts (1) the bundle
+exports only `default` with a callable `createWorker` on it and no named `createWorker`, and
+(2) importing `ocr.js` does not throw the "does not provide an export named" SyntaxError. The
+bundle references `self` at evaluation time, so the test shims `globalThis.self` to inspect
+the evaluated exports. LIMIT: this proves the import/export CONTRACT, not full Chrome
+WASM/worker execution — the user still smoke-tests Chrome. Not yet marked PASSED in Chrome.
