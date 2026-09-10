@@ -138,7 +138,7 @@ function renderAgentContext(res) {
 function renderPlanner(res) {
   const planner = res.planner;
   const plan = planner?.plan;
-  byId('planner-mode').textContent = planner?.plannerMode === 'ai' ? 'AI' :
+  byId('planner-mode').textContent = planner?.plannerMode === 'ai' ? 'NVIDIA AI' :
     planner?.plannerMode === 'deterministic' ? 'Deterministic' : 'Unknown';
   byId('planner-status').textContent = planner?.status === 'READY' ? 'READY' :
     planner?.status === 'UNAVAILABLE' ? 'Planner unavailable' : 'Plan rejected';

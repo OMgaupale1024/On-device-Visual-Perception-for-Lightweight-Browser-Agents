@@ -1,7 +1,8 @@
 # EdgeSight progress
 
-Current phase: **Phase 6B — privacy-safe AI planner. Complete in code; real-provider
-manual verification pending because no server-side key was available.**
+Current phase: **Phase 6B — privacy-safe AI planner on NVIDIA NIM. Complete in code;
+end-to-end AI verification pending because no NVIDIA_API_KEY was configured this
+session (the NVIDIA endpoint was verified out-of-band by the user).**
 
 Phases 0–5 are implemented. **Phase 6A manually Chrome-verified by the user**:
 POST /plan → FastAPI HTTP 200, 7 fields, sensitiveFieldCount=5,
@@ -9,9 +10,10 @@ redactedRegionCount=5, rawPiiIncluded=false, privacy.status=safe, all five role
 placeholders, Bengaluru/Conference retained, deterministic planner working.
 No unreported detailed checks are inferred.
 
-Phase 6B adds one OpenAI Responses adapter (gpt-4.1-mini-2025-04-14), minimized and
-revalidated provider input with semantic/pixel provenance, fixed policy, strict
-model-output/visual-ID validation and server-owned observation binding.
+Phase 6B uses one NVIDIA NIM adapter (nvidia/nemotron-3.5-lightning-30b-a3b via the
+OpenAI-compatible Chat Completions endpoint), minimized and revalidated provider input
+with semantic/pixel provenance, fixed policy, strict model-output/visual-ID validation
+and server-owned observation binding.
 Deterministic default mode is unchanged. AI mode never silently falls back.
 Mode header updates the existing popup; JSON request/action contracts stay unchanged.
 No images, action execution, re-observation, metrics, Pi or provider routing.

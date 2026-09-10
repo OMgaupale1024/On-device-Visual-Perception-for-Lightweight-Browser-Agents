@@ -444,7 +444,13 @@ wording; arbitrary server reasons are not rendered. There is no execution or lat
 live-page freshness guarantee. Real model integration is Phase 6B; execution is Phase 7;
 re-observation is Phase 8. Stop after Phase 6A commit/push and await review.
 
-## D31 — One OpenAI LLM over sanitized structured visual context
+## D31 — One LLM over sanitized structured visual context (provider superseded by D33)
+
+> **Superseded by [D33](#d33--switch-real-provider-to-nvidia-nim).** The single-LLM,
+> minimized-input, strict-output design below still holds; only the concrete provider
+> (originally OpenAI Responses / gpt-4.1-mini) changed to NVIDIA NIM. The OpenAI
+> adapter was never verified against a real key.
+
 
 The user confirmed Phase 6A's actual Chrome POST /plan → FastAPI HTTP 200, seven
 fields, five sensitive/redacted regions, safe/false-PII flags, placeholders, retained
@@ -496,3 +502,30 @@ No provider body/headers/errors logged. No new metrics UI. Local results remain 
 Phase 6B automated acceptance and real-key manual acceptance are separate. Stop after
 commit/push for review. Next task: Phase 7 safe execution using the current
 observation's visual boxes. No Phase 7 code in this checkpoint.
+
+## D33 — Switch real provider to NVIDIA NIM
+
+The OpenAI Responses adapter (D31) was never verified against a real key. NVIDIA API
+access is now verified: nvidia/nemotron-3.5-lightning-30b-a3b at
+https://integrate.api.nvidia.com/v1 returns the exact structured JSON EdgeSight needs
+(action/target/reason). Replace the single real provider with NVIDIA NIM and keep every
+privacy, validation, transport and safety invariant from D31–D32.
+
+NVIDIA NIM is OpenAI-compatible **Chat Completions** (/chat/completions), not the
+Responses API. The adapter (renamed app/nvidia_provider.py) therefore sends
+`messages` + `response_format={"type":"json_object"}`, temperature=0, stream=false,
+256 max_tokens, and `chat_template_kwargs.enable_thinking=false` so the model returns
+a short decision, not chain-of-thought; it parses `choices[0].message.content` and
+rejects refusals, tool calls and empty/multiple choices. httpx remains the transport
+and doubles as the OpenAI-compatible HTTP client — the Python `openai` SDK is **not**
+added, which also preserves the existing httpx.MockTransport test seam. Credential is
+now `NVIDIA_API_KEY`; `NVIDIA_BASE_URL` and `NVIDIA_MODEL` are non-secret overrides.
+
+Trade-off: json_object mode does not enforce the reason enum on the provider, so the
+server's strict `ModelDecision` validation (fixed reason phrases, target membership)
+is the only guarantee — an off-enum but valid-JSON reason yields a 502 by design, no
+repair, no fallback to deterministic. Only ONE real provider exists (NVIDIA); the
+OpenAI path is fully removed from the application layer. No screenshots are sent to
+NVIDIA in Phase 6B: this remains an LLM over sanitized structured visual context, not
+a VLM. Real server-side smoke and Chrome AI-mode acceptance are still pending (no key
+configured this session).

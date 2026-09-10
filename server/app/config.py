@@ -1,7 +1,9 @@
-"""Non-secret server configuration. One provider/model, explicit mode selection."""
+"""Non-secret server configuration. One provider (NVIDIA NIM), explicit mode."""
 import os
 
-MODEL = "gpt-4.1-mini-2025-04-14"
+# NVIDIA NIM, OpenAI-compatible Chat Completions. Non-secret; overridable by env.
+MODEL = os.environ.get("NVIDIA_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
+BASE_URL = os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
 PROVIDER_TIMEOUT_SECONDS = 15
 MODE_HEADER = "X-EdgeSight-Planner"
 

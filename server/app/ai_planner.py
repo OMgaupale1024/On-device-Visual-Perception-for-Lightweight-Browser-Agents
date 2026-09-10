@@ -4,7 +4,7 @@ import asyncio
 from .ai_contract import parse_decision
 from .ai_input import prepare_ai_input
 from .config import PROVIDER_TIMEOUT_SECONDS
-from .openai_provider import PlannerFailure, PlanningProvider
+from .nvidia_provider import PlannerFailure, PlanningProvider
 from .schemas import PlanResponse
 
 

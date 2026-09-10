@@ -1,9 +1,10 @@
 # EdgeSight server — Phase 6B
 
-FastAPI/Pydantic/Uvicorn with one OpenAI Responses API adapter using httpx.
-PLANNER_MODE=deterministic is the default; PLANNER_MODE=ai selects the real adapter.
-No automatic fallback, alternative providers, agent framework, browser execution,
-payload logging or image upload.
+FastAPI/Pydantic/Uvicorn with one NVIDIA NIM adapter (OpenAI-compatible Chat
+Completions) using httpx as the compatible HTTP client — the Python `openai` SDK is
+not a dependency. PLANNER_MODE=deterministic is the default; PLANNER_MODE=ai selects
+the real NVIDIA adapter. No automatic fallback, alternative providers, agent framework,
+browser execution, payload logging or image upload.
 
 ## Windows setup
 
@@ -26,35 +27,41 @@ To enable AI in the server terminal before restarting, enter the key through a
 masked prompt so its literal value does not enter command history:
 
 ```powershell
-$plannerKeyInput = Read-Host "OpenAI API key" -AsSecureString
-$env:OPENAI_API_KEY = [System.Net.NetworkCredential]::new("", $plannerKeyInput).Password
+$plannerKeyInput = Read-Host "NVIDIA API key" -AsSecureString
+$env:NVIDIA_API_KEY = [System.Net.NetworkCredential]::new("", $plannerKeyInput).Password
 Remove-Variable plannerKeyInput
 $env:PLANNER_MODE = "ai"
+$env:NVIDIA_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"
 .venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
 The application reads process environment only; .env files are not auto-loaded.
 Examples list variable names with empty values. Never put a key into Chrome or
 commit a .env. Remove the process variable when finished:
-`Remove-Item Env:OPENAI_API_KEY`. AI requests can incur provider charges.
+`Remove-Item Env:NVIDIA_API_KEY`. AI requests can incur NVIDIA charges.
 
 ## Configuration and provider
 
 - PLANNER_MODE: deterministic (default) or ai. Invalid mode fails startup.
-- OPENAI_API_KEY: server-side credential, required only for AI requests.
+- NVIDIA_API_KEY: server-side credential, required only for AI requests.
+- NVIDIA_BASE_URL: default https://integrate.api.nvidia.com/v1 (non-secret override).
+- NVIDIA_MODEL: default nvidia/nemotron-3.5-lightning-30b-a3b (non-secret override).
 - EDGESIGHT_EXTENSION_ORIGIN: exact chrome-extension://[a-p]{32} origin.
-- Model: fixed **gpt-4.1-mini-2025-04-14** in app/config.py. One provider/model only.
-- Endpoint: fixed https://api.openai.com/v1/responses.
+- Provider: **NVIDIA NIM**, OpenAI-compatible Chat Completions at `<NVIDIA_BASE_URL>/chat/completions`.
+  One provider/model only. httpx is the compatible HTTP client; no openai SDK.
 - Provider deadline: 15s; browser deadline: 20s. No retry or fallback chain.
 - Input cap: 32,000 UTF-8 bytes; response envelope cap: 64,000 bytes; output token cap: 256.
-- store=false; no tools, prior conversation, images, redirects or environment proxies.
+- Request: temperature=0, stream=false, response_format={"type":"json_object"},
+  chat_template_kwargs.enable_thinking=false; no tools, prior conversation, images,
+  redirects or environment proxies.
 
-Selection rationale: this narrow planner needs structured ID selection, not a
-long reasoning workflow. The pinned GPT-4.1 mini snapshot offers instruction
-following and structured output support with no separate reasoning step.
-[Model reference](https://developers.openai.com/api/docs/models/gpt-4.1-mini) ·
-[Structured output reference](https://developers.openai.com/api/docs/guides/structured-outputs).
-store=false is not a claim of zero provider retention under every account policy.
+Selection rationale: this narrow planner needs short structured ID selection, not a
+long reasoning workflow. Nemotron 3.5 Lightning follows instructions and emits JSON;
+enable_thinking=false suppresses chain-of-thought so we get only the decision. Because
+json_object mode does not enforce a schema provider-side, the server's strict
+`ModelDecision` validation (fixed reason phrases, target membership) is the real
+guarantee — an off-enum but valid-JSON reason is rejected 502, never repaired. NVIDIA
+account/data retention is governed by NVIDIA's policy.
 
 ## Browser API — unchanged JSON contract
 
@@ -180,9 +187,10 @@ From repository root with the matching server mode running:
 The latter is an opt-in real-provider smoke using a safe synthetic fixture, not a
 Chrome/manual test. It checks mode, health, CLICK/STOP and observation binding.
 
-**Real provider manual status: PENDING — no key was configured during development.**
+**Real NVIDIA provider smoke status: PENDING — no NVIDIA_API_KEY was configured in
+this session's shell (the NVIDIA endpoint was verified out-of-band by the user).**
 After tests: run AI server, reload extension, Analyze / Plan on Employee Travel
-Request, inspect the sanitized browser POST, and verify Planner AI / actual Continue
-ID / no browser click. Provider-bound content is tested automatically; manual
+Request, inspect the sanitized browser POST, and verify Planner NVIDIA AI / actual
+Continue ID / no browser click. Provider-bound content is tested automatically; manual
 inspection of an actual provider request was not performed. Never inspect/log the
 authorization header. See docs/TESTING.md for the acceptance checklist.

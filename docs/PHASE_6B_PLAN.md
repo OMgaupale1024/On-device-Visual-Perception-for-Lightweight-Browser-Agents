@@ -1,5 +1,12 @@
 # Phase 6B plan — one privacy-safe AI planner
 
+> **Provider updated after this plan was written.** The real provider is now NVIDIA
+> NIM (nvidia/nemotron-3.5-lightning-30b-a3b, OpenAI-compatible Chat Completions at
+> https://integrate.api.nvidia.com/v1), see [DECISIONS D33](DECISIONS.md#d33--switch-real-provider-to-nvidia-nim).
+> The design below (single provider, minimized input, strict output, no fallback,
+> httpx as the compatible client) is unchanged; only the OpenAI Responses references
+> in step 1 are superseded.
+
 Inspected baseline: f356308048cf7ed5afa29ee76e88904552457605; main clean and
 synchronized. Phase 6A is user Chrome-verified: POST /plan → FastAPI HTTP 200,
 7 fields, 5 sensitive fields/regions, safe status, rawPiiIncluded=false, all five

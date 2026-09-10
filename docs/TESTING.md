@@ -582,13 +582,13 @@ AI failure without fabricated fallback success. No latency metric is claimed.
 
 ### P6B-M1 — real provider and Chrome demo (PENDING)
 
-1. After automated tests pass, use server/README.md to enter a real API key privately
-   in the server terminal. Set PLANNER_MODE=ai and the exact extension origin; start
-   Uvicorn. Never put the key in Chrome or chat.
+1. After automated tests pass, use server/README.md to enter a real NVIDIA_API_KEY
+   privately in the server terminal. Set PLANNER_MODE=ai and the exact extension origin;
+   start Uvicorn. Never put the key in Chrome or chat.
 2. Reload EdgeSight; open Employee Travel Request with all fields and Continue visible.
 3. Goal: Check whether this travel request is complete and submit it.
 4. Analyze / Plan. Confirm local perception READY, privacy SAFE, context READY,
-   server Connected and Planner AI. Inspect the service worker Network POST body.
+   server Connected and Planner NVIDIA AI. Inspect the service worker Network POST body.
 5. Confirm response CLICK targets the actual supplied Continue visual ID and echoes
    the request observation ID. Popup displays CLICK Continue.
 6. Confirm browser does NOT click; no execution exists in Phase 6B.
@@ -596,11 +596,13 @@ AI failure without fabricated fallback success. No latency metric is claimed.
    provider-bound content. Never log/inspect the credential or auth header. Do not
    enable HTTP debug dumps. Automated body capture is not a real-network inspection.
 
-**All Phase 6B real-provider/Chrome steps remain PENDING** because no server-side
-key was available. The new --ai smoke option can be run against AI mode using the
-synthetic safe fixture; it incurs real provider requests and was not run here.
-Unknown PII/OCR errors, semantic model mistakes and account/model availability remain
-limitations. store=false does not establish zero provider retention for every account.
+**All Phase 6B real-provider/Chrome steps remain PENDING** because no NVIDIA_API_KEY
+was configured in this session's shell (the NVIDIA endpoint was verified out-of-band by
+the user). The --ai smoke option can be run against NVIDIA AI mode using the synthetic
+safe fixture; it incurs real NVIDIA requests and was not run here. Unknown PII/OCR
+errors, semantic model mistakes and account/model availability remain limitations.
+NVIDIA data retention is governed by NVIDIA's policy. Note: json_object output does not
+enforce the reason enum provider-side, so an off-enum reason is rejected 502 by design.
 
 Exact next task after review: **PHASE 7 — safe browser action execution using the
 current observation's visual bounding boxes. DO NOT START PHASE 7 here.**

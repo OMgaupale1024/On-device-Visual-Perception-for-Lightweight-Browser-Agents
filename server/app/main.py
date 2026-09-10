@@ -11,14 +11,14 @@ from .planner import plan
 from .schemas import PlanResponse, SafeAgentContext
 from .ai_planner import plan_ai
 from .config import MODE_HEADER, planner_mode
-from .openai_provider import OpenAIProvider, PlannerFailure
+from .nvidia_provider import NvidiaProvider, PlannerFailure
 
 
 def create_app(allowed_origin: str | None = None, *, mode=None, provider=None) -> FastAPI:
     selected_mode = planner_mode() if mode is None else mode
     if selected_mode not in {"deterministic", "ai"}:
         raise ValueError("PLANNER_MODE must be deterministic or ai")
-    ai_provider = provider if provider is not None else OpenAIProvider()
+    ai_provider = provider if provider is not None else NvidiaProvider()
     origin = os.environ.get("EDGESIGHT_EXTENSION_ORIGIN", "") if allowed_origin is None else allowed_origin
     if origin and not re.fullmatch(r"chrome-extension://[a-p]{32}", origin):
         raise ValueError("Configure one exact Chrome extension origin")

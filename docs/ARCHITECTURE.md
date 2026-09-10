@@ -15,7 +15,7 @@ Safe semantics + safe visual items + observation metadata + guarded goal
 ================ NETWORK BOUNDARY ================
 structured JSON POST http://127.0.0.1:8000/plan
  → strict FastAPI/Pydantic validation → deterministic planner OR explicit AI mode:
-   minimized/revalidated safe input → provider privacy guard → OpenAI Responses LLM
+   minimized/revalidated safe input → provider privacy guard → NVIDIA NIM LLM
    → untrusted structured output → strict action/visual-ID validator
  → observation-bound CLICK / STOP → client validation → suggestion display
 ```
@@ -119,10 +119,12 @@ freshness at future execution time remains Phase 7's responsibility.
 ## Phase 6B provider boundary
 
 PLANNER_MODE chooses deterministic (default, original logic unchanged) or ai.
-There is no fallback when AI fails. The only AI adapter uses OpenAI Responses API
-with fixed gpt-4.1-mini-2025-04-14, strict JSON schema, no tools/conversation,
-store=false, bounded output, redirects/retries/environment proxies disabled.
-httpx is the sole HTTP dependency; no SDK, routing or agent framework.
+There is no fallback when AI fails. The only AI adapter uses NVIDIA NIM's
+OpenAI-compatible Chat Completions endpoint with model
+nvidia/nemotron-3.5-lightning-30b-a3b, temperature=0, response_format=json_object,
+enable_thinking=false, no tools/conversation, bounded output, redirects/retries/
+environment proxies disabled. httpx is the sole HTTP dependency and doubles as the
+OpenAI-compatible client; no openai SDK, routing or agent framework.
 
 The AI entry accepts a JSON-shaped candidate, takes a JSON snapshot and revalidates
 the complete SafeAgentContext BEFORE projection. Nested extra keys, fake PII and
@@ -187,6 +189,7 @@ re-analysis or 60 seconds; nothing is persisted.
 Phase 6A is user Chrome-verified: POST /plan → FastAPI 200; seven safe fields, five
 sensitive/redacted regions, safe status/false PII flag, five placeholders, retained
 Bengaluru/Conference and working deterministic flow. No unreported checks inferred.
-Phase 6B real-provider and Chrome AI/no-click acceptance remain pending because no
-server-side key was available. Mock tests and local HTTP missing-key tests are not
-real-model verification. store=false does not certify zero provider retention.
+Phase 6B server-side NVIDIA smoke and Chrome AI/no-click acceptance remain pending
+because no NVIDIA_API_KEY was configured this session (the NVIDIA endpoint itself was
+verified out-of-band by the user). Mock tests and local HTTP missing-key tests are not
+real-model verification. NVIDIA data retention is governed by NVIDIA's policy.

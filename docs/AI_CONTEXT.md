@@ -1,8 +1,11 @@
 # EdgeSight AI Context
 
-Current phase: **Phase 6B — privacy-safe AI planner, complete in code.**
-Real-provider/manual AI demo remains pending: no provider key was configured.
-Stop for review after commit/push. Checkpoint: 2026-09-10.
+Current phase: **Phase 6B — privacy-safe AI planner on NVIDIA NIM, complete in code.**
+Provider switched from the OpenAI adapter to NVIDIA NIM. NVIDIA API access was
+manually verified by the user (returns valid structured JSON). End-to-end AI demo
+remains pending: no NVIDIA_API_KEY was configured in this session's shell, so the
+server-side provider smoke and Chrome AI-mode run were not performed. Stop for review
+after commit/push. Checkpoint: 2026-09-10.
 
 ## Project/root objective
 
@@ -31,7 +34,7 @@ detection/redaction/filtering → SafeAgentContext → final local guard/approva
 → browser/server boundary → FastAPI strict validation
 → deterministic planner OR explicit AI mode:
 full candidate revalidation → minimized JSON input → provider privacy check
-→ OpenAI Responses API → untrusted model output → strict action/visual-ID validator
+→ NVIDIA NIM (OpenAI-compatible Chat Completions) → untrusted model output → strict action/visual-ID validator
 → SERVER observation binding → unchanged CLICK/STOP JSON → client validation/display.
 
 LLM over sanitized structured visual context, **not a VLM integration**. No image
@@ -39,8 +42,11 @@ upload. Raw data and the private sanitized-image capability remain browser-local
 
 ## Phase 6B implementation
 
-- One provider/model: OpenAI gpt-4.1-mini-2025-04-14, fixed endpoint /v1/responses,
-  strict structured output, store=false, 256 output tokens, no tools/history/retries.
+- One provider/model: NVIDIA NIM, nvidia/nemotron-3.5-lightning-30b-a3b, base URL
+  https://integrate.api.nvidia.com/v1, OpenAI-compatible Chat Completions endpoint
+  /chat/completions, temperature=0, stream=false, response_format=json_object,
+  chat_template_kwargs.enable_thinking=false, 256 max_tokens, no tools/history/retries.
+  Model/base URL are non-secret and overridable via NVIDIA_MODEL / NVIDIA_BASE_URL.
 - app/config.py: explicit PLANNER_MODE=deterministic (default) or ai; invalid fails
   startup. 15s provider bound; browser transport updated to 20s.
 - app/ai_input.py: JSON snapshot + full SafeAgentContext revalidation before explicit
@@ -52,9 +58,11 @@ upload. Raw data and the private sanitized-image capability remain browser-local
   cannot be reconstructed and only filled=true signals completion. Strict
   action/target/reason schema; four fixed safe reason phrases; duplicate JSON keys
   rejected. No chain-of-thought or free-form explanations.
-- app/openai_provider.py: one async httpx adapter; credential read only inside
-  server application code, never prompt/config/error/log/browser. Fixed HTTPS URL,
-  trust_env=false, no redirects, 64KB response cap, strict completed-message parsing.
+- app/nvidia_provider.py: one async httpx adapter (httpx is the OpenAI-compatible HTTP
+  client; the openai SDK is not used); NVIDIA_API_KEY read only inside server
+  application code, never prompt/config/error/log/browser. Fixed HTTPS URL,
+  trust_env=false, no redirects, 64KB response cap, strict single-choice parsing
+  (rejects refusal, tool calls, empty/multiple choices).
 - app/ai_planner.py: provider protocol seam, deadline, exact output validation,
   supplied visual-ID membership, STOP/null, server-owned observation ID.
 - app/main.py: same /plan request and five-key response. AI missing key/network/
@@ -62,8 +70,9 @@ upload. Raw data and the private sanitized-image capability remain browser-local
   422. All errors generic. No deterministic fallback in AI mode.
 - X-EdgeSight-Planner mode header exposed by narrow CORS and allowlisted by
   transport. Popup shows AI/Deterministic/Unknown, including AI on server-reported
-  failures; still suggestions only. No model metrics panel.
-- httpx moved from test-only to production requirements; no new framework or SDK.
+  failures; popup AI label reads "NVIDIA AI". Still suggestions only. No model metrics panel.
+- httpx is the production HTTP client and OpenAI-compatible transport; no openai SDK,
+  no new framework added.
 - scripts/smoke-planner.mjs now asserts mode; --ai is an opt-in live-provider smoke.
 
 ## Configuration / Windows run
@@ -82,9 +91,10 @@ Set-Location server
 .venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-For AI set PLANNER_MODE=ai and supply OPENAI_API_KEY privately in the server
-terminal, then restart. Masked key-entry and venv creation instructions are in
-server/README.md. Fixed model in config.py; no other provider/model integrated.
+For AI set PLANNER_MODE=ai and supply NVIDIA_API_KEY privately in the server
+terminal, then restart. Optional NVIDIA_BASE_URL / NVIDIA_MODEL override the defaults.
+Masked key-entry and venv creation instructions are in server/README.md. Default model
+in config.py; no other provider integrated.
 
 Reload unpacked extension/ (Chrome 116+), enable file URLs, open demo-page/index.html,
 keep all seven fields and Continue visible, and ANALYZE / PLAN. Opening popup alone
@@ -92,7 +102,7 @@ does not send. Inspect service worker Network; both previews remain local.
 
 ## Important files
 
-Phase 6B: server/app/{config,ai_input,ai_contract,ai_planner,openai_provider,main}.py,
+Phase 6B: server/app/{config,ai_input,ai_contract,ai_planner,nvidia_provider,main}.py,
 server/tests/test_ai_planner.py, extension/src/transport/{config,planner-client}.js,
 extension/src/popup/popup.{html,js}, scripts/smoke-planner.mjs, docs/PHASE_6B_PLAN.md.
 
@@ -123,11 +133,19 @@ unchanged. Source/tests/Git outrank stale documentation.
 
 VERIFIED: the exact Phase 6A user evidence above. Existing historical reports in TESTING.
 
-PENDING Phase 6B: real provider call with server-side key; Chrome local perception
-READY, privacy SAFE, context READY, server connected, Planner AI, CLICK actual
-Continue ID with matching observation and browser not clicking. Actual provider-bound
-content inspection without auth/header exposure is also pending. Mock tests do not
-prove model behavior or actual remote privacy/account settings.
+VERIFIED by user out-of-band: the NVIDIA endpoint/model returns valid structured JSON
+(action/target/reason). This was a direct API check, not a run through EdgeSight's
+server, parser or privacy projection.
+
+PENDING Phase 6B: (1) real provider call with a server-side NVIDIA_API_KEY exercised
+through EdgeSight's parser/validator (scripts/smoke-planner.mjs --ai); (2) Chrome
+AI-mode run — local perception READY, privacy SAFE, context READY, server connected,
+Planner NVIDIA AI, CLICK actual Continue ID with matching observation and browser not
+clicking; (3) actual provider-bound content inspection without auth/header exposure.
+No NVIDIA_API_KEY existed in this session's shell, so none were run. Note: the model's
+free reason must match one of the four fixed safe phrases or the server returns 502 by
+design (json_object mode does not enforce the enum server-side). Mock tests do not
+prove model behavior or remote privacy/account settings.
 
 Unreported detailed masks, offline OCR, geometry/HiDPI and timing checks remain
 pending; do not invent them from the general flow confirmation.
@@ -155,17 +173,20 @@ unknown/transformed secrets and OCR errors can evade heuristics. System prompt
 separation is defence in depth, not proof against all prompt injection. Schema/ID
 checks constrain outputs but do not prove a chosen action is correct. Execution-time
 page freshness remains Phase 7. Fixed reason phrases limit explanation detail.
-CORS is not authentication; local no-Origin clients are allowed. store=false does
-not certify zero provider retention. Existing Starlette/httpx deprecation warning
-is non-failing.
+CORS is not authentication; local no-Origin clients are allowed. NVIDIA account/data
+retention is governed by NVIDIA's policy, not asserted here. json_object structured
+output does not enforce the reason enum on the provider side, so a valid-JSON but
+off-enum reason is rejected with 502 (no repair). Existing Starlette/httpx deprecation
+warning is non-failing.
 
 ## Git state and exact next task
 
-Baseline: **f356308048cf7ed5afa29ee76e88904552457605**, main clean and synchronized.
-Phase 6B checkpoint is the commit containing this document, subject
-feat: add privacy-safe AI planner. Resolve exact hash with git log -1 --format=%H.
-At doc preparation changes await commit; final report records actual normal push,
-HEAD == origin/main and clean-tree verification. A commit cannot embed its own hash.
+Baseline before this checkpoint: **f201778baee1b275642379788f4ea3485555b712**
+(feat: add privacy-safe AI planner), main clean and synchronized. This NVIDIA-switch
+checkpoint is the commit containing this document, subject
+feat: switch AI planner to NVIDIA NIM. Resolve exact hash with git log -1 --format=%H.
+Final report records actual normal push, HEAD == origin/main and clean-tree
+verification. A commit cannot embed its own hash.
 
 After review: **PHASE 7 — safe browser action execution using the current
 observation's visual bounding boxes. DO NOT START PHASE 7 in this session.**

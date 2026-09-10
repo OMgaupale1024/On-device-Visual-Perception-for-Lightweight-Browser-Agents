@@ -17,15 +17,18 @@ deterministic flow working. No additional unreported manual check inferred.
 ## Phase 6B boundary
 
 PLANNER_MODE=deterministic (default) preserves original planner. Explicit ai mode
-uses exactly one provider: OpenAI Responses, gpt-4.1-mini-2025-04-14.
-OPENAI_API_KEY belongs only in the server process. No key was available/read/printed.
+uses exactly one provider: NVIDIA NIM, nvidia/nemotron-3.5-lightning-30b-a3b, via the
+OpenAI-compatible Chat Completions endpoint at https://integrate.api.nvidia.com/v1.
+NVIDIA_API_KEY belongs only in the server process. No key was configured/read/printed
+in this session; NVIDIA API access was verified out-of-band by the user.
 
 app/ai_input.py snapshots/revalidates the full candidate, projects only safe
 goal/privacy/semantic and pixel-OCR evidence/redaction legend, guards the exact
 JSON and caps it. No observation ID/timestamps/bboxes/debug/environment goes to model.
 app/ai_contract.py supplies fixed instructions and strict three-key model schema.
-app/openai_provider.py sends the prompt via async httpx, fixed HTTPS endpoint,
-store=false, no tools/redirects/environment proxies/retries, 15s/64KB bounds.
+app/nvidia_provider.py sends the prompt via async httpx (the OpenAI-compatible HTTP
+client; no openai SDK), fixed HTTPS endpoint, response_format=json_object,
+enable_thinking=false, no tools/redirects/environment proxies/retries, 15s/64KB bounds.
 app/ai_planner.py validates action/target/reason and binds observation on our server.
 
 Same five-key CLICK/STOP response. X-EdgeSight-Planner reports mode separately;
@@ -43,10 +46,11 @@ cases reject. Injection text stays separate from policy. Genuine OCR cold/warm,
 syntax/assets/Python/dependency checks pass. Real localhost HTTP verifies
 deterministic 200 and AI missing-key 503 with correct mode header. No live model call.
 
-Next manual review: follow server/README.md masked key setup, run AI mode and the
-Employee Travel Request demo. Confirm local privacy/context, Planner AI, actual
-Continue visual ID, and no browser click. Inspect safe planning content without
-logging auth headers. All real-provider/Phase 6B Chrome checks remain pending.
+Next manual review: follow server/README.md masked key setup with NVIDIA_API_KEY, run
+AI mode and the Employee Travel Request demo. Confirm local privacy/context, Planner
+NVIDIA AI, actual Continue visual ID, and no browser click. Inspect safe planning
+content without logging auth headers. The server-side NVIDIA smoke through the parser
+and all Phase 6B Chrome checks remain pending (no key was configured this session).
 
 ## Run / files / limitations
 
@@ -59,7 +63,7 @@ From server/ after process configuration:
 Reload extension/, allow file URLs, Analyze / Plan. Optional synthetic real-provider
 smoke from root: node scripts/smoke-planner.mjs --ai (requires key; not run here).
 
-Important: app/{ai_input,ai_contract,ai_planner,openai_provider,config,main}.py,
+Important: app/{ai_input,ai_contract,ai_planner,nvidia_provider,config,main}.py,
 test_ai_planner.py, transport/config + planner-client, popup. Preserve the untouched
 Phase 5/6A approval/sanitized handle/schemas/deterministic planner and all regressions.
 Unknown PII/OCR errors, model semantic mistakes, prompt-injection limits, no live

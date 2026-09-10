@@ -5,15 +5,17 @@ SIH26171 · ISRO · Smart India Hackathon 2026.
 
 **Phase 6B implemented in code:** browser-local OCR and semantic analysis, local
 redaction, privacy-approved SafeAgentContext, FastAPI validation, and one real
-OpenAI planner adapter. Deterministic mode remains the default. Both modes return
+NVIDIA NIM planner adapter. Deterministic mode remains the default. Both modes return
 the exact same observation-bound CLICK/STOP suggestion contract. No browser action
 execution, re-observation, metrics dashboard or Raspberry Pi work.
 
 **Phase 6A is manually Chrome-verified by the user:** extension → POST /plan →
 FastAPI HTTP 200; seven fields, five sensitive/redacted regions, safe status,
 rawPiiIncluded=false, five role placeholders, Bengaluru/Conference retained, and
-working deterministic planning. **Phase 6B real-provider/Chrome verification remains
-pending:** no server-side API key was available during this implementation.
+working deterministic planning. The NVIDIA endpoint was manually verified to return
+valid structured JSON. **Phase 6B end-to-end AI verification remains pending:** the
+server-side provider smoke through EdgeSight's parser and the Chrome AI-mode run were
+not performed (no NVIDIA_API_KEY was configured in this session's shell).
 
 ## Run on Windows
 
@@ -29,7 +31,7 @@ Set-Location server
 ```
 
 Use EdgeSight's actual 32-letter extension ID. For AI mode, set PLANNER_MODE=ai
-and OPENAI_API_KEY **server-side only**, then restart. The
+and NVIDIA_API_KEY **server-side only**, then restart. The
 [server README](server/README.md) includes a masked PowerShell key-entry procedure;
 never paste a key into the extension, repository, logs or chat. No .env auto-loader.
 
@@ -39,7 +41,7 @@ Click **ANALYZE / PLAN** with the default travel-request goal. Opening the popup
 alone sends nothing. OCR has a 45s limit; planning through localhost has a 20s limit
 (provider work is bounded to 15s).
 
-The planner panel displays **AI**, **Deterministic**, or **Unknown** based on an
+The planner panel displays **NVIDIA AI**, **Deterministic**, or **Unknown** based on an
 allowlisted server header. AI failures show unavailable/rejected and never silently
 fall back to deterministic success. Local Phase 1–5 results remain visible.
 **CLICK Continue is a suggestion only. The browser does not execute it.**
@@ -51,7 +53,7 @@ Browser screen → local OCR + semantics → local PII detection/redaction
 → SafeAgentContext → FINAL LOCAL PRIVACY GUARD
 ========== Browser → EdgeSight server ==========
 FastAPI strict validation → minimized safe planning input → provider guard
-========== EdgeSight server → OpenAI (AI mode only) ==========
+========== EdgeSight server → NVIDIA NIM (AI mode only) ==========
 LLM → untrusted structured decision → strict action/ID validation
 → server-owned observation binding → extension validation → suggestion display
 ```
@@ -67,9 +69,12 @@ IDs, geometry, image metadata, extension IDs, environment and debug data are omi
 Authentication uses the server credential as protocol authentication only; it is
 never model content.
 
-Selected model: **OpenAI gpt-4.1-mini-2025-04-14**, via Responses API with strict
-structured output. This is an **LLM over sanitized structured visual context**, not
-a VLM integration. No image upload. See [model documentation](https://developers.openai.com/api/docs/models/gpt-4.1-mini).
+Selected provider: **NVIDIA NIM**, model **nvidia/nemotron-3.5-lightning-30b-a3b**,
+via the OpenAI-compatible Chat Completions endpoint (https://integrate.api.nvidia.com/v1)
+with JSON-object structured output. The Python `openai` SDK is not used; the server
+speaks the compatible protocol directly over `httpx`. This is an **LLM over sanitized
+structured visual context**, not a VLM integration. No image upload; no screenshots
+are ever sent to NVIDIA in Phase 6B.
 
 Prompt policy treats goal/screen text as untrusted data, forbids hidden-value
 reconstruction, and permits only supplied visual IDs or STOP. All model output is
@@ -94,8 +99,8 @@ HTTP smoke pass. Mocked AI tests are not real-provider acceptance.
 
 With a separately running server, from repository root:
 `node scripts/smoke-planner.mjs` for deterministic mode, or
-`node scripts/smoke-planner.mjs --ai` for a real, billable AI smoke using only the
-synthetic safe fixture. The latter was NOT run without a key.
+`node scripts/smoke-planner.mjs --ai` for a real, billable NVIDIA smoke using only the
+synthetic safe fixture. The latter was NOT run — no NVIDIA_API_KEY was configured.
 
 [Architecture](docs/ARCHITECTURE.md) · [Testing](docs/TESTING.md) ·
 [Progress](docs/PROGRESS.md) · [Decisions](docs/DECISIONS.md) ·
