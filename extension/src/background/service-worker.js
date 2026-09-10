@@ -5,9 +5,10 @@ import { observePage } from '../content/observe.js';
 import { detectSensitiveFields, countSensitive } from '../privacy/detect.js';
 import { collectLocalValues } from '../privacy/collect.js';
 import { sanitizeSemantics } from '../privacy/semantic.js';
-import { redactScreenshot, buildOutboundPackage } from '../privacy/redact.js';
+import { redactScreenshot, buildOutboundPackage, sanitizedImageForPerception } from '../privacy/redact.js';
 import { perceiveLocalCapture } from '../perception/pipeline.js';
 import { sensitiveRegions } from '../privacy/geometry.js';
+import { buildSafeAgentContext } from '../privacy/agent-context.js';
 
 let busy = false;
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -15,7 +16,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL('src/popup/popup.html')) return false;
   if (busy) { sendResponse({ ok: false, error: 'Analysis already in progress.' }); return false; }
   busy = true;
-  runAnalysis().then(sendResponse).catch(() => sendResponse({
+  runAnalysis(message.goal).then(sendResponse).catch(() => sendResponse({
     ok: false,
     error: 'Local privacy processing blocked. Keep the page still and retry. Restricted pages cannot be analyzed; local files require Allow access to file URLs.',
   })).finally(() => { busy = false; });
@@ -48,7 +49,7 @@ function release(snapshot) {
   }
 }
 
-async function runAnalysis() {
+async function runAnalysis(goal) {
   let before, after, rawScreenshot, secrets;
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -60,6 +61,9 @@ async function runAnalysis() {
     }
     await assertActive(tab);
     rawScreenshot = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+    // Observation-scoped identity: visual_N ids in this context belong to this obs id.
+    const observationId = 'obs_' + crypto.randomUUID();
+    const capturedAt = new Date().toISOString();
     await assertActive(tab);
     after = await snapshot(tab.id, before.documentId);
     if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error('Page changed during capture.');
@@ -77,6 +81,21 @@ async function runAnalysis() {
     if (perception.privacy === 'SAFE') {
       safeContext = buildOutboundPackage(visual.handle, semantic, secrets, perception.value);
     }
+    // Phase 5: fuse safe semantic + safe visual state into the canonical, guarded
+    // SafeAgentContext. Built defensively so a builder fault never discards working
+    // Phase 1-4 results; a privacy failure fails closed (no context, status marked).
+    let agent = { status: 'REVOKED' };
+    if (perception.status !== 'UNSAFE') {
+      try {
+        agent = buildSafeAgentContext({
+          goal, semantic,
+          visualState: perception.privacy === 'SAFE' ? perception.value : null,
+          image: { width: visual.width, height: visual.height, redactedRegions: visual.redactedRegions },
+          observation: { id: observationId, capturedAt, viewport: obs.viewport },
+          sensitiveValues: secrets,
+        });
+      } catch { agent = { status: 'ERROR' }; }
+    }
     return {
       ok: true,
       observation: {
@@ -90,6 +109,12 @@ async function runAnalysis() {
       // A privacy failure also revokes the image package: don't leave an eligible
       // screenshot behind if OCR discovered known sensitive text outside the masks.
       safeContext: perception.status === 'UNSAFE' ? null : safeContext,
+      // Phase 5 canonical outbound-shaped context (image metadata only; sanitized
+      // bytes stay behind the redact.js handle). Null unless the guard passed READY.
+      agentContext: agent.status === 'READY' ? agent.context : null,
+      agentContextStatus: agent.status,
+      structuredContextBytes: agent.bytes ?? 0,
+      sanitizedImageBytes: agent.status === 'READY' ? sanitizedImageForPerception(visual.handle).dataUrl.length : 0,
       perception,
     };
   } finally {

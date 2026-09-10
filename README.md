@@ -4,9 +4,11 @@
 
 Smart India Hackathon 2026 · SIH26171 · ISRO · Software · Smart Automation.
 
-**Phase 4 implemented. Phase 5 not started.** EdgeSight now runs a **browser-local
-OCR/CV visual perception baseline** over locally captured screenshot pixels using Tesseract.js 6.0.1,
-WASM core 6.1.2 and packaged English data. This is OCR, not a Vision Transformer.
+**Phases 4–5 implemented.** EdgeSight runs a **browser-local OCR/CV visual perception
+baseline** over locally captured screenshot pixels (Tesseract.js 6.0.1, WASM core 6.1.2,
+packaged English data — OCR, not a Vision Transformer), then **fuses** its safe DOM semantics
+and safe visual perception into one privacy-guarded **SafeAgentContext** — the single structure
+a future server would consume. Sensitive fields become `[ROLE]` placeholders; nothing is transmitted.
 
 Real Tesseract/WASM inference passed on a synthetic image under Node. Actual Chrome
 MV3 inference, offline operation and demo recognition still require manual verification.
@@ -18,7 +20,8 @@ the privacy display; only that specific report is recorded in [Testing](docs/TES
 1. Reload/load unpacked `extension/` at `chrome://extensions` (Chrome 116+).
 2. Enable Allow access to file URLs and open `demo-page/index.html` (fake data only).
 3. Keep all seven fields visible; open EdgeSight and click **ANALYZE PAGE**.
-4. Inspect Local visual perception and expand detected text/positions and local previews.
+4. Inspect Local visual perception and the **Safe agent context** panel (Status, observation
+   id, safe fields, structured size); expand its preview to see the exact sanitized structure.
 
 All OCR runtime assets are committed under `extension/vendor/ocr/`; loading the extension
 requires no npm install and no runtime download. Engine processing has a 45-second deadline.
@@ -46,11 +49,12 @@ file is removed; the model remains loaded for warm runs. This is reference/resou
 cleanup, not secure memory erasure. The original local preview still hides passwords.
 Previews expire after 60 seconds, re-analysis or close. Nothing is sent off-device.
 
-A residual known-value leak blocks the visual result and candidate package. Ordinary OCR
-failures preserve Phase 1–3 results. Only the Phase 3 private sanitized-image handle can
-enter the outbound builder. All runtime assets are extension-local; CSP permits self
-scripts/workers, self/data reads and local WASM compilation. No transport, server, LLM,
-planner, browser actions or Phase 5 fusion exists.
+A residual known-value leak blocks the visual result, candidate package AND the SafeAgentContext
+(fail closed). Ordinary OCR failures preserve Phase 1–3 results. Only the Phase 3 private
+sanitized-image handle can enter the outbound builder or supply sanitized image bytes; the
+SafeAgentContext itself carries image metadata only. All runtime assets are extension-local; CSP
+permits self scripts/workers, self/data reads and local WASM compilation. No transport, server,
+LLM, planner or browser actions exist — Phase 5 fusion is local-only.
 
 Expected demo OCR targets include Destination, Bengaluru, Purpose, Conference and Continue.
 The static fake-data form is the supported prototype scope. Unknown PII, OCR errors,
@@ -73,6 +77,6 @@ Node/WASM smoke result is documented separately from the unrun Chrome harness.
 [Claude / Codex AI context](docs/AI_CONTEXT.md) ·
 [OCR assets and licenses](extension/vendor/ocr/README.md)
 
-Next: **Phase 5 — DOM + visual fusion and final sanitized structured agent context.**
-Later: Phase 6 planner, 7 safe actions, 8 re-observe/verify, 9 metrics, 10 polish.
+Next: **Phase 6 — privacy-safe server transport + planner** (consumes the SafeAgentContext only).
+Later: 7 safe actions, 8 re-observe/verify, 9 metrics, 10 polish. Chrome verification of Phases 4–5 is user-pending.
 .

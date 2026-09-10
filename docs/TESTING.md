@@ -378,9 +378,50 @@ fail with `ocr.js OCR import contract regressed: ... does not provide an export 
    - `OCR_TIMEOUT` — init/recognition genuinely exceeded the 45 s budget (slow cold start).
    Debug it next, one bug at a time. Status: **UNVERIFIED** until the user confirms.
 
+## Phase 5 — SafeAgentContext (2026-09-10)
+
+Local fusion of safe DOM semantics + safe visual OCR into one privacy-guarded structure. Pure
+module `extension/src/privacy/agent-context.js`; no network/server/LLM/actions added.
+
+| Command | Result | Passed | Failed |
+|---|---|---|---|
+| `npm test` | PASS | 71 test entries | 0 |
+| `npm run check` | PASS (JS syntax, manifest, local asset hashes) | all | 0 |
+| `node scripts/smoke-ocr.mjs .browser-test/synthetic.png` | PASS (cold+warm, 5 targets, 1 withheld) | both runs | 0 |
+
+`agent-context.test.mjs` (12 entries) covers: construction/schema/freeze; goal validation
+(type, whitespace, trim, 500-char cap); observation-id handling + missing/invalid rejection;
+safe semantic fields retained with `source:"semantic"`; sensitive values only as `[ROLE]`
+placeholders; safe visual elements retained with bbox/confidence/`source:"visual"`; provenance
+never conflated; graceful no-visual case; redaction legend (present placeholders → descriptions,
+no values); no raw screenshot bytes (image metadata only; a passed `dataUrl` is dropped); byte
+measurement; and malformed-input rejection. `background.test.mjs` additionally asserts the wired
+service worker emits a READY `agentContext` (obs id, `[EMAIL]` placeholder, `Continue` visual
+element, positive `structuredContextBytes`/`sanitizedImageBytes`) and a REVOKED context on the
+OCR-UNSAFE path.
+
+**Security — deliberate contamination (fail closed):** the guard test injects each fake secret
+(`Rahul Sharma`, `rahul@example.com`, `9876543210`, `EMP1024`, `secret123`) via the goal
+(top-level), a field value (nested) AND visual OCR text (nested) — every case returns
+`status:"BLOCKED"` with a generic reason that never echoes the value. This is the test's core
+assertion: if the final gate were removed, these cases would go READY and the test would fail.
+
+**Measured size:** a representative 7-field / 6-visual demo context serializes to **2195 bytes
+(~2.1 KB)** (`structuredContextBytes`); the safe sanitized-image encoded size is reported
+separately (`sanitizedImageBytes`). These are structure-size measurements, not a Chrome run.
+
+### P5-M0 — confirm the SafeAgentContext in real Chrome (REQUIRED, UNVERIFIED)
+
+After P4-M0 (OCR initializes), in the same ANALYZE run check the **Safe agent context** panel:
+Status **READY**, an `obs_…` observation id, safe fields count, visual elements count, sensitive
+hidden = 5, Privacy check **SAFE**, a small structured size (~2 KB). Expand **Preview safe agent
+context** and confirm it shows `[NAME]`/`[EMAIL]`/`[PHONE]`/`[EMPLOYEE_ID]`/`[PASSWORD]` (never
+the real values), `Bengaluru`/`Conference`, and a `Continue` visual element with a bbox. Status:
+**UNVERIFIED** until the user confirms.
+
 ## Next exact task
 
-Verify the import fix via P4-M0 above (user's Chrome reload). Do not mark Chrome OCR PASSED
-until the user confirms. If a new stage error surfaces, debug that one next, then re-verify
-P4-M1–M10. Phase 5 (DOM + visual fusion) has NOT started and must not start until Chrome OCR
-is verified.
+User Chrome-verifies P4-M0 (OCR initializes, no createWorker SyntaxError) and P5-M0
+(SafeAgentContext READY, placeholders, ~2 KB). Do not mark either PASSED until the user confirms.
+Phase 6 (privacy-safe server transport + planner) has NOT started and must not start until
+reviewed and until Chrome verification is done; it must consume the `agentContext` only.

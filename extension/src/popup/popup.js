@@ -23,6 +23,7 @@ function clearPreviews() {
   byId('sanitized-preview').removeAttribute('src');
   byId('sanitized-preview').onload = null;
   byId('semantic-preview').textContent = '';
+  byId('ac-preview').textContent = '';
   const canvas = byId('ocr-overlay');
   canvas.width = 0; canvas.height = 0;
   hide(byId('overlay-figure'));
@@ -36,7 +37,7 @@ analyzeBtn.addEventListener('click', async () => {
   hide(errorEl);
   setStatus('Analyzing locally… OCR may take up to 45 seconds.');
   try {
-    const res = await chrome.runtime.sendMessage({ type: MSG.ANALYZE_PAGE });
+    const res = await chrome.runtime.sendMessage({ type: MSG.ANALYZE_PAGE, goal: byId('goal').value });
     if (!res || !res.ok) throw new Error(res?.error || 'Analysis failed.');
     render(res);
     setStatus('Done');
@@ -68,6 +69,7 @@ function render(res) {
     byId('semantic-preview').textContent = JSON.stringify(res.safeContext.semantic, null, 2);
   }
   renderPerception(res.perception, res.safeContext?.image);
+  renderAgentContext(res);
   previewTimer = setTimeout(clearPreviews, 60_000);
   if (cap.ok) {
     byId('cap-status').textContent = 'Ready';
@@ -108,6 +110,28 @@ function renderPerception(perception, image) {
   };
   preview.onload = draw;
   if (preview.complete && preview.naturalWidth) draw();
+}
+
+function renderAgentContext(res) {
+  const ctx = res.agentContext;
+  byId('ac-status').textContent = res.agentContextStatus || 'Unavailable';
+  if (!ctx) {
+    for (const id of ['ac-obs', 'ac-fields', 'ac-visual', 'ac-hidden', 'ac-size']) byId(id).textContent = '–';
+    // No context => OCR found sensitive text (REVOKED) or the guard blocked it.
+    byId('ac-guard').textContent = res.agentContextStatus === 'REVOKED' ? 'REVOKED' : 'BLOCKED';
+    byId('ac-ready').textContent = 'No';
+    byId('ac-preview').textContent = '';
+    return;
+  }
+  byId('ac-obs').textContent = ctx.observation.id;
+  byId('ac-fields').textContent = ctx.fields.length;
+  byId('ac-visual').textContent = ctx.visualElements.length;
+  byId('ac-hidden').textContent = ctx.privacy.sensitiveFieldCount;
+  byId('ac-guard').textContent = 'SAFE';
+  byId('ac-size').textContent = `${(res.structuredContextBytes / 1024).toFixed(1)} KB`;
+  byId('ac-ready').textContent = 'Yes';
+  // The SAME object future transport would serialize — sanitized by construction, never raw PII.
+  byId('ac-preview').textContent = JSON.stringify(ctx, null, 2);
 }
 
 function renderSensitive(fields, count) {

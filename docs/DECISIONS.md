@@ -347,3 +347,43 @@ exports only `default` with a callable `createWorker` on it and no named `create
 bundle references `self` at evaluation time, so the test shims `globalThis.self` to inspect
 the evaluated exports. LIMIT: this proves the import/export CONTRACT, not full Chrome
 WASM/worker execution — the user still smoke-tests Chrome. Not yet marked PASSED in Chrome.
+
+## D27 — Canonical SafeAgentContext fuses safe DOM + safe visual state (Phase 5)
+
+**Problem:** Phases 2–4 produce two separate safe structures — sanitized semantic fields
+(`sanitizeSemantics`) and sanitized visual OCR items (`sanitizeVisual`) — plus a sanitized
+image behind a handle. Phase 6 transport needs ONE stable, privacy-guarded interface to
+consume, not an ad-hoc concatenation of internal objects, and it must never be able to reach
+raw pixels, raw OCR or raw field values.
+
+**Decision:** add `extension/src/privacy/agent-context.js` exporting `buildSafeAgentContext`,
+`serializeSafeAgentContext` and `validateGoal`. It consumes ONLY already-safe inputs (§9 of
+the Phase 5 brief) and re-copies whitelisted keys (never spreads) so no stray/internal key
+rides along. The schema (schemaVersion 1): `observation {id, capturedAt, viewport, image,
+coordinateSystem}`, `goal`, `privacy {status, sensitiveFieldCount, redactedRegionCount,
+rawPiiIncluded:false}`, `fields[]` (each tagged `source:"semantic"`), `visualElements[]`
+(each tagged `source:"visual"`, keeping the observation-scoped `visual_N` id + pixel bbox +
+confidence), and `redactionScheme` (present placeholders → fixed descriptions, no values).
+
+**Key sub-decisions:**
+- **Image is metadata only.** The context carries `{width,height,redactedRegions}`, never the
+  sanitized `dataUrl`. The sanitized bytes stay behind the existing `redact.js` WeakMap handle
+  so a future network layer obtains only the sanitized representation, deliberately, via that
+  separate path. `buildOutboundPackage` (which does inline the sanitized dataUrl) is retained
+  ONLY as the local preview package + future "obtain sanitized image" path, not the context.
+- **Provenance is never conflated (§12).** DOM-derived fields and pixel-derived visual
+  elements stay in separate arrays with explicit `source` tags; DOM text is never presented as
+  visually recognized.
+- **Final local gate, fail closed.** The builder runs `checkOutbound` (structural, nested,
+  cycle-safe, keys+values) AND scans the exact serialized bytes for any known sensitive value.
+  Either hit ⇒ `{status:"BLOCKED"}` with a GENERIC reason (never echoes the value). Structural
+  malformation throws; contamination fails closed. Serialized byte size is reported for future
+  efficiency evaluation (Phase 9); a representative 7-field/6-visual demo is ~2.2 KB.
+- **Goal is untrusted text (§16):** coerced to string, whitespace-collapsed, trimmed, capped at
+  500 chars, stored only — never executed/interpreted.
+- **`visualRefs` (optional semantic↔visual links, §13) deferred.** It needs cross-coordinate-
+  space (CSS field rects vs screenshot-pixel boxes) matching; the schema stays forward-
+  compatible (add an optional field later) rather than shipping fragile matching now.
+
+**No network/server/LLM/actions** are introduced. Phase 6 transport, when it exists, must
+consume `agentContext` only, and obtain the sanitized image solely through the handle path.

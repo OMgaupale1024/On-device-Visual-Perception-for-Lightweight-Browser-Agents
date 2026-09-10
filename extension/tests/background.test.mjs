@@ -77,6 +77,14 @@ test('worker integration: guarded result, repeat run, changed page and capture f
   assert.deepEqual(filtered.safeContext.visual.items.map((item) => item.text), ['Continue']);
   assert.notEqual(filtered.safeContext.image.dataUrl, raw);
   assert.ok(!JSON.stringify(filtered).includes(known));
+  // Phase 5: the canonical SafeAgentContext is built, guarded, and fuses safe DOM +
+  // safe visual state. Sanitized image is metadata only (no dataUrl); size measured.
+  assert.equal(filtered.agentContextStatus, 'READY');
+  assert.match(filtered.agentContext.observation.id, /^obs_/);
+  assert.equal(filtered.agentContext.observation.image.dataUrl, undefined);
+  assert.deepEqual(filtered.agentContext.visualElements.map((v) => v.text), ['Continue']);
+  assert.ok(filtered.agentContext.fields.some((f) => f.role === 'email' && f.value === '[EMAIL]'));
+  assert.ok(filtered.structuredContextBytes > 0 && filtered.sanitizedImageBytes > 0);
   await new Promise((resolve) => setImmediate(resolve));
   // A known value fragmented across individually retained lines still revokes the
   // candidate package and previews at the final privacy gateway.
@@ -89,6 +97,8 @@ test('worker integration: guarded result, repeat run, changed page and capture f
   assert.equal(blocked.perception.status, 'UNSAFE');
   assert.equal(blocked.privacy.outbound, 'BLOCKED');
   assert.equal(blocked.safeContext, null);
+  assert.equal(blocked.agentContext, null); // OCR found known text: context revoked, fail closed
+  assert.equal(blocked.agentContextStatus, 'REVOKED');
   assert.deepEqual(blocked.localPreview, {});
   assert.ok(!JSON.stringify(blocked).includes(known));
   await new Promise((resolve) => setImmediate(resolve));

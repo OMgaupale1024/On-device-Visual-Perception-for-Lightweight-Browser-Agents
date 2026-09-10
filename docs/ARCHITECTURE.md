@@ -3,10 +3,11 @@
 ## Current scope
 
 SIH26171: privacy-preserving on-device visual perception for lightweight browser agents.
-Phases 1–3 remain the privacy foundation. Phase 4 OCR is implemented; Phase 5 is not started.
-Screenshot capture and deterministic masking do not constitute pixel understanding.
-The Phase 4 section below adds local OCR. No server, remote transport, LLM, planner, actions or Pi.
-Phase 4 adds offscreen permission and minimal local-only CSP changes, detailed below.
+Phases 1–3 remain the privacy foundation. Phase 4 OCR and Phase 5 context fusion are
+implemented. Screenshot capture and deterministic masking do not constitute pixel understanding.
+The Phase 4 section below adds local OCR; the Phase 5 section adds the canonical SafeAgentContext.
+No server, remote transport, LLM, planner, actions or Pi. Phase 4 adds offscreen permission and
+minimal local-only CSP changes, detailed below; Phase 5 adds no permissions and no network.
 
 ## Phase 1–3 analysis transaction (retained foundation)
 
@@ -67,8 +68,9 @@ rejected. Ordinary browser zoom uses measured ratios. DPR is diagnostic only.
 | Safe visual state | post-inference geometry/text filter + guard | Separate guarded candidate |
 | Local original preview | password-masked popup PNG, at most 60 seconds | Never |
 | Source labels/title/signals | local transaction, untrusted | Never copied directly |
-| Sanitized image handle | private redaction WeakMap | Required builder input |
-| Frozen safeContext | guarded semantics + sanitized PNG | Only candidate for future transport |
+| Sanitized image handle | private redaction WeakMap | Required builder input; sole sanitized-image source |
+| Frozen safeContext (local package) | guarded semantics + sanitized PNG dataUrl | Local preview + future sanitized-image source, not the transport shape |
+| Frozen SafeAgentContext (Phase 5) | guarded fusion; image METADATA only, no bytes | The ONLY structure future transport consumes |
 
 `redact.js` owns handle minting and package construction; it exposes no register/cast
 API. Raw data URLs and lookalike objects are rejected. `safeContext` contains semantic,
@@ -82,9 +84,11 @@ passwords. Other sensitive values appear only as pixels in this intentionally lo
 comparison image. Raw field-value strings never go to the popup. Preview sources clear
 on re-analysis, pagehide or 60-second expiry. No screenshots are persisted.
 
-Phase 6 transport must consume only guarded `safeContext`, never the full response
-(which contains localPreview), and preserve the builder and contamination tests.
-New goals/action labels/text must enter sanitization and guard before packaging.
+Phase 6 transport must consume only the guarded Phase 5 `agentContext` (see the Phase 5
+section), never the full response (which contains localPreview and the dataUrl-bearing
+local package), and must preserve the builder, the final gate and the contamination tests.
+The sanitized image is obtainable only through the `redact.js` handle path, never inlined in
+the context. New goals/action labels/text must enter sanitization and guard before packaging.
 The current structural API/CSP prevent an accidental raw-image path; they cannot
 prevent a future developer deliberately adding a bypass or removing safeguards.
 
@@ -249,3 +253,56 @@ The popup displays real safe OCR lines, confidence, boxes and cold/warm timing. 
 overlay draws returned boxes on the sanitized image only. Nothing is transmitted. The
 existing preview expiry/cleanup remains. All P4-M checks remain UNVERIFIED; the automated
 real engine result below is Node/WASM on synthetic pixels, not a Chrome acceptance test.
+
+## Phase 5 — canonical SafeAgentContext
+
+Phase 5 fuses the two already-safe representations into one normalized, privacy-guarded
+structure that a future server may consume. It adds no permissions, no network, no server,
+no LLM and no browser actions. `extension/src/privacy/agent-context.js` is a pure module
+(no DOM, no chrome APIs, no I/O, no logging) that reuses the Phase 3 `guard.js`.
+
+```text
+safe semantic state (sanitizeSemantics) ─┐
+safe visual state   (sanitizeVisual)     ─┤→ buildSafeAgentContext → FINAL LOCAL GATE → SafeAgentContext
+sanitized image METADATA (from handle)   ─┤     (whitelist-copy)      (guard + serialized scan)
+observation id/capturedAt/viewport, goal ─┘
+```
+
+`buildSafeAgentContext({goal, semantic, visualState, image, observation, sensitiveValues})`
+consumes ONLY already-sanitized inputs (never raw screenshot, raw OCR or raw values). It
+re-copies whitelisted keys per field/element rather than spreading, so no stray or internal
+key can ride along. Schema (schemaVersion 1):
+
+```text
+{ schemaVersion, observation:{id:"obs_…", capturedAt, viewport:{w,h},
+    image:{w,h,redactedRegions}, coordinateSystem:"screenshot-pixels"},
+  goal, privacy:{status, sensitiveFieldCount, redactedRegionCount, rawPiiIncluded:false},
+  fields:[{id, role, sensitive, filled, value, source:"semantic"}],
+  visualElements:[{id:"visual_N", text, bbox:{x,y,width,height}, confidence, source:"visual"}],
+  redactionScheme:{ "[NAME]":"…", … } }   // present placeholders → fixed descriptions
+```
+
+- **Provenance.** DOM fields (`source:"semantic"`) and pixel detections (`source:"visual"`)
+  stay in separate arrays; the visual `bbox` and observation-scoped `visual_N` id are kept for
+  future visual grounding (Phase 7). DOM text is never presented as pixel-recognized.
+- **Image is metadata only.** No sanitized `dataUrl` enters the context; the sanitized bytes
+  remain behind the `redact.js` handle. `observation.image` carries dimensions + redacted count.
+- **Observation scoping.** A fresh `obs_<uuid>` id is minted per analysis and `capturedAt`
+  is stamped at capture; `visual_N` ids are valid only within that observation.
+- **Goal** is untrusted text: coerced to string, whitespace-collapsed, trimmed, capped at 500
+  chars, stored only — never executed or interpreted as HTML/JS.
+- **Final local gate, fail closed.** The builder runs `checkOutbound` (recursive keys+values,
+  nested, cycle-safe) AND scans the exact serialized bytes for any known sensitive value.
+  Either hit returns `{status:"BLOCKED"}` with a generic reason (no value echoed). Structural
+  malformation throws; contamination fails closed. A residual OCR leak upstream (perception
+  UNSAFE) revokes the context (status `REVOKED`).
+- **Size.** The serialized UTF-8 byte length (`structuredContextBytes`) is reported for future
+  client/network efficiency evaluation; the safe encoded sanitized-image size is reported
+  separately (`sanitizedImageBytes`). A representative demo context is ~2.2 KB.
+
+The service worker mints the observation id/timestamp, passes the popup's untrusted goal, and
+builds the context in its own try so a builder fault never discards working Phase 1–4 results.
+The popup shows a "Safe agent context" summary and a collapsible preview of the SAME
+`agentContext` object (sanitized by construction) — it is never a hardcoded mock, and it never
+shows raw PII. Nothing is transmitted; there is no server. Chrome acceptance remains a pending
+manual check (see TESTING.md); Phase 5 automated coverage is Node unit + integration tests.

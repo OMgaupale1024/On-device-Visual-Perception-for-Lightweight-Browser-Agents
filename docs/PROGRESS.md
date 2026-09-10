@@ -1,10 +1,12 @@
 # EdgeSight — Progress
 
 CURRENT PHASE:
-Phase 4 code complete. Chrome root cause IDENTIFIED and FIXED in code: ocr.js imported a
-named `createWorker` that the vendored default-export-only Tesseract bundle never provided,
-so Chrome threw a load-time ESM SyntaxError before any OCR ran. Import corrected; awaiting the
-user's Chrome reload to confirm OCR now initializes. NOT yet Chrome-verified. Phase 5 not started.
+Phase 5 COMPLETE IN CODE: local fusion of safe DOM semantics + safe visual OCR into one
+privacy-guarded SafeAgentContext (schemaVersion 1), with a final fail-closed gate over the
+serialized structure and observation-scoped ids. Sensitive fields become [ROLE] placeholders;
+non-sensitive safe values kept; sanitized image is metadata only (bytes stay behind the handle).
+No network/server/LLM/browser actions. Phase 4's Chrome OCR import fix is applied but its Chrome
+run is STILL user-pending — Phase 4 (Chrome) and Phase 5 are both NOT yet Chrome-verified. Phase 6 not started.
 
 STATUS:
 Browser-local OCR/CV perception baseline implemented with Tesseract.js 6.0.1, core 6.1.2,
@@ -37,7 +39,12 @@ COMPLETED:
 - Blank raster replacement and input-file cleanup while preserving a warm OCR model.
 - Known-value guard (including case/spacing variants); unsafe output revokes image package.
 - Local text/details UI and bounding-box overlay; graceful OCR-only failure state.
-- 59/59 automated test entries pass, including Phase 1–3 regressions and 7/7 detection assertions.
+- 71/71 automated test entries pass, including Phase 1–4 regressions and 7/7 detection assertions.
+- Phase 5 SafeAgentContext (D27): privacy/agent-context.js fuses safe semantic + safe visual state
+  into a canonical, guarded, frozen structure; separate DOM/visual provenance; redaction legend;
+  image metadata only. Final gate = recursive guard + serialized-bytes scan, fail closed. Goal is
+  validated untrusted text. Wired into the service worker; popup shows a Phase 5 summary + preview.
+  agent-context.test.mjs (12 entries) covers construction, guard fail-closed, and §25 contamination.
 - Stage-tagged, privacy-safe OCR diagnostics: a single audited sink (perception/diagnostics.js)
   logs only stage + error class/short message to the offscreen and service-worker consoles;
   every other source file stays log-free. New regression asserts the failure stage is surfaced.
@@ -49,9 +56,10 @@ COMPLETED:
   10 safe lines retained including Continue; known demo PII absent.
 
 REMAINING:
-- User Chrome checks P4-M1 through P4-M10 and real browser harness.
-- Phase 5: spatial DOM/visual fusion into a sanitized structured UI state.
-- Phase 6 planner; 7 safe actions; 8 re-observe/verify; 9 metrics; 10 polish.
+- User Chrome checks: P4-M1..M10 (OCR) and P5 (SafeAgentContext panel shows READY, obs id,
+  placeholders, ~2 KB size) in real Chrome. Real browser harness.
+- Phase 6 planner + privacy-safe server transport (consumes agentContext ONLY); 7 safe actions;
+  8 re-observe/verify; 9 metrics; 10 polish.
 
 KNOWN LIMITS:
 English text baseline, not ViT/object detection. Whole-line overlap may withhold nearby
@@ -59,14 +67,15 @@ safe text; simple text rules do not guarantee detection of unknown PII. No scree
 for OCR only. Chrome behavior/latency not yet measured; browser automation reported no surfaces.
 
 NEXT EXACT TASK:
-Verify the import fix in real Chrome. User reloads the extension (chrome://extensions →
-EdgeSight → Reload), runs one ANALYZE on the demo, and confirms the offscreen/service-worker
-consoles no longer show the `does not provide an export named 'createWorker'` SyntaxError and
-that LOCAL VISUAL PERCEPTION now initializes. If a NEW `[EdgeSight OCR] …` stage error appears
-(e.g. OCR_CORE_LOAD / OCR_LANGUAGE_LOAD / OCR_RECOGNIZE / OCR_TIMEOUT), that is a separate
-second bug — report it and debug it next. Do NOT mark Chrome OCR PASSED until the user confirms.
-Phase 5 (DOM + visual fusion) remains NOT STARTED — do not begin it until Chrome OCR is verified.
+Phase 6 — privacy-safe server transport + planner. DO NOT START until reviewed and until the
+user has Chrome-verified Phases 4–5. When it begins, Phase 6 must consume the Phase 5
+`agentContext` ONLY, obtain the sanitized image solely through the redact.js handle path, and
+preserve the final gate + contamination tests. No LLM/VLM, API keys, browser actions, metrics
+dashboard or Pi in Phase 6's first step. First, the user reloads the extension and confirms in
+Chrome: OCR initializes (no createWorker SyntaxError) AND the Safe agent context panel shows
+Status READY, an obs_ id, [ROLE] placeholders, and a small structured size.
 
 LAST UPDATED:
-2026-09-10 — Phase 4 Chrome OCR root cause found + fixed (D26: vendored bundle is default-export
-only; ocr.js now imports it correctly). Awaiting user's Chrome reload to verify.
+2026-09-10 — Phase 5 complete in code (D27: canonical SafeAgentContext = safe DOM + safe visual
+fusion, final fail-closed gate, image metadata only). 71/71 tests pass. Chrome verification of
+Phases 4–5 still user-pending. Phase 6 NOT started.
