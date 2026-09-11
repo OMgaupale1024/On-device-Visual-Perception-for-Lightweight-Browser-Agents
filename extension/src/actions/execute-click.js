@@ -24,11 +24,13 @@ export function createTicket(fields) {
 }
 
 // Build a ticket only for a validated CLICK whose observation + target match the
-// exact local context. STOP, mismatched observation, or unknown target -> no ticket.
+// exact local context and approved candidates. STOP, mismatched observation, or an
+// unapproved target -> no ticket.
 // `local` carries browser-only execution metadata that never enters SafeAgentContext.
 export function ticketForPlan(plan, context, local, now = Date.now()) {
   if (!plan || plan.action !== 'CLICK') return null;
   if (!context || !context.observation || plan.observationId !== context.observation.id) return null;
+  if (!Array.isArray(context.actionCandidates) || !context.actionCandidates.includes(plan.target)) return null;
   const target = (context.visualElements || []).find((v) => v.id === plan.target);
   if (!target) return null;
   return createTicket({

@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { toViewportPoint, overlapsSensitive, actionableVisualIds } from '../src/actions/geometry.js';
 import { createTicket, ticketForPlan, executeTicket, clickInPage, EXECUTION_TTL_MS }
   from '../src/actions/execute-click.js';
+import { mapRect } from '../src/privacy/geometry.js';
 
 // ---------- geometry: screenshot pixels -> CSS viewport point ----------
 
@@ -66,6 +67,7 @@ test('overlapsSensitive: substantial overlap true, disjoint false, zero-size uns
 const CONTEXT = {
   observation: { id: 'obs_1', image: { width: 200, height: 100 }, viewport: { width: 200, height: 100 } },
   visualElements: [{ id: 'visual_3', text: 'Continue', bbox: { x: 10, y: 10, width: 20, height: 10 } }],
+  actionCandidates: ['visual_3'],
 };
 const LOCAL = { tabId: 5, windowId: 2, documentId: 'doc1', url: 'http://x/', sensitiveRegions: [] };
 
@@ -91,6 +93,68 @@ test('actionableVisualIds: candidates are real pixel ids, never fabricated; bad 
   assert.deepEqual(actionableVisualIds(undefined, undefined), []);
 });
 
+test('actionableVisualIds: small OCR text fully inside a big button grounds by containment', () => {
+  const control = { x: 0, y: 0, width: 400, height: 60 };
+  const small = { id: 'visual_7', text: 'Continue', bbox: { x: 160, y: 20, width: 80, height: 20 } };
+  assert.deepEqual(actionableVisualIds([small], [control]), ['visual_7']);
+});
+
+test('actionableVisualIds: mostly contained OCR remains actionable', () => {
+  const control = { x: 100, y: 100, width: 100, height: 40 };
+  const item = { id: 'visual_8', bbox: { x: 80, y: 110, width: 100, height: 20 } };
+  assert.deepEqual(actionableVisualIds([item], [control]), ['visual_8']);
+});
+
+test('actionableVisualIds: an OCR line wider than the control still grounds by centre', () => {
+  // Real case: an OCR line box can be larger than the mapped control (glyph slack,
+  // rounding, merged text), so <50% of the OCR area is contained — but its CENTRE is
+  // on the button. Requiring equal sizes / IoU would drop the only real target.
+  const control = { x: 150, y: 500, width: 100, height: 40 };
+  const wideOcr = { id: 'visual_5', text: 'Continue', bbox: { x: 100, y: 490, width: 200, height: 60 } };
+  const contained = ((Math.min(300, 250) - Math.max(100, 150)) * (Math.min(550, 540) - Math.max(490, 500))) / (200 * 60);
+  assert.ok(contained < 0.5, 'precondition: area-containment alone is below threshold');
+  assert.deepEqual(actionableVisualIds([wideOcr], [control]), ['visual_5']);
+});
+
+test('actionableVisualIds: text near but outside a control is not grounded', () => {
+  const control = { x: 100, y: 500, width: 200, height: 40 };
+  const near = { id: 'visual_9', text: 'Helper text', bbox: { x: 100, y: 550, width: 120, height: 18 } };
+  assert.deepEqual(actionableVisualIds([near], [control]), []);
+  // A small overlap is insufficient when the centre is still outside.
+  const sliver = { id: 'visual_10', bbox: { x: 100, y: 535, width: 120, height: 18 } };
+  assert.deepEqual(actionableVisualIds([sliver], [control]), []);
+});
+
+test('actionableVisualIds: zero overlap never grounds even with a zero area threshold', () => {
+  const control = { x: 0, y: 0, width: 60, height: 40 };
+  const item = { id: 'visual_4', bbox: { x: 61, y: 0, width: 20, height: 20 } };
+  assert.deepEqual(actionableVisualIds([item], [control], 0), []);
+});
+
+test('actionableVisualIds: adjacent controls do not cross-match', () => {
+  const left = { x: 0, y: 0, width: 60, height: 40 };
+  const right = { x: 200, y: 0, width: 60, height: 40 };
+  const inGap = { id: 'visual_2', text: 'x', bbox: { x: 120, y: 10, width: 20, height: 20 } };
+  const onRight = { id: 'visual_3', text: 'Continue', bbox: { x: 210, y: 10, width: 40, height: 20 } };
+  assert.deepEqual(actionableVisualIds([inGap, onRight], [left, right]), ['visual_3']);
+  assert.deepEqual(actionableVisualIds([onRight], [left]), []);
+  assert.deepEqual(actionableVisualIds([onRight], [right]), ['visual_3']);
+  // A merged line spans the gap and clips both controls, but belongs to neither.
+  const acrossGap = { id: 'visual_4', bbox: { x: 40, y: 10, width: 180, height: 20 } };
+  assert.deepEqual(actionableVisualIds([acrossGap], [left, right]), []);
+});
+
+test('actionableVisualIds + mapRect: a CSS button and DPR-scaled OCR fuse (integration)', () => {
+  // The real path no synthetic-only test exercised: the DOM rect is CSS px, OCR is
+  // screenshot px at devicePixelRatio 2. mapRect brings the control into screenshot px,
+  // then the centre of the "Continue" OCR line lands on the mapped button.
+  const viewport = { width: 400, height: 800 };     // CSS px (window.inner*)
+  const screenshot = { width: 800, height: 1600 };  // captureVisibleTab @ DPR 2
+  const control = mapRect({ x: 20, y: 300, width: 360, height: 44 }, viewport, screenshot);
+  const ocr = { id: 'visual_11', text: 'Continue', bbox: { x: 320, y: 610, width: 160, height: 40 } };
+  assert.deepEqual(actionableVisualIds([ocr], [control]), ['visual_11']);
+});
+
 test('valid CLICK plan produces a bound ticket', () => {
   const t = ticketForPlan({ action: 'CLICK', observationId: 'obs_1', target: 'visual_3' }, CONTEXT, LOCAL, 1000);
   assert.equal(t.observationId, 'obs_1');
@@ -99,6 +163,13 @@ test('valid CLICK plan produces a bound ticket', () => {
   assert.deepEqual(t.screenshot, { width: 200, height: 100 });
   assert.equal(t.tabId, 5);
   assert.equal(t.consumed, false);
+});
+
+test('a visible target outside current actionCandidates produces no ticket', () => {
+  for (const actionCandidates of [[], undefined, ['visual_99']]) {
+    const context = { ...CONTEXT, actionCandidates };
+    assert.ok(ticketForPlan({ action: 'CLICK', observationId: 'obs_1', target: 'visual_3' }, context, LOCAL) === null);
+  }
 });
 
 test('STOP produces no ticket', () => {

@@ -21,6 +21,7 @@ export function validatePlannerResponse(value, context) {
   if (value.action === 'STOP') {
     if (value.target !== null) throw new Error('Plan rejected.');
   } else if (typeof value.target !== 'string' || !/^visual_[1-9]\d*$/.test(value.target) ||
+      !Array.isArray(context.actionCandidates) || !context.actionCandidates.includes(value.target) ||
       context.visualElements.filter((v) => v.id === value.target).length !== 1) {
     throw new Error('Plan rejected.');
   }

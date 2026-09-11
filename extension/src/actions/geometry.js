@@ -31,20 +31,26 @@ export function toViewportPoint(bbox, screenshot, viewport) {
 
 // Which pixel-OCR elements spatially sit on a clickable control, so the planner may
 // only CLICK a genuine actionable target (e.g. "Continue") and never a label like
-// "Password". Both boxes are screenshot pixels; the OCR text box must be mostly
-// inside a control region. Returns the subset of visual ids — real pixel-derived
-// ids, never fabricated. Geometry stays local; only these safe ids cross the wire.
+// "Password". Both boxes are screenshot pixels. Control padding and OCR line slack
+// can produce very different box sizes. Match when the OCR centre is inside the
+// control or at least minOverlap of the OCR area overlaps it (default 50%). Never
+// expand control bounds to admit nearby text. Inputs must already be privacy-safe;
+// returns only their original visual ids. Geometry stays local.
 export function actionableVisualIds(items, controlRegions, minOverlap = 0.5) {
   const ids = [];
   for (const item of items || []) {
     const b = item?.bbox;
     if (!positiveSize(b) || !finite(b.x) || !finite(b.y)) continue;
     const area = b.width * b.height;
+    const cx = b.x + b.width / 2;
+    const cy = b.y + b.height / 2;
     for (const r of controlRegions || []) {
       if (!positiveSize(r) || !finite(r.x) || !finite(r.y)) continue;
+      const centreInside = cx >= r.x && cx <= r.x + r.width && cy >= r.y && cy <= r.y + r.height;
       const iw = Math.min(b.x + b.width, r.x + r.width) - Math.max(b.x, r.x);
       const ih = Math.min(b.y + b.height, r.y + r.height) - Math.max(b.y, r.y);
-      if (iw > 0 && ih > 0 && (iw * ih) / area >= minOverlap) { ids.push(item.id); break; }
+      const contained = iw > 0 && ih > 0 ? (iw * ih) / area : 0;
+      if (centreInside || (iw > 0 && ih > 0 && contained >= minOverlap)) { ids.push(item.id); break; }
     }
   }
   return ids;

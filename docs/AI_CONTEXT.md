@@ -16,8 +16,8 @@ sanitized structured state crosses to a localhost FastAPI service, which plans e
 **deterministically** (default) or via one **NVIDIA NIM (Nemotron)** call and returns
 exactly ONE structured action. The browser re-validates the action and performs a single
 guarded local click, then re-observes fresh pixels to verify the outcome locally. The
-product is now evolving from this single-step demo into a full autonomous
-**OBSERVE → PLAN → ACT → OBSERVE** loop.
+autonomous **OBSERVE → PLAN → ACT → OBSERVE** loop remains planned; the current
+acceptance gate is one live AI-generated CLICK against an approved candidate.
 
 ## Current architecture
 ```
@@ -34,7 +34,7 @@ LOCAL PRIVACY  privacy/* (detect → redact → guard)               [IMPLEMENTE
 SAFE STATE  privacy/agent-context.js (frozen SafeAgentContext)   [IMPLEMENTED]
       ↓
 PLANNER  localhost FastAPI → deterministic OR NVIDIA NIM         [IMPLEMENTED code;
-                                                                  live AI run PENDING]
+                                                                  live AI mode VERIFIED]
       ↓
 VALIDATED ACTION  CLICK visual_N | STOP                          [IMPLEMENTED]
       ↓  (expanded NAVIGATE/TYPE/SCROLL/… vocabulary = PLANNED)
@@ -55,26 +55,25 @@ RE-OBSERVATION  verification/verify-*.js (fresh pixels, local)   [IMPLEMENTED]
 - `actionCandidates` (Phase 10 groundwork): local geometry maps pixel-OCR text onto
   clickable DOM control regions so the planner may only `CLICK` a genuine target
   (e.g. "Continue"), never a label like "Password". Only safe visual ids cross the wire.
+  Fusion accepts OCR centre inside a control OR at least 50% OCR-area containment,
+  after existing `mapRect` scaling and privacy filtering. Client response validation
+  and ticket creation also require current candidate membership. Wire shape: string IDs.
 - Guarded single-use CLICK execution (bbox → viewport → elementFromPoint → allowlist).
 - Fresh same-tab re-observation + local exact-phrase visual verification.
 - Phase 9 controlled benchmarks (5 synthetic screens) + current-run timing panel.
 
 ## Current blocking issues
-- **No manual Chrome acceptance has ever been observed** for phases 6B/7/8/9 (see
-  Manual verification). Automated unit doubles are not acceptance.
-- **crop-OCR refinement is ineffective in live Chrome** (committed, Node-green, but a
-  styled "Continue" button still misread, e.g. `visual_17='Looe'@0.39`). Rework candidate.
-- No `NVIDIA_API_KEY` in the working shell → the **live** NVIDIA round-trip is still
-  unverified (architecture, parser, target validation and fail-closed behaviour are all
-  verified offline; a real key is the only remaining gap). On the first live run, confirm
-  `NVIDIA_MODEL` is a real NIM model id — a 404 now shows in the upstream-status header.
+- **Live candidate acceptance pending:** user confirmed AI mode at `b5bc9c5`, but
+  `actionCandidates=[]` despite OCR controls. Generic fusion fix is automated-test
+  verified; the user must reload Chrome and confirm a current button candidate + AI CLICK.
+- Styled control OCR/refinement can still misread; this fix does not prove live OCR accuracy.
+- Manual Phase 7 execution, Phase 8 visual verification and Phase 9 resource/timing
+  acceptance remain pending. Automated unit doubles are not acceptance.
 
 ## Current task
-Phase 11A (verify the real NVIDIA Nemotron planner path) is **verified offline** — the
-architecture, parser, target validation and fail-closed behaviour are proven by 54 server
-tests + a live deterministic smoke + a live AI-mode 503. The **live NVIDIA round-trip is
-still PENDING a real key** (see below). Next: run the live NVIDIA check, then Phase 11B
-(the autonomous OBSERVE → PLAN → ACT loop). Read `HANDOFF.md` before writing code.
+Generic action-candidate fusion fix completed from Claude's interrupted working tree.
+Stop for the user's manual Chrome ANALYZE / PLAN retest, **without Execute**. Do not
+debug NVIDIA again or start the autonomous loop. Read `HANDOFF.md` for exact expectations.
 
 ## Critical architecture decisions (do not break)
 - **One privacy boundary out of the browser:** only the frozen builder-approved
@@ -120,7 +119,8 @@ still PENDING a real key** (see below). Next: run the live NVIDIA check, then Ph
 
 ## Commands
 ```bash
-npm test            # extension suite  (node --test) — 238 entries
+npm test            # extension suite (node --test) — 247 entries
+npm run build       # package pinned local OCR assets
 npm run check       # syntax / manifest / packaged-asset integrity
 npm run benchmark   # Phase 9 controlled benchmark (needs server venv)
 # server tests (from server/):
@@ -131,9 +131,8 @@ npm run benchmark   # Phase 9 controlled benchmark (needs server venv)
 Full Windows setup (venv, extension origin, AI mode) is in `README.md` / `server/README.md`.
 
 ## Git state
-- Branch `main`, synchronized with `origin/main`. Cleanup baseline was `3184bc3`.
-- `c3c494f` = Phase 10 WIP; `3184bc3` = repo cleanup.
-- The current HEAD is the Phase 11A commit that contains this file — resolve with
+- Branch `main`; recovered from `b5bc9c5` with three uncommitted Claude files preserved.
+- The current HEAD is the candidate-grounding fix containing this file — resolve with
   `git log -1 --format=%H` (a commit cannot embed its own hash).
 
 ## Manual verification
@@ -144,8 +143,12 @@ Full Windows setup (venv, extension origin, AI mode) is in `README.md` / `server
 - **VERIFIED (offline, Phase 11A):** AI-mode planner path — deterministic live smoke PASS;
   AI mode with no key returns 503 `X-EdgeSight-Planner: ai` (fails closed, not deterministic);
   mock-transport tests prove Nemotron's decision is used and hallucinated / non-actionable
-  targets are rejected. The live NVIDIA HTTP round-trip itself is NOT yet verified (no key).
-- **PENDING (never observed):** live NVIDIA AI-mode run (real key); Phase 7 positive click +
+  targets are rejected.
+- **VERIFIED (user, Chrome, after `b5bc9c5`):** `/plan` 200,
+  `X-EdgeSight-Planner: ai`, sensitive/redacted counts 5/5, `rawPiiIncluded=false`.
+  Nemotron returned STOP with null target while `actionCandidates=[]`; controls were
+  present in OCR. NVIDIA is confirmed; candidate generation is the acceptance blocker.
+- **PENDING (never observed):** AI CLICK against a current approved candidate; Phase 7 positive click +
   stale/wrong-page negative; Phase 8 positive/negative visual verification; Phase 9 live
   Chrome timings + CPU/GPU/RAM. Prior Computer-Use attempts stopped on a URL-policy block.
 
@@ -157,13 +160,14 @@ Tab/capture checks are not atomic. Worker restart loses pending tickets/results.
 automation, no additional provider, no Raspberry Pi.
 
 ## Exact next step
-Begin roadmap #2 — a minimal autonomous controller loop (OBSERVE → PLAN → ACT →
-re-OBSERVE → PLAN…) reusing the existing single-step pieces and `actionCandidates`, keeping
-every privacy invariant and the server action contract intact. First confirm the NVIDIA
-planner path end-to-end (roadmap #1).
+User: reload EdgeSight at `chrome://extensions`, reload Employee Travel Request, then
+ANALYZE / PLAN without Execute. Confirm `actionCandidates` contains the current safe
+visual ID for the button, `/plan` 200, planner header `ai`, and CLICK targeting that ID.
+Record the live result before deciding the next controlled execution verification.
+No automatic Execute, autonomous loop, or expanded actions in this task.
 
 ## Remaining roadmap (not sacred — adjust to repo reality)
-1. Verify the real NVIDIA Nemotron planner path end-to-end (offline done; live run pending a key).
+1. Verify one live AI CLICK against an approved candidate (AI mode itself is confirmed).
 2. Autonomous controller loop: OBSERVE → PLAN → ACT → OBSERVE.
 3. Expanded safe actions: NAVIGATE, CLICK, TYPE, TYPE_LOCAL_REF, PRESS_KEY, SCROLL, WAIT, STOP.
 4. Browser navigation / new-tab control.

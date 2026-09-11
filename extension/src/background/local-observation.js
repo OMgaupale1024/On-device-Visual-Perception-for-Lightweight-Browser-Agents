@@ -9,6 +9,7 @@ import { perceiveLocalCapture } from '../perception/pipeline.js';
 import { sensitiveRegions, mapRect } from '../privacy/geometry.js';
 import { actionableVisualIds } from '../actions/geometry.js';
 import { buildSafeAgentContext } from '../privacy/agent-context.js';
+import { logStage } from '../perception/diagnostics.js';
 
 // Bound local API work; abort prevents subsequent stages and late acceptance.
 export async function bounded(work, signal, timeoutMs = 5_000) {
@@ -119,10 +120,14 @@ export async function observeLocal(tab, goal, { signal } = {}) {
     // Phase 5: fuse safe semantic + safe visual state into the canonical, guarded
     // SafeAgentContext. Built defensively so a builder fault never discards working
     // Phase 1-4 results; a privacy failure fails closed (no context, status marked).
-    // actionCandidates: the visual ids that sit on a clickable control (post-refinement
-    // items, so the refined Continue label is grounded the same way). Logic unchanged.
+    // Ground only privacy-safe, post-refinement visual items on mapped controls.
     const actionCandidates = (perception.privacy === 'SAFE' && perception.value?.items)
       ? actionableVisualIds(perception.value.items, controlRegions) : [];
+    // Safe fusion telemetry (counts only, no text/PII): distinguishes "no clickable
+    // control detected / in the captured viewport" (controls=0) from "control detected
+    // but no OCR element grounded on it" (controls>0, candidates=0) on a live run.
+    logStage('service-worker', 'ACTION_FUSION',
+      `buttons=${obs.buttonRects?.length ?? 0} controls=${controlRegions.length} items=${perception.value?.items?.length ?? 0} candidates=${actionCandidates.length}`);
     let agent = { status: 'REVOKED' };
     if (perception.status !== 'UNSAFE') {
       try {

@@ -92,6 +92,17 @@ test('STOP with null target accepted', async () => {
   assert.equal((await requestPlan(approvedContext(), { fetchImpl: async () => reply(plan) })).plan.action, 'STOP');
 });
 
+test('CLICK on an existing visual id outside current actionCandidates is rejected', async () => {
+  const input = plannerInput();
+  input.visualState.items.push({ ...input.visualState.items[0], id: 'visual_13' });
+  for (const actionCandidates of [[], undefined, ['visual_13']]) {
+    const { context } = buildSafeAgentContext({ ...input, actionCandidates });
+    const result = await requestPlan(context, { fetchImpl: async () => reply() });
+    assert.equal(result.status, 'REJECTED');
+    assert.equal(result.plan, undefined);
+  }
+});
+
 test('network exception is generic and local context remains available', async () => {
   const ctx = approvedContext();
   const result = await requestPlan(ctx, { fetchImpl: async () => { throw new Error(SECRETS[0]); } });

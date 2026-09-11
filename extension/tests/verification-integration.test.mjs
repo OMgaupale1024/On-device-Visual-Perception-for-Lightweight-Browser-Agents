@@ -51,6 +51,7 @@ function harness(t) {
       if (func.name === 'observePage') return [{ documentId, result: {
         counts: { inputs: 5, labels: 5, buttons: 1 }, viewport: { width: 800, height: 500 },
         devicePixelRatio: 1, visualViewport: { scale: 1, x: 0, y: 0 },
+        buttonRects: state.post ? [] : [{ rect: { x: 0, y: 190, width: 400, height: 40 } }],
         // Even the post-action fixture contains private inputs: every stage must rerun.
         fieldSignals: ['name', 'email', 'tel', 'employee_id', 'password'].map((role, i) => ({
           id: `field_${i + 1}`, type: role, name: role, label: canaries[i],
@@ -71,6 +72,7 @@ function harness(t) {
   globalThis.fetch = async (_url, opts) => {
     state.network++;
     const ctx = JSON.parse(opts.body);
+    assert.deepEqual(ctx.actionCandidates, [ctx.visualElements[0].id]);
     return { ok: true, json: async () => ({ schemaVersion: 1, observationId: ctx.observation.id,
       action: 'CLICK', target: ctx.visualElements[0].id, reason: 'Deterministic test suggestion.' }) };
   };
@@ -96,6 +98,11 @@ test('real shared pipeline recaptures new pixels, OCR, dimensions, IDs and priva
   assert.ok(h.masks > oldMasks); assert.equal(result.privacy, 'SAFE');
   assert.deepEqual(result.evidence.visualIds, ['visual_1']); // regenerated; scoped by NEW observation
   assert.equal(h.network, 0); assert.equal(h.clicks, 0);
+  const fusionLogs = h.logs.filter((line) => line.includes('ACTION_FUSION'));
+  assert.equal(fusionLogs.length, 2);
+  for (const line of fusionLogs) {
+    assert.match(line, /^\[EdgeSight OCR\] service-worker ACTION_FUSION buttons=\d+ controls=\d+ items=\d+ candidates=\d+$/);
+  }
   for (const value of canaries) {
     assert.ok(!JSON.stringify(result).includes(value)); assert.ok(!h.logs.join(' ').includes(value));
   }

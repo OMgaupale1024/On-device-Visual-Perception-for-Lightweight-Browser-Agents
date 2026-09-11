@@ -7,13 +7,15 @@ test('worker integration: guarded result, repeat run, changed page and capture f
   let listener, mode = 'success', observations = 0, captures = 0;
   const raw = 'data:image/png;base64,AA==';
   const known = 'synthetic-sensitive@example.invalid';
-  let networkCalls = 0, serverMode = 'success';
+  let networkCalls = 0, serverMode = 'success', sentContext;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_url, options) => {
     networkCalls++;
     const context = JSON.parse(options.body);
+    sentContext = context;
     assert.ok(!options.body.includes(known)); assert.ok(!options.body.includes(raw));
     assert.ok(!/localPreview|dataUrl/.test(options.body));
+    assert.ok(context.actionCandidates.every((id) => context.visualElements.some((item) => item.id === id)));
     if (serverMode === 'offline') throw new Error('offline');
     return { ok: true, json: async () => ({ schemaVersion: 1, observationId: context.observation.id,
       action: context.visualElements.length ? 'CLICK' : 'STOP',
@@ -32,6 +34,12 @@ test('worker integration: guarded result, repeat run, changed page and capture f
           return [{ documentId: 'document-1', result: {
             counts: { inputs: 1, buttons: 1, labels: 1 }, viewport: { width: 200, height: 100 },
             devicePixelRatio: 1, visualViewport: { scale: 1, x: 0, y: 0 },
+            buttonRects: [
+              // Even if a sensitive field is also exposed as a control, its OCR is withheld.
+              { rect: { x: 10, y: 10, width: 50, height: 20 } },
+              // OCR is wider than this control; its centre still grounds the real target.
+              { rect: { x: 20, y: 64, width: 20, height: 12 } },
+            ],
             fieldSignals: [{ id: 'field_1', type: 'email', label: known, rect: {
               x: mode === 'changed-page' ? observations : 10, y: 10, width: 50, height: 20,
             } }],
@@ -79,6 +87,7 @@ test('worker integration: guarded result, repeat run, changed page and capture f
     return { ok: true, result: { data: { text: known, blocks: [{ paragraphs: [{ lines: [
       { text: known, confidence: 90, bbox: { x0: 10, y0: 10, x1: 60, y1: 30 } },
       { text: 'Continue', confidence: 95, bbox: { x0: 5, y0: 60, x1: 60, y1: 80 } },
+      { text: 'Status', confidence: 95, bbox: { x0: 120, y0: 45, x1: 170, y1: 55 } },
     ] }] }] }, width: 200, height: 100,
     timing: { cold: true, initializationMs: 10, inferenceMs: 10, totalMs: 20 } } };
   };
@@ -87,7 +96,7 @@ test('worker integration: guarded result, repeat run, changed page and capture f
   assert.equal(filtered.perception.status, 'Ready');
   assert.equal(filtered.privacy.outbound, 'SAFE');
   assert.equal(filtered.perception.value.withheldItems, 1);
-  assert.deepEqual(filtered.safeContext.visual.items.map((item) => item.text), ['Continue']);
+  assert.deepEqual(filtered.safeContext.visual.items.map((item) => item.text), ['Continue', 'Status']);
   assert.notEqual(filtered.safeContext.image.dataUrl, raw);
   assert.ok(!JSON.stringify(filtered).includes(known));
   // Phase 5: the canonical SafeAgentContext is built, guarded, and fuses safe DOM +
@@ -95,8 +104,13 @@ test('worker integration: guarded result, repeat run, changed page and capture f
   assert.equal(filtered.agentContextStatus, 'READY');
   assert.match(filtered.agentContext.observation.id, /^obs_/);
   assert.equal(filtered.agentContext.observation.image.dataUrl, undefined);
-  assert.deepEqual(filtered.agentContext.visualElements.map((v) => v.text), ['Continue']);
+  assert.deepEqual(filtered.agentContext.visualElements.map((v) => v.text), ['Continue', 'Status']);
   assert.ok(filtered.agentContext.fields.some((f) => f.role === 'email' && f.value === '[EMAIL]'));
+  assert.deepEqual(filtered.agentContext.actionCandidates, ['visual_2']);
+  assert.ok(!filtered.agentContext.actionCandidates.includes('visual_1'));
+  assert.deepEqual(sentContext, filtered.agentContext);
+  assert.deepEqual(sentContext.visualElements.map((item) => item.id), ['visual_2', 'visual_3']);
+  assert.deepEqual(sentContext.actionCandidates, ['visual_2']);
   assert.ok(filtered.structuredContextBytes > 0 && filtered.sanitizedImageBytes > 0);
   assert.equal(filtered.planner.status, 'READY');
   assert.equal(filtered.planner.plan.observationId, filtered.agentContext.observation.id);
