@@ -78,7 +78,7 @@ function safeVisualElement(item) {
 // Build the canonical SafeAgentContext from already-safe inputs. Structural problems
 // throw (programmer error); a privacy-contamination failure returns {status:'BLOCKED'}
 // (fail closed, generic reason — never echoes the offending value).
-export function buildSafeAgentContext({ goal, semantic, visualState, image, observation, sensitiveValues }) {
+export function buildSafeAgentContext({ goal, semantic, visualState, actionCandidates = [], image, observation, sensitiveValues }) {
   if (!observation || typeof observation.id !== 'string' || !/^obs_[\w-]+$/.test(observation.id) ||
       typeof observation.capturedAt !== 'string' || !observation.viewport ||
       !Number.isFinite(observation.viewport.width) || !Number.isFinite(observation.viewport.height)) {
@@ -98,6 +98,13 @@ export function buildSafeAgentContext({ goal, semantic, visualState, image, obse
   // unavailable/blocked; semantic context is still emitted in that case.
   const visualElements = (visualState && Array.isArray(visualState.items))
     ? visualState.items.map(safeVisualElement) : [];
+
+  // actionCandidates is the subset of visual ids that locally correspond to clickable
+  // controls (derived from geometry on-device). Keep only real, deduped visual ids so
+  // the planner can CLICK a genuine actionable target and nothing else.
+  const visualIds = new Set(visualElements.map((v) => v.id));
+  const safeActionCandidates = (Array.isArray(actionCandidates) ? actionCandidates : [])
+    .filter((id, i, a) => typeof id === 'string' && visualIds.has(id) && a.indexOf(id) === i);
 
   // Legend contains ONLY placeholders actually present, drawn from the fixed legend.
   const redactionScheme = {};
@@ -123,6 +130,7 @@ export function buildSafeAgentContext({ goal, semantic, visualState, image, obse
     },
     fields,
     visualElements,
+    actionCandidates: safeActionCandidates,
     redactionScheme,
   };
 

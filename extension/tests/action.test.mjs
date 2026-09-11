@@ -2,7 +2,7 @@
 // policy uses mocked chrome deps, and clickInPage runs against a tiny DOM stub.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { toViewportPoint, overlapsSensitive } from '../src/actions/geometry.js';
+import { toViewportPoint, overlapsSensitive, actionableVisualIds } from '../src/actions/geometry.js';
 import { createTicket, ticketForPlan, executeTicket, clickInPage, EXECUTION_TTL_MS }
   from '../src/actions/execute-click.js';
 
@@ -68,6 +68,28 @@ const CONTEXT = {
   visualElements: [{ id: 'visual_3', text: 'Continue', bbox: { x: 10, y: 10, width: 20, height: 10 } }],
 };
 const LOCAL = { tabId: 5, windowId: 2, documentId: 'doc1', url: 'http://x/', sensitiveRegions: [] };
+
+// ---------- actionable visual candidates (local visual grounding) ----------
+
+test('actionableVisualIds: only OCR elements on a clickable control qualify', () => {
+  // A "Continue" OCR line sits inside the submit button; "Password"/"Email" labels do not.
+  const buttonRegion = { x: 10, y: 200, width: 120, height: 40 };
+  const items = [
+    { id: 'visual_12', text: 'Continue', bbox: { x: 20, y: 208, width: 90, height: 24 } },
+    { id: 'visual_20', text: 'Password', bbox: { x: 10, y: 120, width: 90, height: 20 } },
+    { id: 'visual_21', text: 'Email', bbox: { x: 10, y: 60, width: 70, height: 20 } },
+  ];
+  assert.deepEqual(actionableVisualIds(items, [buttonRegion]), ['visual_12']);
+});
+
+test('actionableVisualIds: candidates are real pixel ids, never fabricated; bad input ignored', () => {
+  // No control regions → no candidates (cannot invent a clickable target from DOM text).
+  assert.deepEqual(actionableVisualIds([{ id: 'visual_1', bbox: { x: 0, y: 0, width: 5, height: 5 } }], []), []);
+  // Degenerate/missing geometry is skipped, never thrown on.
+  assert.deepEqual(actionableVisualIds([{ id: 'visual_1', bbox: { x: 0, y: 0, width: 0, height: 5 } }],
+    [{ x: 0, y: 0, width: 10, height: 10 }]), []);
+  assert.deepEqual(actionableVisualIds(undefined, undefined), []);
+});
 
 test('valid CLICK plan produces a bound ticket', () => {
   const t = ticketForPlan({ action: 'CLICK', observationId: 'obs_1', target: 'visual_3' }, CONTEXT, LOCAL, 1000);

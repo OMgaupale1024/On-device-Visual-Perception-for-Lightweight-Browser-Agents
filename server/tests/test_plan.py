@@ -145,7 +145,7 @@ class PlannerTests(unittest.TestCase):
             self.context[key].pop()
 
     def test_stop_without_continue(self):
-        self.context["visualElements"] = []
+        self.context["visualElements"] = []; self.context["actionCandidates"] = []
         response = self.post().json()
         self.assertEqual(response["action"], "STOP")
         self.assertIsNone(response["target"])
@@ -177,6 +177,7 @@ class PlannerTests(unittest.TestCase):
     def test_target_always_supplied_and_observation_echoed(self):
         for i in range(1, 15):
             self.context["visualElements"][0]["id"] = f"visual_{i}"
+            self.context["actionCandidates"] = [f"visual_{i}"]
             self.context["observation"]["id"] = f"obs_case-{i}"
             plan = self.post().json()
             self.assertEqual(plan["target"], f"visual_{i}")

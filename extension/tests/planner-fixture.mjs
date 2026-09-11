@@ -10,6 +10,7 @@ export function plannerInput() {
     })) },
     visualState: { items: [{ id: 'visual_12', text: 'Continue',
       bbox: { x: 10, y: 200, width: 100, height: 30 }, confidence: 0.95 }] },
+    actionCandidates: ['visual_12'],
     image: { width: 800, height: 600, redactedRegions: 5 },
     observation: { id: 'obs_demo-abc', capturedAt: '2026-09-10T00:00:00.000Z', viewport: { width: 800, height: 600 } },
     sensitiveValues: SECRETS,

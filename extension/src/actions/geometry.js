@@ -29,6 +29,27 @@ export function toViewportPoint(bbox, screenshot, viewport) {
   };
 }
 
+// Which pixel-OCR elements spatially sit on a clickable control, so the planner may
+// only CLICK a genuine actionable target (e.g. "Continue") and never a label like
+// "Password". Both boxes are screenshot pixels; the OCR text box must be mostly
+// inside a control region. Returns the subset of visual ids — real pixel-derived
+// ids, never fabricated. Geometry stays local; only these safe ids cross the wire.
+export function actionableVisualIds(items, controlRegions, minOverlap = 0.5) {
+  const ids = [];
+  for (const item of items || []) {
+    const b = item?.bbox;
+    if (!positiveSize(b) || !finite(b.x) || !finite(b.y)) continue;
+    const area = b.width * b.height;
+    for (const r of controlRegions || []) {
+      if (!positiveSize(r) || !finite(r.x) || !finite(r.y)) continue;
+      const iw = Math.min(b.x + b.width, r.x + r.width) - Math.max(b.x, r.x);
+      const ih = Math.min(b.y + b.height, r.y + r.height) - Math.max(b.y, r.y);
+      if (iw > 0 && ih > 0 && (iw * ih) / area >= minOverlap) { ids.push(item.id); break; }
+    }
+  }
+  return ids;
+}
+
 // Defence in depth: never click a target that substantially overlaps a redacted
 // sensitive region (both in screenshot pixels). The demo Continue button sits well
 // outside every field mask. Missing/zero-area target is treated as unsafe.

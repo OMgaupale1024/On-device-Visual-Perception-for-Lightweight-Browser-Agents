@@ -1,4 +1,4 @@
-import { HOST_PATH, OCR_MESSAGE, OCR_TIMEOUT_MS } from './config.js';
+import { HOST_PATH, OCR_MESSAGE, OCR_REFINE_MESSAGE, OCR_TIMEOUT_MS } from './config.js';
 import { sanitizeError, logError, logStage } from './diagnostics.js';
 
 // Service workers cannot construct Web Workers. A packaged offscreen document owns it.
@@ -11,6 +11,22 @@ async function ensureHost() {
     url: HOST_PATH, reasons: ['WORKERS'], justification: 'Run packaged OCR WebAssembly on local screenshot pixels before privacy filtering.',
   }).finally(() => { creating = undefined; });
   await creating;
+}
+
+// Best-effort second pass for a few actionable low-confidence control crops. Bounded
+// and fail-soft: any error/timeout returns [] so the original OCR text simply stands.
+export async function refineLocally(image, regions) {
+  if (!Array.isArray(regions) || !regions.length) return [];
+  try {
+    return await Promise.race([
+      (async () => {
+        await ensureHost();
+        const response = await chrome.runtime.sendMessage({ type: OCR_REFINE_MESSAGE, target: 'ocr-host', image, regions });
+        return response?.ok && Array.isArray(response.result?.refinements) ? response.result.refinements : [];
+      })(),
+      new Promise((resolve) => setTimeout(() => resolve([]), OCR_TIMEOUT_MS)),
+    ]);
+  } catch { return []; }
 }
 
 export async function inferLocally(image) {

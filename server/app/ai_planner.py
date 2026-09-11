@@ -22,8 +22,10 @@ async def plan_ai(candidate: dict, provider: PlanningProvider) -> PlanResponse:
     try:
         decision = parse_decision(text)
         if decision.action == "CLICK":
-            if decision.target not in prepared.visual_ids:
-                raise ValueError("Unknown visual target")
+            # Target must be a locally-grounded actionable candidate, never just any
+            # visible label (e.g. "Password"). Non-actionable CLICK is rejected safely.
+            if decision.target not in prepared.actionable_ids:
+                raise ValueError("Non-actionable visual target")
         elif decision.target is not None:
             raise ValueError("Invalid STOP target")
         return PlanResponse(observationId=prepared.observation_id, action=decision.action,

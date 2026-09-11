@@ -55,7 +55,7 @@ class AIPlannerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(set(data), {"goal", "privacy", "semanticState", "visualState", "redactionScheme"})
         self.assertEqual(data["semanticState"]["source"], "local-browser-semantics")
         self.assertEqual(data["visualState"]["source"], "local-pixel-ocr")
-        self.assertEqual(data["visualState"]["elements"], [{"id": "visual_12", "text": "Continue", "confidence": 0.95}])
+        self.assertEqual(data["visualState"]["elements"], [{"id": "visual_12", "text": "Continue", "confidence": 0.95, "actionable": True}])
         for role in ["NAME", "EMAIL", "PHONE", "EMPLOYEE_ID", "PASSWORD"]:
             self.assertIn(f"[{role}]", content)
         for value in SECRETS + ["obs_demo-abc", "capturedAt", "bbox", "viewport", "redactedRegions", "field_1"]:
@@ -121,6 +121,7 @@ class AIPlannerTests(unittest.IsolatedAsyncioTestCase):
         for index in range(1, 6):
             data = fixture(); data["observation"]["id"] = f"obs_binding-{index}"
             data["visualElements"][0]["id"] = f"visual_{index}"
+            data["actionCandidates"] = [f"visual_{index}"]
             plan = await plan_ai(data, FakeProvider(decision(target=f"visual_{index}")))
             self.assertEqual(plan.observationId, data["observation"]["id"])
             self.assertEqual(plan.target, data["visualElements"][0]["id"])
@@ -147,8 +148,33 @@ class AIPlannerTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(str(error.exception), "AI planner unavailable.")
 
     async def test_empty_visual_context_cannot_accept_click(self):
-        data = fixture(); data["visualElements"] = []
+        data = fixture(); data["visualElements"] = []; data["actionCandidates"] = []
         with self.assertRaises(PlannerFailure): await plan_ai(data, FakeProvider())
+
+    async def test_non_actionable_target_rejected_actionable_accepted(self):
+        # Regression for the live run where NVIDIA chose CLICK "Password": a visible
+        # label that exists in visualElements but is NOT a clickable control. Only
+        # actionCandidates (locally grounded clickable ids) may be clicked.
+        def two_elements():
+            data = fixture()
+            data["visualElements"].append({"id": "visual_20", "text": "Password",
+                "bbox": {"x": 10, "y": 120, "width": 100, "height": 20}, "confidence": 0.9, "source": "visual"})
+            data["actionCandidates"] = ["visual_12"]  # only Continue is actionable
+            return data
+        # Non-actionable label → rejected without repair or silent execution.
+        with self.assertRaises(PlannerFailure) as error:
+            await plan_ai(two_elements(), FakeProvider(decision(target="visual_20")))
+        self.assertEqual(error.exception.status_code, 502)
+        # Actionable Continue → accepted.
+        plan = await plan_ai(two_elements(), FakeProvider(decision(target="visual_12")))
+        self.assertEqual((plan.action, plan.target), ("CLICK", "visual_12"))
+        # No actionable candidate present → only STOP is acceptable; a CLICK is rejected.
+        none_actionable = two_elements(); none_actionable["actionCandidates"] = []
+        stop = await plan_ai(none_actionable, FakeProvider(decision(action="STOP", target=None,
+            reason="No suitable visual target is available.")))
+        self.assertEqual(stop.action, "STOP")
+        with self.assertRaises(PlannerFailure):
+            await plan_ai(none_actionable, FakeProvider(decision(target="visual_12")))
 
     async def test_provider_timeout_is_bounded(self):
         class HangingProvider:

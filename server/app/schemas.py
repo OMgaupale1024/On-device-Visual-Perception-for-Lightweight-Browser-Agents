@@ -127,6 +127,7 @@ class SafeAgentContext(StrictModel):
     privacy: Privacy
     fields: Annotated[list[SemanticField], Field(max_length=200)]
     visualElements: Annotated[list[VisualElement], Field(max_length=1000)]
+    actionCandidates: Annotated[list[VisualId], Field(max_length=1000)]
     redactionScheme: dict[str, str]
 
     @model_validator(mode="before")
@@ -151,6 +152,11 @@ class SafeAgentContext(StrictModel):
             box = element.bbox
             if box.x + box.width > self.observation.image.width or box.y + box.height > self.observation.image.height:
                 raise ValueError("Visual box outside observation")
+        # actionCandidates must be a duplicate-free subset of real visual ids: the
+        # planner may only CLICK a genuine, locally-grounded actionable target.
+        visual_ids = {element.id for element in self.visualElements}
+        if len(set(self.actionCandidates)) != len(self.actionCandidates) or not set(self.actionCandidates) <= visual_ids:
+            raise ValueError("Invalid action candidates")
         return self
 
 

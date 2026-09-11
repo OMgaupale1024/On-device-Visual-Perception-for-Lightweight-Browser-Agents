@@ -34,8 +34,20 @@ test('construction produces a versioned, frozen, correctly shaped context', () =
   const { context } = ready();
   assert.equal(context.schemaVersion, SCHEMA_VERSION);
   assert.deepEqual(Object.keys(context).sort(),
-    ['fields', 'goal', 'observation', 'privacy', 'redactionScheme', 'schemaVersion', 'visualElements']);
+    ['actionCandidates', 'fields', 'goal', 'observation', 'privacy', 'redactionScheme', 'schemaVersion', 'visualElements']);
   assert.ok(Object.isFrozen(context) && Object.isFrozen(context.observation) && Object.isFrozen(context.fields));
+});
+
+test('actionCandidates keeps only real, deduped visual ids — never fabricated controls', () => {
+  // visual_3 is Continue (real); visual_99 is not a real OCR element and must be dropped.
+  const { context } = build({ actionCandidates: ['visual_3', 'visual_3', 'visual_99', 'not-a-visual'] });
+  assert.deepEqual(context.actionCandidates, ['visual_3']);
+  const ids = new Set(context.visualElements.map((v) => v.id));
+  assert.ok(context.actionCandidates.every((id) => ids.has(id)));
+});
+
+test('actionCandidates defaults to empty when none supplied', () => {
+  assert.deepEqual(ready().context.actionCandidates, []);
 });
 
 test('goal is validated: type-coerced, whitespace-collapsed, trimmed, length-capped', () => {

@@ -6,7 +6,8 @@ import { collectLocalValues } from '../privacy/collect.js';
 import { sanitizeSemantics } from '../privacy/semantic.js';
 import { redactScreenshot, buildOutboundPackage, sanitizedImageForPerception } from '../privacy/redact.js';
 import { perceiveLocalCapture } from '../perception/pipeline.js';
-import { sensitiveRegions } from '../privacy/geometry.js';
+import { sensitiveRegions, mapRect } from '../privacy/geometry.js';
+import { actionableVisualIds } from '../actions/geometry.js';
 import { buildSafeAgentContext } from '../privacy/agent-context.js';
 
 // Bound local API work; abort prevents subsequent stages and late acceptance.
@@ -90,6 +91,12 @@ export async function observeLocal(tab, goal, { signal } = {}) {
     timings.redactionMs = performance.now() - redactionStart;
     const semanticStart = performance.now();
     const regions = sensitiveRegions(geometry, obs.viewport, { width: visual.width, height: visual.height });
+    // Clickable-control regions in screenshot pixels, derived locally from DOM button
+    // geometry (never their text). Used to ground actionCandidates and to target the
+    // optional crop-OCR refinement. Never leaves the device.
+    const controlRegions = (obs.buttonRects || [])
+      .map((b) => mapRect(b.rect, obs.viewport, { width: visual.width, height: visual.height }))
+      .filter(Boolean);
     secrets = before.values.filter((v) => fields.some((f) => f.id === v.id && f.sensitive)).map((v) => v.value);
     const semantic = sanitizeSemantics(fields, obs.fieldSignals, before.values);
     let safeContext = buildOutboundPackage(visual.handle, semantic, secrets);
@@ -98,7 +105,7 @@ export async function observeLocal(tab, goal, { signal } = {}) {
     before = after = null; // Only the known sensitive strings remain until OCR guarding.
     stage = 'PERCEPTION_FAILED';
     const perceptionStart = performance.now();
-    const perception = await perceiveLocalCapture({ dataUrl: rawScreenshot, width: visual.width, height: visual.height }, secrets, regions);
+    const perception = await perceiveLocalCapture({ dataUrl: rawScreenshot, width: visual.width, height: visual.height }, secrets, regions, controlRegions);
     check();
     timings.perceptionMs = performance.now() - perceptionStart;
     stage = 'PRIVACY_FAILED';
@@ -112,12 +119,17 @@ export async function observeLocal(tab, goal, { signal } = {}) {
     // Phase 5: fuse safe semantic + safe visual state into the canonical, guarded
     // SafeAgentContext. Built defensively so a builder fault never discards working
     // Phase 1-4 results; a privacy failure fails closed (no context, status marked).
+    // actionCandidates: the visual ids that sit on a clickable control (post-refinement
+    // items, so the refined Continue label is grounded the same way). Logic unchanged.
+    const actionCandidates = (perception.privacy === 'SAFE' && perception.value?.items)
+      ? actionableVisualIds(perception.value.items, controlRegions) : [];
     let agent = { status: 'REVOKED' };
     if (perception.status !== 'UNSAFE') {
       try {
         agent = buildSafeAgentContext({
           goal, semantic,
           visualState: perception.privacy === 'SAFE' ? perception.value : null,
+          actionCandidates,
           image: { width: visual.width, height: visual.height, redactedRegions: visual.redactedRegions },
           observation: { id: observationId, capturedAt, viewport: obs.viewport },
           sensitiveValues: secrets,

@@ -75,6 +75,90 @@ export async function recognizePixels(image) {
   }
 }
 
+// Second, bounded PIXEL OCR pass for actionable control regions that the full-screen
+// sparse pass read with low confidence (e.g. a styled "Continue" button). Crops the
+// ALREADY-CAPTURED screenshot, upscales + greyscales + auto-inverts dark-on-dark, then
+// re-recognises as a single line. Pixels only; no DOM text, no new network, no new model.
+export async function refineRegions(image, regions) {
+  logStage('offscreen', 'OCR_REFINE_ENTER', `worker=${!!worker} regions=${Array.isArray(regions) ? regions.length : 'none'} img=${typeof image?.dataUrl === 'string'}`); // TEMP-DIAG
+  if (!worker || !Array.isArray(regions) || !regions.length ||
+      !image || typeof image.dataUrl !== 'string' ||
+      !/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(image.dataUrl)) return [];
+  let bitmap;
+  try {
+    // Decode the already-captured PNG locally (no network, no fetch): base64 -> bytes -> blob.
+    const png = Uint8Array.from(atob(image.dataUrl.slice(22)), (c) => c.charCodeAt(0));
+    bitmap = await createImageBitmap(new Blob([png], { type: 'image/png' }));
+    await worker.setParameters({ tessedit_pageseg_mode: '7' }); // one centred label line
+    const out = [];
+    for (const region of regions) {
+      const refined = await bestCropRead(bitmap, region?.bbox, region?.id);
+      if (refined) out.push({ id: region.id, text: refined.text, confidence: refined.confidence });
+    }
+    return out;
+  } catch (err) {
+    logError('offscreen', sanitizeError('OCR_REFINE', err));
+    return [];
+  } finally {
+    try { await worker?.setParameters({ tessedit_pageseg_mode: '11' }); } catch { /* restore global layout */ }
+    bitmap?.close?.();
+  }
+}
+
+const REFINE_SCALE = 4;
+// Generic centred-text crop variants for a button-like control, as fractions of the
+// element bbox (never tuned to specific label text), each greyscaled+auto-inverted and
+// optionally binarised. Full crop can include dark padding that clips glyphs; a centred
+// inset isolates the label. Best-confidence pixel read wins.
+const CROP_VARIANTS = [
+  { name: 'full', ix: 0.00, iy: 0.00, threshold: false },
+  { name: 'center', ix: 0.10, iy: 0.15, threshold: false },
+  { name: 'center-bin', ix: 0.10, iy: 0.15, threshold: true },
+  { name: 'tight-bin', ix: 0.20, iy: 0.20, threshold: true },
+];
+
+async function bestCropRead(bitmap, bbox, id) {
+  if (!bbox || ![bbox.x, bbox.y, bbox.width, bbox.height].every(Number.isFinite) ||
+      bbox.width <= 0 || bbox.height <= 0) return null;
+  let best = null;
+  for (const variant of CROP_VARIANTS) {
+    const read = await recognizeCropVariant(bitmap, bbox, variant);
+    if (!read) continue;
+    logStage('offscreen', 'OCR_REFINE_VARIANT', `id=${id} variant=${variant.name} text="${read.text}" conf=${read.confidence}`); // TEMP-DIAG
+    if (read.text && typeof read.confidence === 'number' && (!best || read.confidence > best.confidence)) best = read;
+  }
+  return best;
+}
+
+async function recognizeCropVariant(bitmap, bbox, variant) {
+  const pad = 6;
+  const insetX = bbox.width * variant.ix, insetY = bbox.height * variant.iy;
+  const sx = Math.max(0, Math.floor(bbox.x + insetX - pad));
+  const sy = Math.max(0, Math.floor(bbox.y + insetY - pad));
+  const sw = Math.min(bitmap.width - sx, Math.ceil(bbox.width - 2 * insetX + pad * 2));
+  const sh = Math.min(bitmap.height - sy, Math.ceil(bbox.height - 2 * insetY + pad * 2));
+  if (sw <= 0 || sh <= 0) return null;
+  const canvas = new OffscreenCanvas(Math.round(sw * REFINE_SCALE), Math.round(sh * REFINE_SCALE));
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = img.data; let sum = 0;
+  for (let i = 0; i < d.length; i += 4) { const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; d[i] = d[i + 1] = d[i + 2] = g; sum += g; }
+  // Tesseract favours dark text on light: invert when the crop is mostly dark (a filled
+  // button). Principled from pixel luminance — not tuned to any specific label text.
+  if (sum / (d.length / 4) < 128) for (let i = 0; i < d.length; i += 4) { const v = 255 - d[i]; d[i] = d[i + 1] = d[i + 2] = v; }
+  if (variant.threshold) for (let i = 0; i < d.length; i += 4) { const v = d[i] < 128 ? 0 : 255; d[i] = d[i + 1] = d[i + 2] = v; }
+  ctx.putImageData(img, 0, 0);
+  const bytes = new Uint8Array(await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer());
+  try {
+    const { data } = await worker.recognize(bytes, {}, { text: true });
+    const text = (data?.text || '').replace(/\s+/g, ' ').trim();
+    const confidence = typeof data?.confidence === 'number' && data.confidence >= 0 && data.confidence <= 100 ? data.confidence / 100 : null;
+    return { text, confidence };
+  } finally { bytes.fill(0); }
+}
+
 export async function disposeEngine() {
   const previous = worker;
   worker = undefined;

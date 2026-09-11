@@ -93,6 +93,7 @@
       "source": "visual"
     }
   ],
+  "actionCandidates": ["visual_12"],
   "redactionScheme": {
     "[NAME]": "filled personal name hidden locally",
     "[EMAIL]": "filled email address hidden locally",

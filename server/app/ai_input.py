@@ -11,6 +11,7 @@ MAX_INPUT_BYTES = 32_000
 class PreparedPlan:
     observation_id: str  # Local binding only; never part of content.
     visual_ids: tuple[str, ...]
+    actionable_ids: tuple[str, ...]  # Subset the planner may CLICK; others are STOP-only.
     content: str
 
 
@@ -35,7 +36,8 @@ def prepare_ai_input(candidate: dict) -> PreparedPlan:
         },
         "visualState": {
             "source": "local-pixel-ocr",
-            "elements": [{"id": v.id, "text": v.text, "confidence": v.confidence}
+            "elements": [{"id": v.id, "text": v.text, "confidence": v.confidence,
+                          "actionable": v.id in set(context.actionCandidates)}
                          for v in context.visualElements],
         },
         "redactionScheme": dict(context.redactionScheme),
@@ -45,4 +47,5 @@ def prepare_ai_input(candidate: dict) -> PreparedPlan:
     reject_obvious_pii(json.loads(content))
     if len(content.encode("utf-8")) > MAX_INPUT_BYTES:
         raise ValueError("Planning context too large")
-    return PreparedPlan(context.observation.id, tuple(v.id for v in context.visualElements), content)
+    return PreparedPlan(context.observation.id, tuple(v.id for v in context.visualElements),
+                        tuple(context.actionCandidates), content)

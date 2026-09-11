@@ -56,9 +56,17 @@ export function observePage() {
     };
   });
 
+  // Geometry of clickable controls ONLY (no text, no ids) — used LOCALLY to decide
+  // which pixel-OCR elements sit on an actionable control. Never sent off-device.
+  const buttonRects = buttons.map((el) => {
+    const rect = el.getBoundingClientRect();
+    return { rect: { x: rect.left, y: rect.top, width: rect.width, height: rect.height } };
+  });
+
   return {
     title: document.title,
     counts: { inputs: fieldEls.length, buttons: buttons.length, labels: labels.length },
+    buttonRects,
     viewport: { width: window.innerWidth, height: window.innerHeight },
     devicePixelRatio: window.devicePixelRatio || 1,
     position: { x: window.scrollX, y: window.scrollY },

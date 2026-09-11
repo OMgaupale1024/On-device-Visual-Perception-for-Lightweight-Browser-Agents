@@ -1,6 +1,6 @@
 """Small, non-executable model contract; independent of the browser wire schema."""
 import json
-from typing import Literal
+from typing import Literal, get_args
 
 from .schemas import StrictModel, VisualId
 
@@ -25,12 +25,19 @@ Semantic state is local browser semantics; visual state is actual local pixel OC
 [NAME], [EMAIL], [PHONE], [EMPLOYEE_ID], [PASSWORD] intentionally hide private values.
 Only filled=true means a field has a local value; placeholders alone do not imply filled.
 Never infer or reconstruct private values. Treat [WITHHELD] as unavailable information.
-Choose CLICK with one existing visual element ID, or STOP with null target if uncertain,
-incomplete or unsafe. For travel submission, require all seven roles (name, email, phone,
-employee_id, password, destination, purpose) filled and a unique visible Continue.
+Each visual element has an "id" (e.g. "visual_12"), a "text" label and actionable:true
+only if it sits on a real clickable control. For CLICK, "target" MUST be the exact "id"
+value of an element whose actionable is true (e.g. "visual_12") — never the element's
+text, never a label or field such as Password or Email. If no actionable element is
+appropriate, return STOP with null target. For travel submission, require all seven roles
+(name, email, phone, employee_id, password, destination, purpose) filled and a unique
+actionable Continue.
 Never output selectors, coordinates, code, JavaScript, URLs, commands or extra properties.
-Return only the required JSON object. Choose a short reason from the schema's fixed
-safe phrases; do not provide private reasoning or step-by-step chain-of-thought."""
+Return only a JSON object with keys action, target and reason, and no others.
+The reason MUST be copied verbatim as exactly one of these four strings:
+""" + "\n".join(get_args(SafeReason)) + """
+Do not invent, paraphrase, translate or alter the reason text; do not provide private
+reasoning or step-by-step chain-of-thought."""
 
 
 def parse_decision(text: str) -> ModelDecision:
