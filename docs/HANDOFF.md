@@ -1,73 +1,78 @@
-# EdgeSight - Phase 9 handoff
+# Session Handoff
 
-**Phases 0-9 code complete. Phase 9 manual Chrome timings PENDING.**
-Exact next task: **Phase 10 - final SIH demo polish + submission/presentation evidence**.
-Not started. Read AI_CONTEXT.md, METRICS.md, PHASE_9_PLAN.md and TESTING.md.
-Code, tests and Git are source of truth; sync before changes, never force push.
+## Agent
+Claude (Opus 4.8). Cleanup/maintenance session.
 
-Phase 9 adds a small repeatable CLI and current-run numeric popup panel. It does not
-change Phase 8's one 750 ms-delayed same-tab fresh observation, new identity, fresh
-local OCR/privacy or visual-only phrase success. No verification network/provider
-call, new action, retry, provider or general automation was added.
+## Session Objective
+Repository cleanup + documentation consolidation + multi-AI handoff infrastructure.
+**No new autonomous-agent features** were to be implemented this session.
 
-Benchmark command: npm run benchmark. Requires installed Node dependencies and server
-venv. Uses actual pixel OCR, Phase 2 detector, Phase 3 final mask commands through
-Canvas adapter, Phase 5 builder, server validation/projection/planner and 10 temporary
-loopback HTTP requests. Default makes no NVIDIA call. Optional --ai requires a private
-configured key; not run here. JSON schema version1; ignored output, reviewed committed
-reference JSON/table. No user captures; committed PNGs are explicitly synthetic/fake.
+## Completed This Session
+1. Recovered state and found the working tree carried **21 modified files + 1 untracked**
+   test — coherent, **test-green** Phase 10 WIP (an `actionCandidates` feature + a
+   `crop-OCR refinement`) that diverged from docs claiming "Phase 10 NOT STARTED".
+2. **Committed that WIP as-is** (user-approved) → `c3c494f`, so cleanup could start from a
+   clean tree without losing test-green work.
+3. **Removed temporary debug instrumentation:** 5 `// TEMP-DIAG` lines in
+   `perception/ocr.js` (2) and `perception/pipeline.js` (3). Three of them logged **raw OCR
+   text** (a privacy leak). Also removed the now-dead `id` param in `bestCropRead`, the
+   `before` Map, and the unused `logStage` import in pipeline.js. Kept the legitimate
+   structured `logStage`/`logError` diagnostics (OCR worker stages).
+4. **Consolidated docs.** Moved the 5 `PHASE_*_PLAN.md` + `PROGRESS.md` into `docs/archive/`
+   (`PROGRESS.md` → `PROTOTYPE_HISTORY.md`, the single history entry point, with an archival
+   header). Canonical `docs/` is now: AI_CONTEXT, ARCHITECTURE, DECISIONS, HANDOFF, METRICS,
+   TESTING. Fixed the dangling links in README, ARCHITECTURE, DECISIONS.
+5. **Rewrote `AI_CONTEXT.md`** into a concise fast-start (was a 206-line spec dump) and
+   **rewrote this HANDOFF**. Updated README test counts + Phase-10 status.
+6. Verified `.gitignore` (correct — no change). Secret scan: CLEAN.
 
-## Reference evidence
+## Files Changed (cleanup commit)
+- Code: `extension/src/perception/ocr.js`, `extension/src/perception/pipeline.js`.
+- Docs rewritten: `docs/AI_CONTEXT.md`, `docs/HANDOFF.md`.
+- Docs edited (links/staleness): `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`.
+- Moved: `docs/PROGRESS.md` → `docs/archive/PROTOTYPE_HISTORY.md` (+ header edit);
+  `docs/PHASE_{6A,6B,7,8,9}_PLAN.md` → `docs/archive/`.
 
-- 5 screens, 41 expected safe OCR items, 41 correct:100% on these synthetic layouts only.
-- PII40 candidates:TP 15 FP 6 FN 5 TN 14; precision 71.43%, recall 75%, F1 73.17%.
-- Redaction3 layouts/41 sensitive/41 safe/43 commands:31 correct, 10 missed, 12 unnecessary;
-  precision 72.09%, recall 75.61%, safe preservation70.73%. IoU>=0.5; not Chrome pixels.
-- Cold OCR2 runs median 523.908 ms; warm5 runs median 249.229 ms (Node/WASM).
-- OCR assets11092523 bytes; built context/request1553 bytes; projected input1058 bytes.
-- Deterministic loopback HTTP10 runs median 1.904 ms, mean 5.946 ms, max 19.006 ms; all200.
-- Chrome plan/post-execution/machine latency and CPU/GPU/RAM are unmeasured. Do not
-  manufacture totals from these independent benchmark stages or omit slow samples.
-- Environment/source hashes/raw numeric runs/formulas/limits in METRICS.md and
-  benchmarks/reference/results.json. Windows10.0.26200x64, Ryzen9 5900HX, Node24.11.0,
-  Python3.10.11, Tesseract6.0.1/core6.1.2; browser/GPU version unavailable.
+## Tests Run
+- `npm test` (extension) after debug removal.
+- `server/.venv/Scripts/python.exe -m unittest discover -s tests`.
+- `npm run check` (syntax / manifest / packaged OCR asset integrity).
+- Secret scan (`git grep` for key/token/private-key patterns across tracked + WIP content).
 
-Popup shows actual plan/perception/privacy/planner/click/execute/verification/total,
-human interval and safe payload bytes, initially --. Human delay is excluded from
-machine total; reopen uses worker timing boundaries. Server adds allowlisted numeric
-Server-Timing header, action JSON unchanged. See METRICS.md for nonadditive intervals.
+## Results
+- Extension **238/238 PASS**. Server **53/53 PASS**. `npm run check` **PASS**.
+- Secret scan **CLEAN** — no secrets tracked; only `.env.example` (empty template).
 
-## Tests and manual status
+## Current Runtime State
+Server not started this session; extension not reloaded; no Chrome/browser run performed.
+No `NVIDIA_API_KEY` in the shell (presence-only checks, none read or printed).
 
-230/230 extension (207 prior+23), 52/52 server (50 prior+2), 21/21 dedicated metrics tests;
-syntax/manifest/assets checks pass. Real benchmark executes12 pixel recognitions across
-3 workers, 10 detector/context/server repeats and30 redaction-adapter repeats.
+## Uncommitted Work
+None once both commits land — working tree is clean.
 
-Phase 6A user-confirmed Chrome PASS remains historical evidence. Phase 6B integrated
-NVIDIA Chrome, Phase 7 positive/stale, Phase 8 positive/negative and Phase9 live Chrome
-timings all PENDING. Current browser inventory exposed no browsers/apps; key presence
-false. Historical Phase 8 Computer Use URL-policy block remains unchanged. No actual
-click/verification/performance acceptance was observed here. Unit doubles are not
-manual acceptance.
+## Current Blocker
+None for cleanup. For the next task: manual Chrome acceptance (6B/7/8/9) has never been
+observed; no NVIDIA key configured; the crop-OCR refinement is ineffective in live Chrome.
 
-For manual acceptance: start server per README (record actual mode); reload 0.9.0,
-reset Employee Travel Request, Analyze/Plan, confirm READY/SAFE/CLICK Continue and
-actual timings, Execute, observe real click and fresh distinct observation with
-Travel Request Submitted/VISUALLY VERIFIED. Record plan/post-execution/human/machine
-intervals and failures. Negative: switch tab before 750 ms capture, expect TAB_CHANGED.
-METRICS.md includes Task Manager resource procedure; no manual numbers prefilled.
+## Exact Resume Point
+Begin the **autonomous OBSERVE → PLAN → ACT → OBSERVE loop** (roadmap #2 in AI_CONTEXT),
+reusing the single-step controller + `actionCandidates`. First confirm the NVIDIA planner
+path end-to-end (roadmap #1). Keep every privacy invariant and the server action contract.
 
-Known limits: tiny correlated clean text fixtures, field-signal PII coverage errors,
-coarse mask-command scoring, no native pixel opacity/resource claim, warm OS caches,
-no calibrated confidence threshold. Phase 8 one-frame/activeTab/OCR/unknown-PII and
-transient-worker limitations remain. No phase10 work.
+## Next Command / Next Action
+`git status && git log --oneline -10`, then read `docs/AI_CONTEXT.md` "Important files"
+and start from `extension/src/background/service-worker.js` (the controller).
 
-Important new files: metrics/metrics.js, metrics.test.mjs, scripts/benchmark*.{mjs, py},
-generate-benchmark-fixtures.ps1, benchmarks/{fixtures, reference}, server/tests/test_metrics.py,
-PHASE_9_PLAN.md, METRICS.md. Modified worker/local observation/popup/transport/server,
-manifest0.9.0, package scripts and all required overview docs.
+## Git State
+- Branch `main`, synced with `origin/main` before this session (`ead24d3`).
+- `c3c494f` = Phase 10 WIP commit. HEAD = the cleanup commit containing this file
+  (`git log -1 --format=%H`). Final report records the actual push + `HEAD == origin/main`.
 
-Baseline6b8172b. Latest commit is the one containing this handoff, subject
-feat: add SIH evaluation metrics; git log -1 --format=%H resolves its hash.
-Final report records normal push, HEAD==origin/main and clean-tree verification.
-Stop after Phase 9. Exact next task: Phase 10 final SIH demo polish/submission evidence.
+## Important Notes For Next Agent
+- Only one agent writes code at a time. Read AI_CONTEXT + this file, not `docs/archive/`.
+- The `crop-OCR refinement` is committed but **ineffective in live Chrome** — treat as a
+  rework candidate, not verified capability. `actionCandidates` is the keeper groundwork.
+- Never log raw OCR text / PII (that was the bug removed this session). Structured
+  `logStage`/`logError` stage diagnostics are fine.
+- Deterministic planner is the default; `ai` mode needs a server-side NVIDIA key. The
+  server never returns coordinates/selectors/code — the browser resolves actions locally.

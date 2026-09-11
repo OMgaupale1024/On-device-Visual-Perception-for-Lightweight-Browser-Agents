@@ -110,8 +110,8 @@ Set-Location server
 .venv/Scripts/python.exe -m unittest discover -s tests -v
 ```
 
-Current results: **230/230 extension test entries** (23 new Phase 9 tests),
-**52/52 server test methods** (2 new Phase 9 tests). Both browser
+Current results: **238/238 extension test entries**, **53/53 server test methods**
+(the newest cover Phase 10 `actionCandidates` groundwork). Both browser
 transport and provider boundary contamination tests pass with zero downstream calls.
 Real OCR cold/warm smoke and local deterministic/AI-missing-key HTTP smoke pass. Mocked
 AI tests are not real-provider acceptance. Phase 6B integrated NVIDIA, Phase 7 positive/
@@ -124,11 +124,10 @@ With a separately running server, from repository root:
 `node scripts/smoke-planner.mjs --ai` for a real, billable NVIDIA smoke using only the
 synthetic safe fixture. The latter was NOT run — no NVIDIA_API_KEY was configured.
 
-[Architecture](docs/ARCHITECTURE.md) · [Testing](docs/TESTING.md) ·
-[Progress](docs/PROGRESS.md) · [Decisions](docs/DECISIONS.md) ·
-[Handoff](docs/HANDOFF.md) · [AI context](docs/AI_CONTEXT.md) ·
-[Phase 6B plan](docs/PHASE_6B_PLAN.md) · [Phase 7 plan](docs/PHASE_7_PLAN.md) ·
-[Phase 8 plan](docs/PHASE_8_PLAN.md)
+[AI context](docs/AI_CONTEXT.md) · [Handoff](docs/HANDOFF.md) ·
+[Architecture](docs/ARCHITECTURE.md) · [Decisions](docs/DECISIONS.md) ·
+[Testing](docs/TESTING.md) · [Metrics](docs/METRICS.md) ·
+[Prototype history & phase plans](docs/archive/)
 
 Verification uses one attempt, a 60-second transaction deadline, five-second local API
 bounds and the existing 45-second OCR deadline. Navigation is allowed after dispatch;
@@ -137,7 +136,8 @@ spacing and joins at most three spatially adjacent OCR items in bbox reading ord
 Confidence values are recorded without an uncalibrated threshold. This proves visible
 text at capture time, not backend persistence or arbitrary workflow completion.
 
-Exact next implementation task: **Phase 10 - final SIH demo polish and submission evidence. Not started.**
+Phase 10 groundwork (`actionCandidates`) is committed; the next task is the autonomous
+OBSERVE → PLAN → ACT loop. See [AI context](docs/AI_CONTEXT.md) and [Handoff](docs/HANDOFF.md).
 
 ## Phase 9 controlled prototype benchmark
 
@@ -156,6 +156,6 @@ remain unmeasured. Popup Performance shows only current-run timings, initially -
 human confirmation time is separate from machine processing.
 
 See [Metrics definitions, results and limitations](docs/METRICS.md),
-[Phase 9 plan](docs/PHASE_9_PLAN.md) and
+[Phase 9 plan](docs/archive/PHASE_9_PLAN.md) and
 [reference judge table](benchmarks/reference/table.md). Phase 9 code is complete;
 manual Chrome metrics acceptance remains PENDING.

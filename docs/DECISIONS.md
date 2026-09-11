@@ -396,7 +396,7 @@ consume `agentContext` only, and obtain the sanitized image solely through the h
 
 The user confirmed the current Chrome flow works and explicitly authorized Phase 6A.
 Only that general report is recorded; detailed unreported manual checks stay pending.
-Inspected/synchronized baseline: ae4e37e. Design is in PHASE_6A_PLAN.md.
+Inspected/synchronized baseline: ae4e37e. Design is in archive/PHASE_6A_PLAN.md.
 
 The existing final local known-value guard remains primary. After it passes, the
 Phase 5 builder freezes the context and records identity → exact safe JSON in a

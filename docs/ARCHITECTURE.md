@@ -32,8 +32,8 @@ Phase 6B calls one real server-side provider adapter; no image upload.
 Phase 7 adds LOCAL execution of a validated CLICK: the server chooses WHAT (visual_N),
 the browser resolves WHERE/HOW from the local bbox and clicks once. No screenshot,
 selector, coordinate or code ever comes from the server. Designs are recorded in
-[PHASE_6B_PLAN.md](PHASE_6B_PLAN.md), [PHASE_7_PLAN.md](PHASE_7_PLAN.md) and
-[PHASE_8_PLAN.md](PHASE_8_PLAN.md); the Phase
+[PHASE_6B_PLAN.md](archive/PHASE_6B_PLAN.md), [PHASE_7_PLAN.md](archive/PHASE_7_PLAN.md) and
+[PHASE_8_PLAN.md](archive/PHASE_8_PLAN.md); the Phase
 6A request/action JSON and local approval architecture remain unchanged.
 
 ## Local observation, perception and privacy

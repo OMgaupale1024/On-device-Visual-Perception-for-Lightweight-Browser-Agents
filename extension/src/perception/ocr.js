@@ -80,7 +80,6 @@ export async function recognizePixels(image) {
 // ALREADY-CAPTURED screenshot, upscales + greyscales + auto-inverts dark-on-dark, then
 // re-recognises as a single line. Pixels only; no DOM text, no new network, no new model.
 export async function refineRegions(image, regions) {
-  logStage('offscreen', 'OCR_REFINE_ENTER', `worker=${!!worker} regions=${Array.isArray(regions) ? regions.length : 'none'} img=${typeof image?.dataUrl === 'string'}`); // TEMP-DIAG
   if (!worker || !Array.isArray(regions) || !regions.length ||
       !image || typeof image.dataUrl !== 'string' ||
       !/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(image.dataUrl)) return [];
@@ -92,7 +91,7 @@ export async function refineRegions(image, regions) {
     await worker.setParameters({ tessedit_pageseg_mode: '7' }); // one centred label line
     const out = [];
     for (const region of regions) {
-      const refined = await bestCropRead(bitmap, region?.bbox, region?.id);
+      const refined = await bestCropRead(bitmap, region?.bbox);
       if (refined) out.push({ id: region.id, text: refined.text, confidence: refined.confidence });
     }
     return out;
@@ -117,14 +116,13 @@ const CROP_VARIANTS = [
   { name: 'tight-bin', ix: 0.20, iy: 0.20, threshold: true },
 ];
 
-async function bestCropRead(bitmap, bbox, id) {
+async function bestCropRead(bitmap, bbox) {
   if (!bbox || ![bbox.x, bbox.y, bbox.width, bbox.height].every(Number.isFinite) ||
       bbox.width <= 0 || bbox.height <= 0) return null;
   let best = null;
   for (const variant of CROP_VARIANTS) {
     const read = await recognizeCropVariant(bitmap, bbox, variant);
     if (!read) continue;
-    logStage('offscreen', 'OCR_REFINE_VARIANT', `id=${id} variant=${variant.name} text="${read.text}" conf=${read.confidence}`); // TEMP-DIAG
     if (read.text && typeof read.confidence === 'number' && (!best || read.confidence > best.confidence)) best = read;
   }
   return best;

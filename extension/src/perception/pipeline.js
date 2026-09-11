@@ -4,7 +4,7 @@ import { checkOutbound } from '../privacy/guard.js';
 import { actionableVisualIds } from '../actions/geometry.js';
 import { inferLocally, refineLocally } from './bridge.js';
 import { REFINE_CONF_THRESHOLD, REFINE_MIN_CONFIDENCE, REFINE_MIN_GAIN } from './config.js';
-import { sanitizeError, logError, logStage } from './diagnostics.js';
+import { sanitizeError, logError } from './diagnostics.js';
 
 // Actionable controls whose full-screen OCR confidence is low are eligible for one
 // crop-OCR refinement pass. Both sets come from real pixels/geometry — never DOM text.
@@ -47,14 +47,10 @@ export async function perceiveLocalCapture(image, sensitiveValues, regions, cont
     if (sanitized.status === 'Ready' && Array.isArray(controlRegions) && controlRegions.length &&
         Array.isArray(sanitized.value?.items) && sanitized.value.items.length) {
       const eligible = eligibleForRefine(sanitized.value.items, controlRegions);
-      logStage('service-worker', 'OCR_REFINE_ELIGIBLE', `n=${eligible.length} ids=${eligible.map((i) => `${i.id}@${i.confidence}`).join(',')} ctrl=${controlRegions.length}`); // TEMP-DIAG
       if (eligible.length) {
         const refinements = await refineLocally(image, eligible.map((item) => ({ id: item.id, bbox: item.bbox })));
-        logStage('service-worker', 'OCR_REFINE_RESULT', refinements.map((r) => `${r.id}:"${r.text}"@${r.confidence}`).join(' ') || 'none'); // TEMP-DIAG
         const eligibleIds = new Set(eligible.map((item) => item.id));
-        const before = new Map(sanitized.value.items.map((i) => [i.id, i.text]));
         const items = applyRefinements(sanitized.value.items, eligibleIds, refinements, sensitiveValues);
-        logStage('service-worker', 'OCR_REFINE_APPLIED', items.filter((i) => before.get(i.id) !== i.text).map((i) => `${i.id}->"${i.text}"`).join(' ') || 'none'); // TEMP-DIAG
         const value = { ...sanitized.value, items };
         // Defence in depth: re-run the outbound guard over the refined value. If anything
         // is off, keep the original already-SAFE value rather than the refined one.

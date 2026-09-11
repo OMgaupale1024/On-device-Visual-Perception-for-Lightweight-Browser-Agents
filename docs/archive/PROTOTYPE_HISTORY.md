@@ -1,7 +1,12 @@
-# EdgeSight progress
+# EdgeSight — prototype development history (Phases 0–9)
 
-**Phases 0-9 complete in code. Phase 9 manual Chrome metrics PENDING.**
-Checkpoint 2026-09-11. Phase 9 controlled evaluation implemented.
+> **Archived.** Historical, phase-by-phase narrative of the prototype build. For the
+> *current* system, architecture and next task read [`../AI_CONTEXT.md`](../AI_CONTEXT.md)
+> and [`../HANDOFF.md`](../HANDOFF.md). Detailed pre-implementation phase plans live beside
+> this file (`PHASE_6A_PLAN.md` … `PHASE_9_PLAN.md`). Code, tests and Git are the source of truth.
+
+**Phases 0-9 completed in code by checkpoint 2026-09-11.** Phase 9 controlled evaluation
+implemented; manual Chrome metrics were PENDING at that checkpoint.
 
 Phase 6A remains user Chrome-verified: POST /plan -> FastAPI 200, seven fields, five
 sensitive fields/redacted regions, privacy safe/rawPiiIncluded=false, five role
@@ -53,5 +58,6 @@ Phase 9 Chrome live timings PENDING. Current browser inventory empty; no configu
 NVIDIA key or provider request. Benchmark timings are Node/Python/loopback only;
 Chrome plan/verification/machine totals are unmeasured. Human delay kept separate.
 
-Exact next implementation task: **PHASE 10 - final SIH demo polish + submission and
-presentation evidence**. NOT STARTED. Stop after Phase 9 commit/push.
+At the Phase 9 checkpoint the next planned task was Phase 10 (final SIH demo polish +
+submission/presentation evidence). See [`../HANDOFF.md`](../HANDOFF.md) for the current
+next step, which supersedes this historical note.
