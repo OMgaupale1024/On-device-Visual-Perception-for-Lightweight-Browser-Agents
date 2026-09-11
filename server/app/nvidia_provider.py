@@ -18,9 +18,12 @@ MAX_RESPONSE_BYTES = 64_000
 
 
 class PlannerFailure(Exception):
-    def __init__(self, status_code=503):
+    def __init__(self, status_code=503, upstream_status=None):
         super().__init__("AI planner unavailable.")
         self.status_code = status_code
+        # Numeric upstream NVIDIA HTTP status when the failure was a provider non-200
+        # (e.g. 404 wrong model, 401 bad key, 429 rate limit). Diagnostic only; no body.
+        self.upstream_status = upstream_status
 
 
 class PlanningProvider(Protocol):
@@ -57,7 +60,7 @@ class NvidiaProvider:
                     async with client.stream("POST", PROVIDER_URL, json=payload,
                                              headers={"Authorization": "Bearer " + key}) as response:
                         if response.status_code != 200:
-                            raise PlannerFailure()
+                            raise PlannerFailure(upstream_status=response.status_code)
                         data = bytearray()
                         async for chunk in response.aiter_bytes():
                             data.extend(chunk)

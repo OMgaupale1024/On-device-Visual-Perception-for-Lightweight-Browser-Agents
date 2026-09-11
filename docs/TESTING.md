@@ -840,5 +840,42 @@ human interval. Reopened popup uses retained worker timing boundaries. Repeat an
 retain failures; do not substitute Node benchmarks for Chrome results. Manual resource
 measurement and exact timing definitions are in METRICS.md; no CPU/GPU/RAM is claimed.
 
-Exact next task: **Phase 10 - final SIH demo polish + submission/presentation evidence**.
-NOT STARTED. Stop after Phase 9 commit/push.
+## Phase 11A - NVIDIA Nemotron planner path verification (2026-09-12)
+
+Objective: prove NVIDIA Nemotron genuinely decides the next action (not local code deciding
+and the model merely explaining). Verified WITHOUT a live key (none configured); the live
+NVIDIA HTTP round-trip itself remains PENDING.
+
+Verified offline / locally:
+- Architecture (code trace): AI mode calls `plan_ai` -> `prepare_ai_input` -> `NvidiaProvider`
+  -> `parse_decision`. The returned `PlanResponse` uses the MODEL's action/target/reason.
+  The server only validates (CLICK target must be in `actionCandidates`; STOP target null)
+  and never substitutes its own decision. AI mode never falls back to the deterministic planner.
+- Server suite 54/54 PASS, incl. valid CLICK/STOP, malformed / refusal / tool /
+  duplicate-key / markdown-wrapped output rejected as 502, hallucinated (`visual_999`) and
+  non-actionable ("Password") targets rejected, provider timeout (504), all upstream
+  statuses -> 503, missing key -> explicit 503 (not a deterministic CLICK), deterministic
+  mode never calls the provider, and the exact privacy-safe request body (role placeholders
+  present, the five canary secrets absent).
+- Live deterministic HTTP smoke (real uvicorn): `/health` ok; `node scripts/smoke-planner.mjs`
+  PASS (CLICK, STOP, observation binding; 1586-byte approved payload).
+- Live AI-mode fail-closed (real uvicorn, no key): POST /plan -> 503, header
+  `X-EdgeSight-Planner: ai`, body `{"detail":"AI planner unavailable."}`. Confirms AI mode
+  attempts the provider and fails closed rather than returning a deterministic CLICK.
+
+Added this phase: on AI failure the server sets a safe numeric
+`X-EdgeSight-Planner-Upstream-Status` header carrying the NVIDIA HTTP status (e.g. 404 wrong
+model, 401 bad key, 429 rate limit) so a live run is diagnosable. No payload/PII/key is ever
+logged or returned (regression-tested).
+
+PENDING (requires a real key, server-side only):
+1. From `server/`: set `NVIDIA_API_KEY` (private), `PLANNER_MODE=ai`, start uvicorn.
+2. `node scripts/smoke-planner.mjs --ai` -> expect plannerMode `ai`, CLICK/STOP READY.
+3. On failure read `X-EdgeSight-Planner-Upstream-Status`: 404 => fix `NVIDIA_MODEL`; 401 =>
+   key; 429 => rate limit; a 502 => model returned an unparseable / off-contract decision.
+4. Then the Chrome manual run: reload extension, open the demo, ANALYZE/PLAN (do NOT
+   Execute), confirm popup planner = NVIDIA / ai with a CLICK on a real current visual id,
+   and POST /plan 200 in the network tab.
+
+Exact next task: complete the live NVIDIA check above, then **Phase 11B** - autonomous
+OBSERVE -> PLAN -> ACT -> OBSERVE loop. Not started.

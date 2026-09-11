@@ -1,78 +1,76 @@
 # Session Handoff
 
 ## Agent
-Claude (Opus 4.8). Cleanup/maintenance session.
+Claude (Opus 4.8). Phase 11A — verify the real NVIDIA Nemotron planner path.
 
 ## Session Objective
-Repository cleanup + documentation consolidation + multi-AI handoff infrastructure.
-**No new autonomous-agent features** were to be implemented this session.
+Prove NVIDIA Nemotron *itself* decides the next action (not local code deciding while the
+model merely explains). Fix if broken. **No autonomous loop, voice, or new actions.**
 
 ## Completed This Session
-1. Recovered state and found the working tree carried **21 modified files + 1 untracked**
-   test — coherent, **test-green** Phase 10 WIP (an `actionCandidates` feature + a
-   `crop-OCR refinement`) that diverged from docs claiming "Phase 10 NOT STARTED".
-2. **Committed that WIP as-is** (user-approved) → `c3c494f`, so cleanup could start from a
-   clean tree without losing test-green work.
-3. **Removed temporary debug instrumentation:** 5 `// TEMP-DIAG` lines in
-   `perception/ocr.js` (2) and `perception/pipeline.js` (3). Three of them logged **raw OCR
-   text** (a privacy leak). Also removed the now-dead `id` param in `bestCropRead`, the
-   `before` Map, and the unused `logStage` import in pipeline.js. Kept the legitimate
-   structured `logStage`/`logError` diagnostics (OCR worker stages).
-4. **Consolidated docs.** Moved the 5 `PHASE_*_PLAN.md` + `PROGRESS.md` into `docs/archive/`
-   (`PROGRESS.md` → `PROTOTYPE_HISTORY.md`, the single history entry point, with an archival
-   header). Canonical `docs/` is now: AI_CONTEXT, ARCHITECTURE, DECISIONS, HANDOFF, METRICS,
-   TESTING. Fixed the dangling links in README, ARCHITECTURE, DECISIONS.
-5. **Rewrote `AI_CONTEXT.md`** into a concise fast-start (was a 206-line spec dump) and
-   **rewrote this HANDOFF**. Updated README test counts + Phase-10 status.
-6. Verified `.gitignore` (correct — no change). Secret scan: CLEAN.
+1. **Traced the full planner path** (client → `/plan` → mode branch → `plan_ai` →
+   `NvidiaProvider` → `parse_decision` → validation → client) and **confirmed the
+   architecture is correct**: in AI mode the returned `PlanResponse` uses the MODEL's
+   `action`/`target`/`reason`; the server only *validates* (CLICK target ∈ `actionCandidates`,
+   STOP target null) and never substitutes a decision. AI mode never falls back to
+   deterministic. **No bug found** — nothing to fix in the decision path.
+2. **Verified the green baseline by running it:** server 53→**54**, extension **238**.
+3. **Live backend demonstration (real uvicorn, no Chrome):**
+   - deterministic: `/health` ok; `node scripts/smoke-planner.mjs` PASS (CLICK/STOP/binding).
+   - ai (no key): POST /plan → **503**, header `X-EdgeSight-Planner: ai` → fails closed,
+     does NOT return a deterministic CLICK (acceptance #10, live).
+4. **Added a safe diagnostic** (the one in-scope gap): AI failures now set
+   `X-EdgeSight-Planner-Upstream-Status` = the NVIDIA HTTP status (404/401/429/…) so the
+   pending live run is diagnosable. Numeric only; no payload/PII/key. +1 regression test.
 
-## Files Changed (cleanup commit)
-- Code: `extension/src/perception/ocr.js`, `extension/src/perception/pipeline.js`.
-- Docs rewritten: `docs/AI_CONTEXT.md`, `docs/HANDOFF.md`.
-- Docs edited (links/staleness): `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`.
-- Moved: `docs/PROGRESS.md` → `docs/archive/PROTOTYPE_HISTORY.md` (+ header edit);
-  `docs/PHASE_{6A,6B,7,8,9}_PLAN.md` → `docs/archive/`.
+## Files Changed
+- `server/app/nvidia_provider.py` — `PlannerFailure` carries `upstream_status`; set it on
+  provider non-200.
+- `server/app/main.py` — surface `X-EdgeSight-Planner-Upstream-Status` on AI failure.
+- `server/tests/test_ai_planner.py` — assert captured upstream status + new endpoint test.
+- `docs/AI_CONTEXT.md`, `docs/HANDOFF.md`, `docs/TESTING.md` — Phase 11A status.
 
 ## Tests Run
-- `npm test` (extension) after debug removal.
-- `server/.venv/Scripts/python.exe -m unittest discover -s tests`.
-- `npm run check` (syntax / manifest / packaged OCR asset integrity).
-- Secret scan (`git grep` for key/token/private-key patterns across tracked + WIP content).
+- `server/.venv/Scripts/python.exe -m unittest discover -s tests` → **54/54 PASS**.
+- `npm test` → **238/238 PASS**.
+- Live deterministic smoke PASS; live AI-mode 503 fail-closed confirmed.
+- Secret scan before commit.
 
 ## Results
-- Extension **238/238 PASS**. Server **53/53 PASS**. `npm run check` **PASS**.
-- Secret scan **CLEAN** — no secrets tracked; only `.env.example` (empty template).
+Green. Planner path proven correct offline + fail-closed live. Live NVIDIA round-trip
+unverified (no key).
 
 ## Current Runtime State
-Server not started this session; extension not reloaded; no Chrome/browser run performed.
-No `NVIDIA_API_KEY` in the shell (presence-only checks, none read or printed).
+No server left running (both demo uvicorns stopped in a `finally`). `NVIDIA_API_KEY`
+**absent** in shell; `PLANNER_MODE` unset (→ deterministic). No Chrome run.
 
 ## Uncommitted Work
-None once both commits land — working tree is clean.
+None after commit — clean tree.
 
 ## Current Blocker
-None for cleanup. For the next task: manual Chrome acceptance (6B/7/8/9) has never been
-observed; no NVIDIA key configured; the crop-OCR refinement is ineffective in live Chrome.
+**No `NVIDIA_API_KEY`** → the live NVIDIA HTTP round-trip (Phase 11A acceptance #3, #4 live,
+#8 popup, and the Chrome run) cannot be exercised here. Everything else is verified.
 
 ## Exact Resume Point
-Begin the **autonomous OBSERVE → PLAN → ACT → OBSERVE loop** (roadmap #2 in AI_CONTEXT),
-reusing the single-step controller + `actionCandidates`. First confirm the NVIDIA planner
-path end-to-end (roadmap #1). Keep every privacy invariant and the server action contract.
+Run the **live NVIDIA check** with a real key (steps below), reading the new upstream-status
+header to diagnose any failure. Suspect first: whether `NVIDIA_MODEL`
+(`nvidia/nemotron-3.5-lightning-30b-a3b`) is a real NIM model id — a 404 will now show.
 
 ## Next Command / Next Action
-`git status && git log --oneline -10`, then read `docs/AI_CONTEXT.md` "Important files"
-and start from `extension/src/background/service-worker.js` (the controller).
+From `server/`: set `NVIDIA_API_KEY` (private, server-side only), `PLANNER_MODE=ai`, start
+uvicorn, then `node scripts/smoke-planner.mjs --ai` (expect plannerMode `ai`, CLICK/STOP
+READY). Then the Chrome ANALYZE/PLAN run. See `docs/TESTING.md` Phase 11A.
 
 ## Git State
-- Branch `main`, synced with `origin/main` before this session (`ead24d3`).
-- `c3c494f` = Phase 10 WIP commit. HEAD = the cleanup commit containing this file
-  (`git log -1 --format=%H`). Final report records the actual push + `HEAD == origin/main`.
+- Branch `main`, was synced at `3184bc3` (cleanup). `c3c494f` = Phase 10 WIP.
+- HEAD = the Phase 11A commit containing this file (`git log -1 --format=%H`). Report
+  records the push + `HEAD == origin/main` + clean tree.
 
 ## Important Notes For Next Agent
-- Only one agent writes code at a time. Read AI_CONTEXT + this file, not `docs/archive/`.
-- The `crop-OCR refinement` is committed but **ineffective in live Chrome** — treat as a
-  rework candidate, not verified capability. `actionCandidates` is the keeper groundwork.
-- Never log raw OCR text / PII (that was the bug removed this session). Structured
-  `logStage`/`logError` stage diagnostics are fine.
-- Deterministic planner is the default; `ai` mode needs a server-side NVIDIA key. The
-  server never returns coordinates/selectors/code — the browser resolves actions locally.
+- The planner path is **not broken** — do not "fix" the decision flow. The only real gap is
+  the live key.
+- Never log/return raw OCR, PII, request body, or the API key. The new upstream-status
+  header is numeric-only and safe.
+- Server never returns coordinates/selectors/code; the model may only target a current
+  `actionCandidates` id; hallucinated/non-actionable targets are rejected (tested).
+- Do NOT start Phase 11B (autonomous loop) until the live NVIDIA check passes.

@@ -256,6 +256,7 @@ class ProviderHTTPTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(PlannerFailure) as error:
                     await plan_ai(fixture(), NvidiaProvider(transport=httpx.MockTransport(handler)))
                 self.assertEqual(error.exception.status_code, 503)
+                self.assertEqual(error.exception.upstream_status, status)
                 self.assertEqual(len(calls), 1)
                 self.assertNotIn("private", str(error.exception))
 
@@ -339,6 +340,21 @@ class AIModeEndpointTests(unittest.TestCase):
             self.assertEqual(response.headers[MODE_HEADER], "ai")
             self.assertEqual(response.json(), {"detail": "AI planner unavailable."})
             self.assertEqual(client.get("/health").status_code, 200)
+
+    def test_ai_failure_surfaces_safe_numeric_upstream_status(self):
+        # An opaque 503 hides why NVIDIA rejected us; the upstream HTTP status
+        # (e.g. 404 wrong model) is surfaced as a safe numeric header, never a body.
+        class UpstreamErrorProvider:
+            async def complete(self, content):
+                raise PlannerFailure(upstream_status=404)
+        with TestClient(create_app(ORIGIN, mode="ai", provider=UpstreamErrorProvider())) as client:
+            response = client.post("/plan", json=fixture())
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response.headers[MODE_HEADER], "ai")
+            self.assertEqual(response.headers["X-EdgeSight-Planner-Upstream-Status"], "404")
+            self.assertEqual(response.json(), {"detail": "AI planner unavailable."})
+            for secret in SECRETS:
+                self.assertNotIn(secret, response.text)
 
     def test_invalid_output_is_502_with_ai_mode_no_fallback(self):
         with TestClient(create_app(ORIGIN, mode="ai", provider=FakeProvider("invalid"))) as client:

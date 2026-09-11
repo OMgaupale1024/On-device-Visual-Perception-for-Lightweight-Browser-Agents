@@ -49,6 +49,9 @@ RE-OBSERVATION  verification/verify-*.js (fresh pixels, local)   [IMPLEMENTED]
   outbound privacy guard → frozen SafeAgentContext.
 - FastAPI `/plan`: strict validation, deterministic planner, one NVIDIA NIM adapter
   (no fallback), server-owned observation binding, numeric Server-Timing headers.
+  Phase 11A verified (offline): in AI mode **Nemotron itself** chooses CLICK/STOP + target;
+  the server only validates (target ∈ `actionCandidates`) and never substitutes a decision.
+  AI failures surface a safe numeric `X-EdgeSight-Planner-Upstream-Status` header.
 - `actionCandidates` (Phase 10 groundwork): local geometry maps pixel-OCR text onto
   clickable DOM control regions so the planner may only `CLICK` a genuine target
   (e.g. "Continue"), never a label like "Password". Only safe visual ids cross the wire.
@@ -61,13 +64,17 @@ RE-OBSERVATION  verification/verify-*.js (fresh pixels, local)   [IMPLEMENTED]
   Manual verification). Automated unit doubles are not acceptance.
 - **crop-OCR refinement is ineffective in live Chrome** (committed, Node-green, but a
   styled "Continue" button still misread, e.g. `visual_17='Looe'@0.39`). Rework candidate.
-- No `NVIDIA_API_KEY` in the working shell → the real AI planner path is unexercised here.
+- No `NVIDIA_API_KEY` in the working shell → the **live** NVIDIA round-trip is still
+  unverified (architecture, parser, target validation and fail-closed behaviour are all
+  verified offline; a real key is the only remaining gap). On the first live run, confirm
+  `NVIDIA_MODEL` is a real NIM model id — a 404 now shows in the upstream-status header.
 
 ## Current task
-Repository cleanup + documentation consolidation is **DONE** (this session). The next
-development task is to begin the **autonomous OBSERVE → PLAN → ACT → OBSERVE loop**
-(roadmap #1–2 below), building on the committed `actionCandidates` groundwork. Do NOT
-start new agent features without reading `HANDOFF.md` first.
+Phase 11A (verify the real NVIDIA Nemotron planner path) is **verified offline** — the
+architecture, parser, target validation and fail-closed behaviour are proven by 54 server
+tests + a live deterministic smoke + a live AI-mode 503. The **live NVIDIA round-trip is
+still PENDING a real key** (see below). Next: run the live NVIDIA check, then Phase 11B
+(the autonomous OBSERVE → PLAN → ACT loop). Read `HANDOFF.md` before writing code.
 
 ## Critical architecture decisions (do not break)
 - **One privacy boundary out of the browser:** only the frozen builder-approved
@@ -117,16 +124,16 @@ npm test            # extension suite  (node --test) — 238 entries
 npm run check       # syntax / manifest / packaged-asset integrity
 npm run benchmark   # Phase 9 controlled benchmark (needs server venv)
 # server tests (from server/):
-.venv/Scripts/python.exe -m unittest discover -s tests   # 53 methods
+.venv/Scripts/python.exe -m unittest discover -s tests   # 54 methods
 # server run (from server/, deterministic):
 .venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 Full Windows setup (venv, extension origin, AI mode) is in `README.md` / `server/README.md`.
 
 ## Git state
-- Branch `main`, synchronized with `origin/main`. Phase 9 baseline was `ead24d3`.
-- `c3c494f` committed the Phase 10 WIP (actionCandidates + crop-OCR refinement).
-- The current HEAD is the cleanup commit that contains this file — resolve with
+- Branch `main`, synchronized with `origin/main`. Cleanup baseline was `3184bc3`.
+- `c3c494f` = Phase 10 WIP; `3184bc3` = repo cleanup.
+- The current HEAD is the Phase 11A commit that contains this file — resolve with
   `git log -1 --format=%H` (a commit cannot embed its own hash).
 
 ## Manual verification
@@ -134,7 +141,11 @@ Full Windows setup (venv, extension origin, AI mode) is in `README.md` / `server
   5 sensitive/redacted, `rawPiiIncluded=false`, `privacy.status=safe`, 5 role placeholders,
   Bengaluru/Conference retained, deterministic planning. NVIDIA endpoint returns valid JSON
   (verified out of band).
-- **PENDING (never observed):** Phase 6B integrated AI-mode run; Phase 7 positive click +
+- **VERIFIED (offline, Phase 11A):** AI-mode planner path — deterministic live smoke PASS;
+  AI mode with no key returns 503 `X-EdgeSight-Planner: ai` (fails closed, not deterministic);
+  mock-transport tests prove Nemotron's decision is used and hallucinated / non-actionable
+  targets are rejected. The live NVIDIA HTTP round-trip itself is NOT yet verified (no key).
+- **PENDING (never observed):** live NVIDIA AI-mode run (real key); Phase 7 positive click +
   stale/wrong-page negative; Phase 8 positive/negative visual verification; Phase 9 live
   Chrome timings + CPU/GPU/RAM. Prior Computer-Use attempts stopped on a URL-policy block.
 
@@ -152,7 +163,7 @@ every privacy invariant and the server action contract intact. First confirm the
 planner path end-to-end (roadmap #1).
 
 ## Remaining roadmap (not sacred — adjust to repo reality)
-1. Verify the real NVIDIA Nemotron planner path end-to-end.
+1. Verify the real NVIDIA Nemotron planner path end-to-end (offline done; live run pending a key).
 2. Autonomous controller loop: OBSERVE → PLAN → ACT → OBSERVE.
 3. Expanded safe actions: NAVIGATE, CLICK, TYPE, TYPE_LOCAL_REF, PRESS_KEY, SCROLL, WAIT, STOP.
 4. Browser navigation / new-tab control.

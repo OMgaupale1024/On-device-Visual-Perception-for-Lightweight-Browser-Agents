@@ -62,8 +62,13 @@ def create_app(allowed_origin: str | None = None, *, mode=None, provider=None) -
         try:
             return measured(await plan_ai(context.model_dump(mode="python"), ai_provider))
         except PlannerFailure as failure:
+            headers = {MODE_HEADER: selected_mode}
+            if failure.upstream_status is not None:
+                # Safe numeric diagnostic: the NVIDIA HTTP status behind an opaque 503,
+                # so a live run distinguishes wrong-model / auth / rate-limit. No payload.
+                headers["X-EdgeSight-Planner-Upstream-Status"] = str(failure.upstream_status)
             return JSONResponse(status_code=failure.status_code, content={"detail": "AI planner unavailable."},
-                                headers={MODE_HEADER: selected_mode})
+                                headers=headers)
         except ValueError:
             return JSONResponse(status_code=422, content={"detail": "Invalid or unsafe agent context."},
                                 headers={MODE_HEADER: selected_mode})
