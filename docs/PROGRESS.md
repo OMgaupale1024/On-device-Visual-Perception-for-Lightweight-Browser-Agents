@@ -1,7 +1,7 @@
 # EdgeSight progress
 
-**Phases 0-8 complete in code. Phase 8 manual Chrome verification PENDING.**
-Checkpoint 2026-09-11. No Phase 9 work.
+**Phases 0-9 complete in code. Phase 9 manual Chrome metrics PENDING.**
+Checkpoint 2026-09-11. Phase 9 controlled evaluation implemented.
 
 Phase 6A remains user Chrome-verified: POST /plan -> FastAPI 200, seven fields, five
 sensitive fields/redacted regions, privacy safe/rawPiiIncluded=false, five role
@@ -28,8 +28,8 @@ Phase 8 positive and negative manual demos remain PENDING: Chrome was launched b
 Computer Use stopped because it could not reliably determine the browser URL to enforce
 policy. No extension reload/click/verification was observed, no manual pass claimed.
 
-Automated results: **207/207 extension entries** (55 new Phase 8 + all 152 prior),
-**50/50 server methods**, syntax/manifest/packaged OCR integrity and diff check PASS.
+Automated results: **230/230 extension entries** (23 new Phase 9 + all 207 prior),
+**52/52 server methods**, syntax/manifest/packaged OCR integrity and diff check PASS.
 Genuine cold/warm Node/WASM synthetic OCR smoke PASS; real local FastAPI smoke confirms
 deterministic 200/CLICK and ai missing-key 503 with correct headers, no provider call.
 Tests prove fresh capture/OCR/identity, document replacement, privacy canaries absent
@@ -41,6 +41,17 @@ phrase policy, no backend-persistence proof, non-atomic tab/capture checks, cros
 permission failures, transient state lost on worker restart. Existing model limitations
 remain. No new side effects/provider/Pi or general automation.
 
-Exact next implementation task: **PHASE 9 - SIH evaluation metrics**. NOT STARTED.
-Official weights: visual-context accuracy 25%, PII precision/recall 20%, redaction
-precision 20%, client resources 20%, end-to-end latency 15%. No fabricated values.
+Phase 9: versioned controlled fixtures/JSON, real pixel-OCR benchmark, actual PII
+classifier and redaction-command evaluation, actual asset/payload bytes, cold/warm
+Node OCR and deterministic HTTP timings, current-run popup timing hooks. Quality:
+41/41 expected text items (5 synthetic screens); PII TP 15/FP 6/FN 5/TN 14 (40 candidates),
+precision 71.43%, recall 75%, F1 73.17%; redaction precision 72.09%, recall 75.61%,
+safe preservation70.73% (3 layouts). Failures retained. Full values and limitations
+in METRICS.md/reference JSON. No general accuracy, native pixel coverage or CPU claim.
+
+Phase 9 Chrome live timings PENDING. Current browser inventory empty; no configured
+NVIDIA key or provider request. Benchmark timings are Node/Python/loopback only;
+Chrome plan/verification/machine totals are unmeasured. Human delay kept separate.
+
+Exact next implementation task: **PHASE 10 - final SIH demo polish + submission and
+presentation evidence**. NOT STARTED. Stop after Phase 9 commit/push.

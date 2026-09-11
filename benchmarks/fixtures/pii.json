@@ -1,0 +1,293 @@
+{
+  "datasetVersion": 1,
+  "description": "20 sensitive field signals and 20 neutral/difficult negatives; independent labels, no raw field values",
+  "roles": [
+    "name",
+    "email",
+    "phone",
+    "employee_id",
+    "password"
+  ],
+  "rows": [
+    {
+      "id": "candidate_1",
+      "expected": "name",
+      "signal": {
+        "label": "Full Name"
+      }
+    },
+    {
+      "id": "candidate_2",
+      "expected": "name",
+      "signal": {
+        "autocomplete": "given-name"
+      }
+    },
+    {
+      "id": "candidate_3",
+      "expected": "name",
+      "signal": {
+        "name": "first_name"
+      }
+    },
+    {
+      "id": "candidate_4",
+      "expected": "name",
+      "signal": {
+        "label": "Traveller"
+      }
+    },
+    {
+      "id": "candidate_5",
+      "expected": "email",
+      "signal": {
+        "type": "email"
+      }
+    },
+    {
+      "id": "candidate_6",
+      "expected": "email",
+      "signal": {
+        "label": "E-mail"
+      }
+    },
+    {
+      "id": "candidate_7",
+      "expected": "email",
+      "signal": {
+        "autocomplete": "email"
+      }
+    },
+    {
+      "id": "candidate_8",
+      "expected": "email",
+      "signal": {
+        "label": "Correspondence address"
+      }
+    },
+    {
+      "id": "candidate_9",
+      "expected": "phone",
+      "signal": {
+        "type": "tel"
+      }
+    },
+    {
+      "id": "candidate_10",
+      "expected": "phone",
+      "signal": {
+        "label": "Mobile"
+      }
+    },
+    {
+      "id": "candidate_11",
+      "expected": "phone",
+      "signal": {
+        "label": "Contact number"
+      }
+    },
+    {
+      "id": "candidate_12",
+      "expected": "phone",
+      "signal": {
+        "label": "Reach me"
+      }
+    },
+    {
+      "id": "candidate_13",
+      "expected": "employee_id",
+      "signal": {
+        "label": "Employee ID"
+      }
+    },
+    {
+      "id": "candidate_14",
+      "expected": "employee_id",
+      "signal": {
+        "name": "emp_no"
+      }
+    },
+    {
+      "id": "candidate_15",
+      "expected": "employee_id",
+      "signal": {
+        "label": "Employee number"
+      }
+    },
+    {
+      "id": "candidate_16",
+      "expected": "employee_id",
+      "signal": {
+        "label": "Staff code"
+      }
+    },
+    {
+      "id": "candidate_17",
+      "expected": "password",
+      "signal": {
+        "type": "password"
+      }
+    },
+    {
+      "id": "candidate_18",
+      "expected": "password",
+      "signal": {
+        "autocomplete": "new-password"
+      }
+    },
+    {
+      "id": "candidate_19",
+      "expected": "password",
+      "signal": {
+        "label": "Password"
+      }
+    },
+    {
+      "id": "candidate_20",
+      "expected": "password",
+      "signal": {
+        "label": "Access secret"
+      }
+    },
+    {
+      "id": "candidate_21",
+      "expected": "other",
+      "signal": {
+        "label": "Destination"
+      }
+    },
+    {
+      "id": "candidate_22",
+      "expected": "other",
+      "signal": {
+        "label": "Purpose"
+      }
+    },
+    {
+      "id": "candidate_23",
+      "expected": "other",
+      "signal": {
+        "label": "Continue"
+      }
+    },
+    {
+      "id": "candidate_24",
+      "expected": "other",
+      "signal": {
+        "label": "Cancel"
+      }
+    },
+    {
+      "id": "candidate_25",
+      "expected": "other",
+      "signal": {
+        "label": "Travel date"
+      }
+    },
+    {
+      "id": "candidate_26",
+      "expected": "other",
+      "signal": {
+        "label": "Meeting time"
+      }
+    },
+    {
+      "id": "candidate_27",
+      "expected": "other",
+      "signal": {
+        "label": "File name"
+      }
+    },
+    {
+      "id": "candidate_28",
+      "expected": "other",
+      "signal": {
+        "label": "Username"
+      }
+    },
+    {
+      "id": "candidate_29",
+      "expected": "other",
+      "signal": {
+        "label": "Nickname"
+      }
+    },
+    {
+      "id": "candidate_30",
+      "expected": "other",
+      "signal": {
+        "label": "Screen name"
+      }
+    },
+    {
+      "id": "candidate_31",
+      "expected": "other",
+      "signal": {
+        "label": "Department"
+      }
+    },
+    {
+      "id": "candidate_32",
+      "expected": "other",
+      "signal": {
+        "label": "Budget"
+      }
+    },
+    {
+      "id": "candidate_33",
+      "expected": "other",
+      "signal": {
+        "label": "Email template"
+      }
+    },
+    {
+      "id": "candidate_34",
+      "expected": "other",
+      "signal": {
+        "label": "Phone model"
+      }
+    },
+    {
+      "id": "candidate_35",
+      "expected": "other",
+      "signal": {
+        "label": "Password policy"
+      }
+    },
+    {
+      "id": "candidate_36",
+      "expected": "other",
+      "signal": {
+        "label": "Employee ID format"
+      }
+    },
+    {
+      "id": "candidate_37",
+      "expected": "other",
+      "signal": {
+        "label": "Contact name of department"
+      }
+    },
+    {
+      "id": "candidate_38",
+      "expected": "other",
+      "signal": {
+        "label": "Mobile platform"
+      }
+    },
+    {
+      "id": "candidate_39",
+      "expected": "other",
+      "signal": {
+        "label": "Project name"
+      }
+    },
+    {
+      "id": "candidate_40",
+      "expected": "other",
+      "signal": {
+        "label": "Reference"
+      }
+    }
+  ]
+}

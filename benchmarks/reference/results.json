@@ -1,0 +1,687 @@
+{
+  "benchmarkVersion": 1,
+  "label": "controlled prototype benchmark",
+  "measuredAt": "2026-09-11T00:10:52.714Z",
+  "code": {
+    "revision": "6b8172b5b432b4d8afed6f6d493d6c10b91337ef",
+    "dirty": true,
+    "sourceSha256": "83488bd4880c8fd175d2306281791ef994ab1fff763b074e1e6184d3d022883a",
+    "sourceFiles": [
+      "benchmarks/fixtures/filled-small.png",
+      "benchmarks/fixtures/filled.png",
+      "benchmarks/fixtures/missing-purpose.png",
+      "benchmarks/fixtures/multiple-buttons.png",
+      "benchmarks/fixtures/pii.json",
+      "benchmarks/fixtures/rendered.json",
+      "benchmarks/fixtures/screens.json",
+      "benchmarks/fixtures/submitted.png",
+      "extension/manifest.json",
+      "extension/src/actions/execute-click.js",
+      "extension/src/actions/geometry.js",
+      "extension/src/background/local-observation.js",
+      "extension/src/background/service-worker.js",
+      "extension/src/content/observe.js",
+      "extension/src/metrics/metrics.js",
+      "extension/src/perception/bridge.js",
+      "extension/src/perception/cleanup.js",
+      "extension/src/perception/config.js",
+      "extension/src/perception/diagnostics.js",
+      "extension/src/perception/normalize.js",
+      "extension/src/perception/ocr.js",
+      "extension/src/perception/offscreen.js",
+      "extension/src/perception/pipeline.js",
+      "extension/src/popup/popup.js",
+      "extension/src/privacy/agent-context.js",
+      "extension/src/privacy/collect.js",
+      "extension/src/privacy/detect.js",
+      "extension/src/privacy/geometry.js",
+      "extension/src/privacy/guard.js",
+      "extension/src/privacy/overlap.js",
+      "extension/src/privacy/redact.js",
+      "extension/src/privacy/semantic.js",
+      "extension/src/privacy/visual.js",
+      "extension/src/shared/messages.js",
+      "extension/src/transport/config.js",
+      "extension/src/transport/planner-client.js",
+      "extension/src/verification/verify-after-click.js",
+      "extension/src/verification/verify-visual-result.js",
+      "extension/tests/planner-fixture.mjs",
+      "package-lock.json",
+      "package.json",
+      "scripts/benchmark-redaction.mjs",
+      "scripts/benchmark-server.py",
+      "scripts/benchmark-table.mjs",
+      "scripts/benchmark.mjs",
+      "scripts/check.mjs",
+      "scripts/create-ocr-fixture.ps1",
+      "scripts/generate-benchmark-fixtures.ps1",
+      "scripts/package-ocr.mjs",
+      "scripts/smoke-ocr.mjs",
+      "scripts/smoke-planner.mjs",
+      "server/app/__init__.py",
+      "server/app/ai_contract.py",
+      "server/app/ai_input.py",
+      "server/app/ai_planner.py",
+      "server/app/config.py",
+      "server/app/main.py",
+      "server/app/nvidia_provider.py",
+      "server/app/planner.py",
+      "server/app/schemas.py"
+    ]
+  },
+  "officialWeights": {
+    "visualContext": 25,
+    "piiDetection": 20,
+    "redaction": 20,
+    "resources": 20,
+    "latency": 15
+  },
+  "environment": {
+    "scope": "Measured on this prototype environment",
+    "os": "Windows_NT 10.0.26200 x64",
+    "node": "v24.11.0",
+    "cpu": "AMD Ryzen 9 5900HX with Radeon Graphics        ",
+    "logicalCpus": 16,
+    "browser": null,
+    "browserReason": "Node/WASM benchmark; no Chrome measurement",
+    "gpu": null,
+    "ocr": "Tesseract.js 6.0.1 / core 6.1.2 / English packaged data / PSM 11",
+    "python": "3.10.11"
+  },
+  "visualContext": {
+    "samples": [
+      {
+        "id": "filled",
+        "width": 1000,
+        "height": 760,
+        "sha256": "41f8e4cac12663b197f427877eb5733b3af1a8a933f34b704daf71f646cb5921",
+        "status": "Ready",
+        "expected": 11,
+        "correct": 11,
+        "missed": 0,
+        "unexpected": 0,
+        "missedIndexes": [],
+        "accuracy": 1,
+        "precision": 1
+      },
+      {
+        "id": "missing-purpose",
+        "width": 1000,
+        "height": 760,
+        "sha256": "3e34ebc69a3596b9c49f1eb3839e4652189b8b5e451bb8f2162f40d9d5674c98",
+        "status": "Ready",
+        "expected": 11,
+        "correct": 11,
+        "missed": 0,
+        "unexpected": 0,
+        "missedIndexes": [],
+        "accuracy": 1,
+        "precision": 1
+      },
+      {
+        "id": "submitted",
+        "width": 1000,
+        "height": 400,
+        "sha256": "7e901da1fd774773f12d3998e8ca748f830fa19fb0bab8f58f9b15ab14a35199",
+        "status": "Ready",
+        "expected": 2,
+        "correct": 2,
+        "missed": 0,
+        "unexpected": 0,
+        "missedIndexes": [],
+        "accuracy": 1,
+        "precision": 1
+      },
+      {
+        "id": "filled-small",
+        "width": 750,
+        "height": 570,
+        "sha256": "9cd78717a23b170387965748e6881c0d95a50f4bdcfa3b1f80afe09f6ece05a5",
+        "status": "Ready",
+        "expected": 11,
+        "correct": 11,
+        "missed": 0,
+        "unexpected": 0,
+        "missedIndexes": [],
+        "accuracy": 1,
+        "precision": 1
+      },
+      {
+        "id": "multiple-buttons",
+        "width": 1000,
+        "height": 500,
+        "sha256": "f25bf54a7fca4dcdd507f0977094c0787893bc3be533f310abd398e15f8ef548",
+        "status": "Ready",
+        "expected": 6,
+        "correct": 6,
+        "missed": 0,
+        "unexpected": 0,
+        "missedIndexes": [],
+        "accuracy": 1,
+        "precision": 1
+      }
+    ],
+    "normalization": "NFKC/lowercase/trim/collapse whitespace/punctuation spacing; exact line items; one-to-one; no fuzzy or line joining",
+    "sampleCount": 5,
+    "expected": 41,
+    "correct": 41,
+    "missed": 0,
+    "unexpected": 0,
+    "accuracy": 1,
+    "precision": 1
+  },
+  "piiDetection": {
+    "samples": 40,
+    "overall": {
+      "tp": 15,
+      "fp": 6,
+      "fn": 5,
+      "tn": 14,
+      "precision": 0.7142857142857143,
+      "recall": 0.75,
+      "f1": 0.7317073170731707
+    },
+    "perCategory": {
+      "name": {
+        "tp": 3,
+        "fp": 1,
+        "fn": 1,
+        "tn": 35,
+        "precision": 0.75,
+        "recall": 0.75,
+        "f1": 0.75
+      },
+      "email": {
+        "tp": 3,
+        "fp": 1,
+        "fn": 1,
+        "tn": 35,
+        "precision": 0.75,
+        "recall": 0.75,
+        "f1": 0.75
+      },
+      "phone": {
+        "tp": 3,
+        "fp": 2,
+        "fn": 1,
+        "tn": 34,
+        "precision": 0.6,
+        "recall": 0.75,
+        "f1": 0.6666666666666666
+      },
+      "employee_id": {
+        "tp": 3,
+        "fp": 1,
+        "fn": 1,
+        "tn": 35,
+        "precision": 0.75,
+        "recall": 0.75,
+        "f1": 0.75
+      },
+      "password": {
+        "tp": 3,
+        "fp": 1,
+        "fn": 1,
+        "tn": 35,
+        "precision": 0.75,
+        "recall": 0.75,
+        "f1": 0.75
+      }
+    },
+    "method": "Actual Phase 2 field-signal detector, not arbitrary pixel PII",
+    "errors": [
+      {
+        "id": "candidate_4",
+        "expected": "name",
+        "predicted": "other"
+      },
+      {
+        "id": "candidate_8",
+        "expected": "email",
+        "predicted": "other"
+      },
+      {
+        "id": "candidate_12",
+        "expected": "phone",
+        "predicted": "other"
+      },
+      {
+        "id": "candidate_16",
+        "expected": "employee_id",
+        "predicted": "other"
+      },
+      {
+        "id": "candidate_20",
+        "expected": "password",
+        "predicted": "other"
+      },
+      {
+        "id": "candidate_33",
+        "expected": "other",
+        "predicted": "email"
+      },
+      {
+        "id": "candidate_34",
+        "expected": "other",
+        "predicted": "phone"
+      },
+      {
+        "id": "candidate_35",
+        "expected": "other",
+        "predicted": "password"
+      },
+      {
+        "id": "candidate_36",
+        "expected": "other",
+        "predicted": "employee_id"
+      },
+      {
+        "id": "candidate_37",
+        "expected": "other",
+        "predicted": "name"
+      },
+      {
+        "id": "candidate_38",
+        "expected": "other",
+        "predicted": "phone"
+      }
+    ]
+  },
+  "redaction": {
+    "method": "Actual detector + redactScreenshot final mask commands; Canvas adapter, not native pixels",
+    "samples": 3,
+    "iouThreshold": 0.5,
+    "expected": 41,
+    "masks": 43,
+    "correct": 31,
+    "missed": 10,
+    "unnecessary": 12,
+    "safeRegions": 41,
+    "safeDamaged": 12,
+    "precision": 0.7209302325581395,
+    "recall": 0.7560975609756098,
+    "safePreservation": 0.7073170731707317,
+    "results": [
+      {
+        "id": "signals-scale-1",
+        "expected": 20,
+        "masks": 21,
+        "correct": 15,
+        "missed": 5,
+        "unnecessary": 6,
+        "safeRegions": 20,
+        "safeDamaged": 6,
+        "precision": 0.7142857142857143,
+        "recall": 0.75,
+        "safePreservation": 0.7,
+        "iouThreshold": 0.5
+      },
+      {
+        "id": "signals-scale-1.25",
+        "expected": 20,
+        "masks": 21,
+        "correct": 15,
+        "missed": 5,
+        "unnecessary": 6,
+        "safeRegions": 20,
+        "safeDamaged": 6,
+        "precision": 0.7142857142857143,
+        "recall": 0.75,
+        "safePreservation": 0.7,
+        "iouThreshold": 0.5
+      },
+      {
+        "id": "fractional-clipped",
+        "expected": 1,
+        "masks": 1,
+        "correct": 1,
+        "missed": 0,
+        "unnecessary": 0,
+        "safeRegions": 1,
+        "safeDamaged": 0,
+        "precision": 1,
+        "recall": 1,
+        "safePreservation": 1,
+        "iouThreshold": 0.5
+      }
+    ]
+  },
+  "resources": {
+    "ocrCold": {
+      "method": "New worker initialization + fixture read + inference + cleanup + local filtering",
+      "runsMs": [
+        526.53,
+        521.2864
+      ],
+      "count": 2,
+      "min": 521.2864,
+      "median": 523.9082,
+      "mean": 523.9082,
+      "max": 526.53
+    },
+    "ocrInitialization": {
+      "method": "New worker + PSM configuration",
+      "runsMs": [
+        190.83580000000006,
+        188.51790000000028
+      ],
+      "count": 2,
+      "min": 188.51790000000028,
+      "median": 189.67685000000017,
+      "mean": 189.67685000000017,
+      "max": 190.83580000000006
+    },
+    "ocrWarmInference": {
+      "method": "Reused second cold worker; fixed filled PNG; recognition only",
+      "runsMs": [
+        255.7545,
+        249.83160000000044,
+        247.72989999999982,
+        248.1525999999999,
+        249.22879999999986
+      ],
+      "count": 5,
+      "min": 247.72989999999982,
+      "median": 249.22879999999986,
+      "mean": 250.13948,
+      "max": 255.7545
+    },
+    "visualPrivacy": {
+      "method": "Node actual sanitizeVisual on warm OCR",
+      "runsMs": [
+        0.23390000000017608,
+        0.31439999999975043,
+        0.24370000000044456,
+        0.20800000000008367,
+        0.16869999999971697
+      ],
+      "count": 5,
+      "min": 0.16869999999971697,
+      "median": 0.23390000000017608,
+      "mean": 0.23374000000003434,
+      "max": 0.31439999999975043
+    },
+    "detection": {
+      "method": "Node actual detector on all 40 signals",
+      "runsMs": [
+        1.0169999999998254,
+        0.05929999999989377,
+        0.04809999999997672,
+        0.04629999999997381,
+        0.04530000000022483,
+        0.049100000000180444,
+        0.044499999999970896,
+        0.04390000000012151,
+        0.04129999999986467,
+        0.042300000000068394
+      ],
+      "count": 10,
+      "min": 0.04129999999986467,
+      "median": 0.04580000000009932,
+      "mean": 0.14371000000001005,
+      "max": 1.0169999999998254
+    },
+    "contextConstruction": {
+      "method": "Node actual builder + final guard on fixed safe planning fixture",
+      "runsMs": [
+        0.8101000000001477,
+        0.20869999999968059,
+        0.10390000000006694,
+        0.09009999999989304,
+        0.6936000000000604,
+        0.14010000000007494,
+        0.1087999999999738,
+        0.06790000000000873,
+        0.08100000000013097,
+        0.07090000000016516
+      ],
+      "count": 10,
+      "min": 0.06790000000000873,
+      "median": 0.10635000000002037,
+      "mean": 0.23751000000002023,
+      "max": 0.8101000000001477
+    },
+    "redactionCommands": {
+      "method": "Node Canvas-command adapter, detection + redaction; NOT browser latency",
+      "runsMs": [
+        1.0839000000000851,
+        0.2017000000000735,
+        0.198399999999765,
+        0.21409999999968932,
+        0.20479999999997744,
+        0.17550000000028376,
+        0.14110000000027867,
+        0.14370000000008076,
+        0.20190000000002328,
+        0.22380000000021028,
+        0.20140000000037617,
+        0.14069999999992433,
+        0.18010000000003856,
+        0.1394999999997708,
+        0.14289999999982683,
+        0.14299999999957436,
+        0.1430000000000291,
+        0.11770000000024083,
+        0.2889999999997599,
+        0.1299999999996544,
+        0.1048000000000684,
+        0.05429999999978463,
+        0.04790000000002692,
+        0.04529999999977008,
+        0.044900000000325235,
+        0.04539999999997235,
+        0.04529999999977008,
+        0.04639999999972133,
+        0.04419999999981883,
+        0.04819999999972424
+      ],
+      "count": 30,
+      "min": 0.04419999999981883,
+      "median": 0.14200000000005275,
+      "mean": 0.16476333333328816,
+      "max": 1.0839000000000851,
+      "p95": 0.2889999999997599
+    },
+    "localPerceptionAssets": {
+      "method": "On-disk files, not runtime RAM",
+      "files": [
+        {
+          "file": "README.md",
+          "bytes": 1749
+        },
+        {
+          "file": "tesseract.esm.min.js",
+          "bytes": 63220
+        },
+        {
+          "file": "worker.min.js",
+          "bytes": 111162
+        },
+        {
+          "file": "licenses/bmp-js.txt",
+          "bytes": 1077
+        },
+        {
+          "file": "licenses/buffer.txt",
+          "bytes": 2306
+        },
+        {
+          "file": "licenses/idb-keyval.txt",
+          "bytes": 555
+        },
+        {
+          "file": "licenses/ieee754.txt",
+          "bytes": 1465
+        },
+        {
+          "file": "licenses/is-url.txt",
+          "bytes": 1036
+        },
+        {
+          "file": "licenses/regenerator-runtime.txt",
+          "bytes": 1080
+        },
+        {
+          "file": "licenses/runtime-notices.txt",
+          "bytes": 149
+        },
+        {
+          "file": "licenses/tessdata.txt",
+          "bytes": 11357
+        },
+        {
+          "file": "licenses/tesseract-core.txt",
+          "bytes": 11358
+        },
+        {
+          "file": "licenses/tesseract-js.txt",
+          "bytes": 11357
+        },
+        {
+          "file": "licenses/wasm-feature-detect.txt",
+          "bytes": 11341
+        },
+        {
+          "file": "licenses/worker-notices.txt",
+          "bytes": 466
+        },
+        {
+          "file": "licenses/zlibjs.txt",
+          "bytes": 1222
+        },
+        {
+          "file": "lang/eng.traineddata.gz",
+          "bytes": 2952873
+        },
+        {
+          "file": "core/tesseract-core-lstm.wasm.js",
+          "bytes": 3954181
+        },
+        {
+          "file": "core/tesseract-core-simd-lstm.wasm.js",
+          "bytes": 3954569
+        }
+      ],
+      "bytes": 11092523
+    },
+    "extensionDirectoryBytes": 11314033,
+    "memory": {
+      "status": "NOT_MEASURED",
+      "method": "Browser memory percentage requires manual Chrome measurement"
+    },
+    "cpuGpuUtilization": {
+      "status": "NOT_MEASURED"
+    },
+    "safeContextBytes": 1553,
+    "providerInputBytes": 1058,
+    "serverRequestBytes": 1553
+  },
+  "latency": {
+    "serverValidation": {
+      "method": "Python actual Pydantic validation, fixed fixture",
+      "runsMs": [
+        0.6797999958507717,
+        0.2424000049359165,
+        0.24340000527445227,
+        0.24309999571414664,
+        0.24369999300688505,
+        0.41590000182623044,
+        0.4129999942961149,
+        0.4236999957356602,
+        0.40720000106375664,
+        0.42469999607419595
+      ],
+      "count": 10,
+      "min": 0.2424000049359165,
+      "median": 0.41009999767993577,
+      "mean": 0.373689998377813,
+      "max": 0.6797999958507717
+    },
+    "deterministicPlanner": {
+      "method": "Python actual deterministic plan() only",
+      "runsMs": [
+        0.05370000144466758,
+        0.013800003216601908,
+        0.012399999832268804,
+        0.012500000593718141,
+        0.011900003300979733,
+        0.031600000511389226,
+        0.03170000127283856,
+        0.03289999585831538,
+        0.024900000425986946,
+        0.02559999848017469
+      ],
+      "count": 10,
+      "min": 0.011900003300979733,
+      "median": 0.025249999453080818,
+      "mean": 0.025100000493694097,
+      "max": 0.05370000144466758
+    },
+    "providerProjection": {
+      "method": "Python actual prepare_ai_input, no provider call",
+      "runsMs": [
+        0.5269000030239113,
+        0.4737999988719821,
+        0.4718999989563599,
+        0.44350000098347664,
+        0.7059000054141507,
+        0.8237000001827255,
+        0.7849000030546449,
+        0.7949999999254942,
+        0.7569000008516014,
+        0.7585999992443249
+      ],
+      "count": 10,
+      "min": 0.44350000098347664,
+      "median": 0.731400003132876,
+      "mean": 0.6541100010508671,
+      "max": 0.8237000001827255
+    },
+    "deterministicHttp": {
+      "method": "urllib -> loopback FastAPI /plan -> validated response; not Chrome plan latency",
+      "runsMs": [
+        3.178999999363441,
+        1.81200000224635,
+        1.687700001639314,
+        1.5783999988343567,
+        1.6600000017206185,
+        19.00579999346519,
+        1.9044999935431406,
+        12.897599997813813,
+        1.902600000903476,
+        13.835500001732726
+      ],
+      "count": 10,
+      "min": 1.5783999988343567,
+      "median": 1.9035499972233083,
+      "mean": 5.9463099991262425,
+      "max": 19.00579999346519,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ]
+    },
+    "nvidia": {
+      "status": "PENDING",
+      "reason": "No configured key"
+    },
+    "chromePlan": {
+      "status": "PENDING"
+    },
+    "chromePostExecution": {
+      "status": "PENDING"
+    },
+    "chromeMachineTotal": {
+      "status": "PENDING",
+      "reason": "Do not sum mixed runtime benchmarks into an end-to-end claim"
+    }
+  }
+}

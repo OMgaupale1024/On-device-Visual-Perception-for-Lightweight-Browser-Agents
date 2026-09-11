@@ -1,85 +1,73 @@
-# EdgeSight - Phase 8 handoff
+# EdgeSight - Phase 9 handoff
 
-**Phases 0-8 code complete. Phase 8 manual Chrome verification PENDING.**
-Stop after this checkpoint's commit/push. Exact next implementation: Phase 9 SIH
-metrics; not started. Read AI_CONTEXT.md for the current architecture and invariants,
-PHASE_8_PLAN.md for the pre-implementation plan, and TESTING.md for actual evidence.
+**Phases 0-9 code complete. Phase 9 manual Chrome timings PENDING.**
+Exact next task: **Phase 10 - final SIH demo polish + submission/presentation evidence**.
+Not started. Read AI_CONTEXT.md, METRICS.md, PHASE_9_PLAN.md and TESTING.md.
+Code, tests and Git are source of truth; sync before changes, never force push.
 
-Before future changes: git status, git branch, git log --oneline -10, git fetch,
-git pull --ff-only; read README/context/architecture/progress/decisions/testing docs.
-Code, tests and Git are source of truth; one writer; never force push.
+Phase 9 adds a small repeatable CLI and current-run numeric popup panel. It does not
+change Phase 8's one 750 ms-delayed same-tab fresh observation, new identity, fresh
+local OCR/privacy or visual-only phrase success. No verification network/provider
+call, new action, retry, provider or general automation was added.
 
-## What changed
+Benchmark command: npm run benchmark. Requires installed Node dependencies and server
+venv. Uses actual pixel OCR, Phase 2 detector, Phase 3 final mask commands through
+Canvas adapter, Phase 5 builder, server validation/projection/planner and 10 temporary
+loopback HTTP requests. Default makes no NVIDIA call. Optional --ai requires a private
+configured key; not run here. JSON schema version1; ignored output, reviewed committed
+reference JSON/table. No user captures; committed PNGs are explicitly synthetic/fake.
 
-Phase 7's user-triggered guarded click now automatically starts local observation.
-After 750 ms, make ONE fresh capture of the intended active tab in its expected window.
-A new document/URL is allowed after the click; the new capture pins its own document.
-Shared background/local-observation.js reuses the existing capture, fresh OCR,
-PII detection, redaction, visual filtering and final context approval transaction.
-Only Analyze / Plan calls the server and creates a ticket. Verification has zero remote
-calls, no /plan or NVIDIA, no second action and no automatic retry/recovery.
+## Reference evidence
 
-verification/verify-visual-result.js requires an approved context, a different
-observation UUID, a post-dispatch timestamp and source=visual evidence. It matches the
-full 'Travel Request Submitted' phrase after conservative normalization; bbox reading
-order can join at most three spatially adjacent OCR fragments. Confidence values are
-recorded as actual 0-1/null, not fabricated or thresholded. Full policy in AI_CONTEXT.
-The popup shows CLICK DISPATCHED -> VERIFYING -> VISUALLY VERIFIED / NOT VERIFIED,
-known expected evidence and before/after IDs. SAFE appears only after privacy reruns.
-The worker retains only safe verification metadata for popup reopen; no persistence.
+- 5 screens, 41 expected safe OCR items, 41 correct:100% on these synthetic layouts only.
+- PII40 candidates:TP 15 FP 6 FN 5 TN 14; precision 71.43%, recall 75%, F1 73.17%.
+- Redaction3 layouts/41 sensitive/41 safe/43 commands:31 correct, 10 missed, 12 unnecessary;
+  precision 72.09%, recall 75.61%, safe preservation70.73%. IoU>=0.5; not Chrome pixels.
+- Cold OCR2 runs median 523.908 ms; warm5 runs median 249.229 ms (Node/WASM).
+- OCR assets11092523 bytes; built context/request1553 bytes; projected input1058 bytes.
+- Deterministic loopback HTTP10 runs median 1.904 ms, mean 5.946 ms, max 19.006 ms; all200.
+- Chrome plan/post-execution/machine latency and CPU/GPU/RAM are unmeasured. Do not
+  manufacture totals from these independent benchmark stages or omit slow samples.
+- Environment/source hashes/raw numeric runs/formulas/limits in METRICS.md and
+  benchmarks/reference/results.json. Windows10.0.26200x64, Ryzen9 5900HX, Node24.11.0,
+  Python3.10.11, Tesseract6.0.1/core6.1.2; browser/GPU version unavailable.
 
-Timings: dispatch/completion timestamps, actual delay, capture, perception, matching,
-total elapsed. Five-second local API bounds, existing 45-second OCR bound, 60-second
-verification deadline with late-result rejection. One attempt. No Phase 9 dashboard.
+Popup shows actual plan/perception/privacy/planner/click/execute/verification/total,
+human interval and safe payload bytes, initially --. Human delay is excluded from
+machine total; reopen uses worker timing boundaries. Server adds allowlisted numeric
+Server-Timing header, action JSON unchanged. See METRICS.md for nonadditive intervals.
 
-## Validation and manual status
+## Tests and manual status
 
-- Extension **207/207 PASS** (55 new, all 152 prior unchanged).
-- Server **50/50 PASS**, unchanged server code. Sandbox escalation was required to
-  access the venv interpreter; no dependency changes.
-- Syntax/manifest/OCR asset integrity and diff whitespace checks PASS.
-- Genuine cold/warm Node/WASM OCR synthetic smoke PASS. This is not Chrome evidence.
-- Real temporary FastAPI HTTP: deterministic 200/CLICK, ai missing-key 503 PASS, mode
-  headers correct, no provider calls, test processes stopped.
-- Phase 6A user Chrome confirmation preserved (7 fields, 5 masks/placeholders, safe
-  context, false raw-PII flag, Bengaluru/Conference retained, working /plan).
-- Phase 6B integrated NVIDIA Chrome **PENDING**. No NVIDIA_API_KEY configured; no key
-  read/printed, no .env present, no live provider request.
-- Phase 7 positive click and stale/wrong-page negative **PENDING**.
-- Phase 8 positive and negative Chrome **PENDING**. Chrome launched, then Computer Use
-  stopped: current URL could not be determined reliably for policy enforcement.
-  No further browser input. No observed extension reload, click or visual verification.
+230/230 extension (207 prior+23), 52/52 server (50 prior+2), 21/21 dedicated metrics tests;
+syntax/manifest/assets checks pass. Real benchmark executes12 pixel recognitions across
+3 workers, 10 detector/context/server repeats and30 redaction-adapter repeats.
 
-## Manual acceptance remaining
+Phase 6A user-confirmed Chrome PASS remains historical evidence. Phase 6B integrated
+NVIDIA Chrome, Phase 7 positive/stale, Phase 8 positive/negative and Phase9 live Chrome
+timings all PENDING. Current browser inventory exposed no browsers/apps; key presence
+false. Historical Phase 8 Computer Use URL-policy block remains unchanged. No actual
+click/verification/performance acceptance was observed here. Unit doubles are not
+manual acceptance.
 
-Start server per server/README.md with exact extension origin. Deterministic mode is
-sufficient to isolate Phase 7/8; ai preferred only with user's valid rotated key.
-Reload EdgeSight 0.8.0, reset Employee Travel Request, use the default goal, Analyze /
-Plan. Confirm OCR READY, privacy SAFE, context READY and CLICK Continue (before evidence).
-Press Execute. Confirm actual click, fresh capture/OCR, distinct observation ID,
-Travel Request Submitted evidence and VISUALLY VERIFIED. The result panel is the primary
-judge display; no raw PII or DevTools required. Record actual mode and results.
-Negative: switch tabs immediately after Execute, before 750 ms capture; reopen popup
-and expect NOT VERIFIED / TAB_CHANGED / Analyze again, no unrelated screenshot evidence.
-See TESTING.md for exact separate Phase 7 and Phase 8 checks. Do not mark pending as PASS
-without observing it. The desired full SIH end-to-end loop is not yet manually proven.
+For manual acceptance: start server per README (record actual mode); reload 0.9.0,
+reset Employee Travel Request, Analyze/Plan, confirm READY/SAFE/CLICK Continue and
+actual timings, Execute, observe real click and fresh distinct observation with
+Travel Request Submitted/VISUALLY VERIFIED. Record plan/post-execution/human/machine
+intervals and failures. Negative: switch tab before 750 ms capture, expect TAB_CHANGED.
+METRICS.md includes Task Manager resource procedure; no manual numbers prefilled.
 
-## Files / limits / checkpoint
+Known limits: tiny correlated clean text fixtures, field-signal PII coverage errors,
+coarse mask-command scoring, no native pixel opacity/resource claim, warm OS caches,
+no calibrated confidence threshold. Phase 8 one-frame/activeTab/OCR/unknown-PII and
+transient-worker limitations remain. No phase10 work.
 
-New: background/local-observation.js, verification/{verify-after-click,verify-visual-result}.js,
-three verification test files, docs/PHASE_8_PLAN.md. Updated worker, popup, messages,
-manifest 0.8.0 and all seven required overview/handoff docs. Server untouched.
+Important new files: metrics/metrics.js, metrics.test.mjs, scripts/benchmark*.{mjs, py},
+generate-benchmark-fixtures.ps1, benchmarks/{fixtures, reference}, server/tests/test_metrics.py,
+PHASE_9_PLAN.md, METRICS.md. Modified worker/local observation/popup/transport/server,
+manifest0.9.0, package scripts and all required overview docs.
 
-Limits: one delayed frame may miss slow transitions; only the full English phrase,
-not backend persistence/causality; OCR/unknown-PII limitations; tab/capture checks are
-not atomic; cross-origin activeTab revocation may block; worker restart loses transient
-state. No general workflow, typing, scrolling, replanning, new provider, Pi or metrics.
-
-Baseline b9d7a92. Latest commit is the one containing this handoff, subject
-feat: add local visual outcome verification; git log -1 --format=%H resolves its hash.
-Final report records normal push, HEAD == origin/main and clean-tree verification.
-No keys, .env, screenshots, PII dumps, dependencies, caches or debug captures committed.
-
-Exact next task: **PHASE 9 - SIH evaluation metrics**: visual-context accuracy 25%,
-PII precision/recall 20%, redaction precision 20%, client resources 20%, latency 15%.
-No fabricated metrics. Phase 9 is NOT STARTED. Stop after Phase 8.
+Baseline6b8172b. Latest commit is the one containing this handoff, subject
+feat: add SIH evaluation metrics; git log -1 --format=%H resolves its hash.
+Final report records normal push, HEAD==origin/main and clean-tree verification.
+Stop after Phase 9. Exact next task: Phase 10 final SIH demo polish/submission evidence.

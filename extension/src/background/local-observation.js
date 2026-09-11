@@ -1,4 +1,5 @@
 // Shared Phase 1-5 local transaction. No planner, tickets or network.
+import { safeMeasurements } from '../metrics/metrics.js';
 import { observePage } from '../content/observe.js';
 import { detectSensitiveFields, countSensitive } from '../privacy/detect.js';
 import { collectLocalValues } from '../privacy/collect.js';
@@ -54,6 +55,7 @@ export async function observeLocal(tab, goal, { signal } = {}) {
   let before, after, rawScreenshot, secrets;
   let stage = 'CAPTURE_FAILED';
   const timings = {};
+  const localStart = performance.now();
   const check = () => { if (signal?.aborted) throw new Error('TIMEOUT'); };
   check();
   try {
@@ -78,14 +80,20 @@ export async function observeLocal(tab, goal, { signal } = {}) {
     check();
     if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error('Page changed during capture.');
     stage = 'PRIVACY_FAILED';
+    const detectionStart = performance.now();
     const fields = detectSensitiveFields(obs.fieldSignals);
+    timings.detectionMs = performance.now() - detectionStart;
     const geometry = fields.map((f) => ({ ...f, rect: obs.fieldSignals.find((s) => s.id === f.id).rect }));
+    const redactionStart = performance.now();
     const visual = await bounded(() => redactScreenshot(rawScreenshot, geometry, obs.viewport), signal);
     check();
+    timings.redactionMs = performance.now() - redactionStart;
+    const semanticStart = performance.now();
     const regions = sensitiveRegions(geometry, obs.viewport, { width: visual.width, height: visual.height });
     secrets = before.values.filter((v) => fields.some((f) => f.id === v.id && f.sensitive)).map((v) => v.value);
     const semantic = sanitizeSemantics(fields, obs.fieldSignals, before.values);
     let safeContext = buildOutboundPackage(visual.handle, semantic, secrets);
+    timings.semanticGuardMs = performance.now() - semanticStart;
     release(before); release(after);
     before = after = null; // Only the known sensitive strings remain until OCR guarding.
     stage = 'PERCEPTION_FAILED';
@@ -95,9 +103,12 @@ export async function observeLocal(tab, goal, { signal } = {}) {
     timings.perceptionMs = performance.now() - perceptionStart;
     stage = 'PRIVACY_FAILED';
     rawScreenshot = null;
+    const visualGuardStart = performance.now();
     if (perception.privacy === 'SAFE') {
       safeContext = buildOutboundPackage(visual.handle, semantic, secrets, perception.value);
     }
+    timings.visualGuardMs = performance.now() - visualGuardStart;
+    const contextStart = performance.now();
     // Phase 5: fuse safe semantic + safe visual state into the canonical, guarded
     // SafeAgentContext. Built defensively so a builder fault never discards working
     // Phase 1-4 results; a privacy failure fails closed (no context, status marked).
@@ -113,6 +124,8 @@ export async function observeLocal(tab, goal, { signal } = {}) {
         });
       } catch { agent = { status: 'ERROR' }; }
     }
+    timings.contextGuardMs = performance.now() - contextStart;
+    timings.localTotalMs = performance.now() - localStart;
     secrets.fill(''); secrets = null;
     check();
     return {
@@ -120,6 +133,9 @@ export async function observeLocal(tab, goal, { signal } = {}) {
       timings,
       result: {
         ok: true,
+        measurements: safeMeasurements({ ...timings, safeContextBytes: agent.bytes,
+          screenshotWidth: visual.width, screenshotHeight: visual.height,
+          sanitizedPngBytes: agent.status === 'READY' ? atob(sanitizedImageForPerception(visual.handle).dataUrl.slice(22)).length : undefined }),
         observation: {
           counts: obs.counts, viewport: obs.viewport, devicePixelRatio: obs.devicePixelRatio,
           fields: safeContext.semantic.fields, sensitiveCount: countSensitive(fields),

@@ -1,0 +1,122 @@
+﻿{
+    "generator":  "System.Drawing Arial 24px, AntiAliasGridFit",
+    "samples":  [
+                    {
+                        "id":  "filled",
+                        "sensitiveRegions":  [
+                                                 {
+                                                     "y":  86,
+                                                     "width":  450,
+                                                     "height":  36,
+                                                     "x":  460
+                                                 },
+                                                 {
+                                                     "y":  146,
+                                                     "width":  450,
+                                                     "height":  36,
+                                                     "x":  460
+                                                 },
+                                                 {
+                                                     "y":  206,
+                                                     "width":  450,
+                                                     "height":  36,
+                                                     "x":  460
+                                                 },
+                                                 {
+                                                     "y":  266,
+                                                     "width":  450,
+                                                     "height":  36,
+                                                     "x":  460
+                                                 },
+                                                 {
+                                                     "y":  566,
+                                                     "width":  450,
+                                                     "height":  36,
+                                                     "x":  460
+                                                 }
+                                             ]
+                    },
+                    {
+                        "id":  "missing-purpose",
+                        "sensitiveRegions":  [
+                                                 {
+                                                     "y":  86,
+                                                     "width":  450,
+                                                     "height":  36,
+                                                     "x":  460
+                                                 },
+                                                 {
+                                                     "y":  146,
+                                                     "width":  450,
+                                                     "height":  36,
+                                                     "x":  460
+                                                 },
+                                                 {
+                                                     "y":  206,
+                                                     "width":  450,
+                                                     "height":  36,
+                                                     "x":  460
+                                                 },
+                                                 {
+                                                     "y":  266,
+                                                     "width":  450,
+                                                     "height":  36,
+                                                     "x":  460
+                                                 },
+                                                 {
+                                                     "y":  566,
+                                                     "width":  450,
+                                                     "height":  36,
+                                                     "x":  460
+                                                 }
+                                             ]
+                    },
+                    {
+                        "id":  "submitted",
+                        "sensitiveRegions":  [
+
+                                             ]
+                    },
+                    {
+                        "id":  "filled-small",
+                        "sensitiveRegions":  [
+                                                 {
+                                                     "y":  64.50,
+                                                     "width":  337.50,
+                                                     "height":  27.00,
+                                                     "x":  345.00
+                                                 },
+                                                 {
+                                                     "y":  109.50,
+                                                     "width":  337.50,
+                                                     "height":  27.00,
+                                                     "x":  345.00
+                                                 },
+                                                 {
+                                                     "y":  154.50,
+                                                     "width":  337.50,
+                                                     "height":  27.00,
+                                                     "x":  345.00
+                                                 },
+                                                 {
+                                                     "y":  199.50,
+                                                     "width":  337.50,
+                                                     "height":  27.00,
+                                                     "x":  345.00
+                                                 },
+                                                 {
+                                                     "y":  424.50,
+                                                     "width":  337.50,
+                                                     "height":  27.00,
+                                                     "x":  345.00
+                                                 }
+                                             ]
+                    },
+                    {
+                        "id":  "multiple-buttons",
+                        "sensitiveRegions":  [
+
+                                             ]
+                    }
+                ]
+}

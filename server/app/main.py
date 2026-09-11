@@ -1,6 +1,7 @@
 """Local FastAPI entry point. Explicit AI mode; no payload logs or persistence."""
 import os
 import re
+from time import perf_counter
 
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -32,6 +33,7 @@ def create_app(allowed_origin: str | None = None, *, mode=None, provider=None) -
 
     @app.middleware("http")
     async def check_origin(request: Request, call_next):
+        request.state.entered_at = perf_counter()
         supplied = request.headers.get("origin")
         if supplied is not None and supplied != origin:
             return JSONResponse(status_code=403, content={"detail": "Origin rejected."})
@@ -39,19 +41,26 @@ def create_app(allowed_origin: str | None = None, *, mode=None, provider=None) -
 
     app.add_middleware(CORSMiddleware, allow_origins=[origin] if origin else [],
                        allow_methods=["GET", "POST"], allow_headers=["Content-Type"], allow_credentials=False,
-                       expose_headers=[MODE_HEADER])
+                       expose_headers=[MODE_HEADER, "Server-Timing"])
 
     @app.get("/health")
     async def health():
         return {"status": "ok"}
 
     @app.post("/plan", response_model=PlanResponse)
-    async def get_plan(context: SafeAgentContext, response: Response):
+    async def get_plan(context: SafeAgentContext, response: Response, request: Request):
+        started = perf_counter()
+        prehandler_ms = (started - request.state.entered_at) * 1000
+        def measured(result):
+            # Fixed numeric metadata only. Pre-handler includes parsing/routing/validation;
+            # it is not an isolated validation timer or one-way network measurement.
+            response.headers["Server-Timing"] = f"prehandler;dur={prehandler_ms:.3f}, planner;dur={(perf_counter() - started) * 1000:.3f}"
+            return result
         response.headers[MODE_HEADER] = selected_mode
         if selected_mode == "deterministic":
-            return plan(context)
+            return measured(plan(context))
         try:
-            return await plan_ai(context.model_dump(mode="python"), ai_provider)
+            return measured(await plan_ai(context.model_dump(mode="python"), ai_provider))
         except PlannerFailure as failure:
             return JSONResponse(status_code=failure.status_code, content={"detail": "AI planner unavailable."},
                                 headers={MODE_HEADER: selected_mode})

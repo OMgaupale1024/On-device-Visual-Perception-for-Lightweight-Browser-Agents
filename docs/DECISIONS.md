@@ -611,3 +611,42 @@ the popup can display it; reset on new analysis, lose it on worker teardown. Rej
 concurrent Analyze/Execute. No end-to-end manual success claim until Chrome observes
 fresh OCR evidence. Current manual checks remain PENDING due to the Computer Use URL
 policy-enforcement stop; all automated tests passing is a separate code-complete claim.
+
+## Phase 9 - honest controlled evaluation (2026-09-11)
+
+Map results to the supplied SIH weights: visual context 25%, PII precision/recall 20%,
+redaction precision 20%, client resources 20%, end-to-end latency 15%. Do not invent a
+weighted score: the rubric provides no conversion from durations/bytes to points.
+
+Keep five generated fake PNGs and independent labels. Recognition must execute real
+pixel OCR. Score exact normalized whole-line items, one-to-one, without fuzzy matching
+or joining; preserve misses and unexpected detections. This evaluates safe OCR text,
+not all visual context, and does not justify calibrating OCR confidence thresholds.
+
+Use forty deliberately mixed field signals with the real detector, including
+unsupported aliases and misleading safe negatives. Retain five false negatives and
+six false positives. Do not tune Phases 0-8 to make Phase 9 numbers look better.
+For redaction, use actual emitted final mask commands and independent geometry,
+greedy one-to-one IoU >=0.5. Any positive overlap damages a safe region. This coarse
+region metric is feasible without heavy CV dependencies but does not prove native
+Chrome opacity or full sensitive-pixel coverage. Document the adapter explicitly.
+
+Two worker-cold OCR runs and five warm runs remain separate. Cheap stages repeat ten
+times (three redaction layouts yield thirty adapter timings). Keep all samples,
+including HTTP outliers/failures. Report count/min/median/mean/max; nearest-rank p95
+only at n>=20, without significance claims. Do not combine Node OCR/adapter/Python
+timings into a fictional Chrome end-to-end result. Asset disk size is not runtime RAM.
+
+Measure real browser processing at existing call boundaries, with performance.now;
+Python uses perf_counter. Separate human confirmation from plan + post-execution
+machine total. Keep numeric timing siblings local and preserve the provider/context
+contract. Server exposes only fixed numeric timing headers. Popup starts at --,
+never fake percentages; no dashboard/library/provider expansion.
+
+Default benchmark uses temporary deterministic loopback HTTP and no external provider.
+Opt-in AI requests use the existing safe fixture and server credential only. No key
+was configured here, so NVIDIA and live Chrome performance stay PENDING. JSON output
+contains aggregate metadata/numbers, no raw OCR/private screenshot/credential. Commit
+small reviewed synthetic fixtures/reference results; keep routine output ignored.
+Record precommit revision/dirty state plus source digest rather than fabricate a
+commit hash before it exists. Exact next task is Phase 10, not implemented here.

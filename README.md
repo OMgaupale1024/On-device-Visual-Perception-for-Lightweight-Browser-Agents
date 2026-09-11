@@ -3,12 +3,13 @@
 **Privacy-preserving on-device perception for lightweight browser agents.**
 SIH26171 · ISRO · Smart India Hackathon 2026.
 
-**Phases 0–8 implemented in code:** browser-local OCR and semantic analysis, local
+**Phases 0–9 implemented in code:** browser-local OCR and semantic analysis, local
 redaction, privacy-approved SafeAgentContext, FastAPI validation, one real NVIDIA NIM
 planner adapter (deterministic mode is the default), and **safe visually grounded
 execution** — a validated `CLICK visual_N` is turned into ONE guarded, user-triggered
 click on the locally resolved target. Phase 8 then captures fresh pixels and verifies
-the visible outcome locally. No metrics dashboard or Raspberry Pi work.
+the visible outcome locally. Phase 9 adds controlled evaluation benchmarks and actual
+current-run timings. No heavy dashboard or Raspberry Pi work.
 
 **Phase 6A is manually Chrome-verified by the user:** extension → POST /plan →
 FastAPI HTTP 200; seven fields, five sensitive/redacted regions, safe status,
@@ -109,8 +110,8 @@ Set-Location server
 .venv/Scripts/python.exe -m unittest discover -s tests -v
 ```
 
-Current results: **207/207 extension test entries** (55 new Phase 8 tests),
-**50/50 server test methods**. Both browser
+Current results: **230/230 extension test entries** (23 new Phase 9 tests),
+**52/52 server test methods** (2 new Phase 9 tests). Both browser
 transport and provider boundary contamination tests pass with zero downstream calls.
 Real OCR cold/warm smoke and local deterministic/AI-missing-key HTTP smoke pass. Mocked
 AI tests are not real-provider acceptance. Phase 6B integrated NVIDIA, Phase 7 positive/
@@ -136,4 +137,25 @@ spacing and joins at most three spatially adjacent OCR items in bbox reading ord
 Confidence values are recorded without an uncalibrated threshold. This proves visible
 text at capture time, not backend persistence or arbitrary workflow completion.
 
-Exact next implementation task: **Phase 9 — SIH evaluation metrics. Not started.**
+Exact next implementation task: **Phase 10 - final SIH demo polish and submission evidence. Not started.**
+
+## Phase 9 controlled prototype benchmark
+
+Run `npm run benchmark` from the repository root with Node dependencies and the
+server venv installed. It runs real pixel OCR on five committed synthetic screens,
+the actual PII detector and redaction mask commands, local stages and 10 temporary
+deterministic FastAPI HTTP requests. No NVIDIA call by default.
+
+Reference: 41/41 safe items on 5 synthetic screens; PII precision **71.43%**, recall
+**75.00%**, F1 **73.17%** on 40 candidates; redaction-command precision **72.09%**,
+recall **75.61%**, safe-region preservation **70.73%** across 3 layouts. These are
+controlled prototype results, not general accuracy or pixel-perfect masking claims.
+Cold OCR median **523.908 ms** (2 new workers); warm inference median **249.229 ms**
+(5 runs), measured in Node/WASM. Live Chrome/NVIDIA latency and resource utilization
+remain unmeasured. Popup Performance shows only current-run timings, initially --;
+human confirmation time is separate from machine processing.
+
+See [Metrics definitions, results and limitations](docs/METRICS.md),
+[Phase 9 plan](docs/PHASE_9_PLAN.md) and
+[reference judge table](benchmarks/reference/table.md). Phase 9 code is complete;
+manual Chrome metrics acceptance remains PENDING.

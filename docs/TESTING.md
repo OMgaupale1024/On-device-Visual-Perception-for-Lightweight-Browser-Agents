@@ -775,6 +775,70 @@ OCR/unknown-PII errors remain; text presence is not backend persistence or causa
 non-atomic tab/capture checks and cross-origin activeTab permission loss can fail closed;
 worker teardown loses the transient result. No metrics dashboard or benchmark claims.
 
-Exact next implementation task: **PHASE 9 - SIH evaluation metrics**. NOT STARTED.
-Visual-context accuracy 25%, PII precision/recall 20%, redaction precision 20%, client
-resource utilization 20%, end-to-end latency 15%. No fabricated metrics.
+The above is the historical Phase 8 checkpoint. Phase 9 evidence follows.
+
+## Phase 9 - automated evidence (2026-09-11)
+
+- npm test: **230/230 PASS**, all 207 prior tests retained plus 23 additions.
+- npm run test:metrics: **21/21 PASS** (subset of extension suite).
+- Server unittest discovery: **52/52 PASS**, all 50 prior methods plus 2 additions.
+- npm run check: syntax/manifest/packaged OCR asset integrity PASS.
+- Separate scripts/smoke-ocr.mjs on the existing ignored synthetic fixture: cold/warm
+  Ready + SAFE PASS. This is additional Node/WASM smoke, not Chrome evidence.
+- npm run benchmark: actual 5-screen pixel quality pass, 2 worker-cold runs, 5 warm
+  recognitions, 10 detector/context/server-stage repetitions, 30 redaction adapter
+  repetitions, 10 real deterministic loopback HTTP responses (all 200). No AI call.
+- Benchmark output contains all runs, including HTTP outliers, and fixture/source
+  hashes. Reviewed reference JSON/table are in benchmarks/reference. METRICS.md has
+  exact formulas, counts, environment and measured values. Benchmark output privacy
+  canaries passed. These scores are independent of unit-test pass rates.
+
+New metrics tests cover precision/recall/F1 and zero denominators, invalid confusion
+counts, mean/median/min/max/nearest-rank percentile, UTF-8 bytes, normalization,
+misses/duplicates/unexpected items, rejected DOM provenance, actual difficult PII
+cases exposing TP/FP/FN/TN, partial/disjoint/invalid IoU, missed/duplicate/unnecessary
+masks and actual redaction commands. Numeric timing projection rejects arbitrary
+strings and nonfinite/negative data. Machine total excludes human delay.
+
+Integration tests append to the original suites: actual worker observation/plan and
+verification timers, actual current-run bytes/dimensions, 9000ms simulated human
+interval excluded, no metrics in planner payload, no extra verification fetch/click;
+popup displays measured finite values, legitimate zero, -- for unavailable values,
+and no fake accuracy percentage. Server tests verify numeric Server-Timing/CORS and
+unchanged five-key plan response; invalid input never echoes data in timing headers.
+
+Run from repository root:
+
+```powershell
+npm test
+npm run test:metrics
+npm run check
+npm run benchmark
+Set-Location server
+.venv/Scripts/python.exe -m unittest discover -s tests -v
+```
+
+The Windows sandbox cannot access this venv interpreter; approved execution outside
+the sandbox ran the server suite and benchmark. This is an environment limitation,
+not a skipped server regression. Default benchmark stops its temporary HTTP process.
+Optional benchmark --ai is separate, explicitly requested via CLI and requires a
+privately configured key. It was not performed here.
+
+## Phase 9 manual acceptance - PENDING
+
+Current browser-control inventory returned no apps/browsers; NVIDIA key presence was
+false. No new Chrome timing run, real click, visual verification or AI request was
+observed. Historical Phase 8 browser URL-policy rejection remains historical.
+Phase 6A user-confirmed PASS is preserved. Phase 6B integrated NVIDIA, Phase 7 positive
+and stale/wrong-page, Phase 8 positive/negative, and Phase 9 live timings remain PENDING.
+
+Reload extension 0.9.0 and follow P8-M1/M2 above. On Analyze, confirm actual Performance
+values appear. On Execute, observe real click, fresh pixel verification and timings;
+record success/failure status, before/after observation, planner mode, plan latency,
+post-execution latency and separate human interval. Machine total must exclude the
+human interval. Reopened popup uses retained worker timing boundaries. Repeat and
+retain failures; do not substitute Node benchmarks for Chrome results. Manual resource
+measurement and exact timing definitions are in METRICS.md; no CPU/GPU/RAM is claimed.
+
+Exact next task: **Phase 10 - final SIH demo polish + submission/presentation evidence**.
+NOT STARTED. Stop after Phase 9 commit/push.

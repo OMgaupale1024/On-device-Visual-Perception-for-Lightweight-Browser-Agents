@@ -317,3 +317,40 @@ browser URL could not be reliably determined for policy enforcement. No actual P
 click or Phase 8 visual verification was observed. A visible phrase at capture time is
 not proof of backend persistence, causality, or arbitrary-goal completion. English OCR,
 unknown-PII limitations and possible cross-origin activeTab revocation remain.
+
+## Phase 9 - evaluation and numeric runtime measurements
+
+The benchmark CLI is separate from live browser orchestration. Five committed fake
+PNGs go through actual Tesseract/WASM and safe visual filtering; independent expected
+text labels are only used by the scorer. Forty labeled field signals go through the
+actual detector. Three region layouts exercise real redaction with an instrumented
+Canvas adapter; evaluation concerns final mask commands, not native rendered pixels.
+Versioned JSON separates visual/PII/redaction quality from runtime resources/latency.
+Source/fixture hashes, all numeric runs, environment and limitations are retained.
+Default output is ignored; reviewed reference JSON and Markdown table are committed.
+
+metrics/metrics.js supplies pure statistics, strict normalized item/source scoring,
+confusion counts, one-to-one IoU region scoring and numeric timing projection. It has
+no DOM, storage or network. The Python helper benchmarks actual validation, safe
+provider projection, deterministic planner and temporary loopback HTTP. No provider
+request by default; NVIDIA timing is opt-in and remains pending without a key.
+
+The shared local observation transaction records monotonic capture, detector,
+redaction, semantics/guard, perception, visual/context guard and total durations.
+The worker adds actual planner round-trip, action preparation/dispatch, plan and
+post-execution timing. Human confirmation is separate; machine total sums plan and
+post-execution processing for the same observation. The existing Phase 8 delay,
+fresh capture/privacy and matching timers are reused. No timing changes the success
+predicate or adds a request/action. Timings are numeric local siblings, never part of
+SafeAgentContext or provider content. Images/text/private values are not metrics.
+
+Popup Performance displays current-run values, initially --. Live popup intervals
+include message transport; reopened summaries use worker intervals. Parent/child
+stages overlap and must not be summed twice. Server-Timing adds fixed numeric
+prehandler/planner headers, preserving the exact action JSON. Prehandler is combined
+routing/parsing/validation, not pure validation. No one-way network inference.
+
+METRICS.md defines every formula, count, timing boundary and measured result. The
+controlled benchmark does not establish general screen accuracy, native mask opacity,
+CPU/GPU/RAM usage or Chrome end-to-end latency. Phase 6B/7/8 manual evidence and
+Phase 9 live Chrome timings remain PENDING. Phase 10 is not implemented.

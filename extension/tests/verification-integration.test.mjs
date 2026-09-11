@@ -173,3 +173,33 @@ test('actual OCR deadline closes hung host and reports NOT VERIFIED without netw
   assert.equal(result.status, 'NOT_VERIFIED'); assert.equal(result.reason, 'PERCEPTION_FAILED');
   assert.equal(closed, true); assert.equal(h.network, 0); assert.equal(h.clicks, 0);
 });
+
+test('Phase 9 actual worker timings stay local and machine total excludes confirmation interval', async (t) => {
+  const h = harness(t);
+  let ticks = 0;
+  t.mock.method(performance, 'now', () => ++ticks);
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (url, options) => {
+    assert.ok(!/measurements|planMs|humanConfirmation|machineTotal/.test(options.body));
+    return realFetch(url, options);
+  };
+  await import('../src/background/service-worker.js?phase9-metrics');
+  const sender = { id: 'test', url: 'chrome-extension://test/src/popup/popup.html' };
+  const send = (type) => new Promise((resolve) => h.listener({ type }, sender, resolve));
+  const analysis = await send(MSG.ANALYZE_PAGE);
+  for (const key of ['captureMs', 'detectionMs', 'redactionMs', 'semanticGuardMs', 'visualGuardMs',
+    'contextGuardMs', 'localTotalMs', 'perceptionMs', 'plannerRoundTripMs', 'actionPreparationMs', 'planMs']) {
+    assert.ok(analysis.measurements[key] > 0, key);
+  }
+  assert.equal(analysis.measurements.safeContextBytes, new TextEncoder().encode(JSON.stringify(analysis.agentContext)).length);
+  assert.equal(analysis.measurements.screenshotWidth, 800);
+  assert.equal(analysis.measurements.sanitizedPngBytes, new TextEncoder().encode('sanitized-fixture').length);
+  await new Promise((r) => setImmediate(r)); ticks += 9000;
+  const executed = await send(MSG.EXECUTE_ACTION);
+  const m = executed.verification.measurements;
+  assert.equal(m.machineTotalMs, m.planMs + m.postExecutionMs);
+  assert.ok(m.humanConfirmationMs >= 9000); assert.ok(m.machineTotalMs < 9000);
+  assert.ok(m.clickDispatchMs > 0); assert.ok(m.verificationMs > 0);
+  assert.equal(h.network, 1); assert.equal(h.clicks, 1);
+  for (const secret of canaries) assert.ok(!JSON.stringify(m).includes(secret));
+});

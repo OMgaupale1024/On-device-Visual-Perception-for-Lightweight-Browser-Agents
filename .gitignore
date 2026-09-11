@@ -9,6 +9,7 @@
 node_modules/
 .npm-cache/
 .browser-test/
+benchmarks/output/
 dist/
 build/
 *.log

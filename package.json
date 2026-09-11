@@ -6,7 +6,9 @@
   "scripts": {
     "build": "node scripts/package-ocr.mjs",
     "test": "node --test extension/tests/*.test.mjs",
-    "check": "node scripts/check.mjs"
+    "check": "node scripts/check.mjs",
+    "benchmark": "node scripts/benchmark.mjs",
+    "test:metrics": "node --test extension/tests/metrics*.test.mjs"
   },
   "devDependencies": {
     "@tesseract.js-data/eng": "1.0.0",

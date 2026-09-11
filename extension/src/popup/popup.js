@@ -35,6 +35,7 @@ const ROLE_LABEL = {
   purpose: 'Purpose',
 };
 let previewTimer;
+let popupPlanMs, popupObservationId;
 function clearPreviews() {
   clearTimeout(previewTimer);
   byId('original-preview').removeAttribute('src');
@@ -49,6 +50,9 @@ function clearPreviews() {
 window.addEventListener('pagehide', clearPreviews);
 
 analyzeBtn.addEventListener('click', async () => {
+  const started = globalThis.performance?.now();
+  popupPlanMs = popupObservationId = undefined;
+  renderMeasurements();
   analyzeBtn.disabled = true;
   clearPreviews();
   renderVerification({ status: 'WAITING' });
@@ -58,6 +62,9 @@ analyzeBtn.addEventListener('click', async () => {
   try {
     const res = await chrome.runtime.sendMessage({ type: MSG.ANALYZE_PAGE, goal: byId('goal').value });
     if (!res || !res.ok) throw new Error(res?.error || 'Analysis failed.');
+    popupPlanMs = started === undefined ? undefined : globalThis.performance.now() - started;
+    popupObservationId = res.agentContext?.observation.id;
+    renderMeasurements(res.measurements, { planMs: popupPlanMs });
     render(res);
     setStatus('Done');
   } catch (err) {
@@ -195,6 +202,7 @@ function renderAction(res) {
 }
 
 executeBtn.addEventListener('click', async () => {
+  const started = globalThis.performance?.now();
   executeBtn.disabled = true;
   analyzeBtn.disabled = true;
   byId('action-status').textContent = 'Executing…';
@@ -207,6 +215,10 @@ executeBtn.addEventListener('click', async () => {
     byId('action-status').textContent = 'CLICK DISPATCHED';
     byId('action-note').textContent = 'One click dispatched. Result checked locally below.';
     renderVerification(res.verification || { status: 'NOT_VERIFIED' });
+    const elapsed = started === undefined ? undefined : globalThis.performance.now() - started;
+    renderMeasurements(res.verification?.measurements, {
+      ...(res.observationId === popupObservationId && Number.isFinite(popupPlanMs) && Number.isFinite(elapsed)
+        ? { planMs: popupPlanMs, machineTotalMs: popupPlanMs + elapsed } : {}), postExecutionMs: elapsed });
   } else if (!res) {
     byId('action-status').textContent = 'Dispatch status unavailable';
     byId('action-note').textContent = 'Analyze again before another action.';
@@ -250,6 +262,7 @@ function showError(msg) { errorEl.textContent = msg; show(errorEl); }
 
 // Safe metadata only; no retained post-action screenshot or page-text preview.
 function renderVerification(result) {
+  if (result?.measurements) renderMeasurements(result.measurements);
   const state = result?.status || 'WAITING';
   byId('verification-status').textContent = state === 'VERIFIED' ? 'VISUALLY VERIFIED' :
     state === 'VERIFYING' ? 'VERIFYING' : state === 'WAITING' ? 'Waiting for action' : 'NOT VERIFIED';
@@ -276,3 +289,16 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   return false;
 });
 chrome.runtime.sendMessage({ type: MSG.GET_VERIFICATION }).then(renderVerification).catch(() => {});
+
+function renderMeasurements(values = {}, overrides = {}) {
+  const m = { ...values };
+  for (const [key, value] of Object.entries(overrides)) if (Number.isFinite(value)) m[key] = value;
+  const duration = (n) => Number.isFinite(n) && n >= 0 ? n.toFixed(1) + ' ms' : '--';
+  const mapping = { plan: 'planMs', ocr: 'perceptionMs', planner: 'plannerRoundTripMs',
+    click: 'clickDispatchMs', execute: 'postExecutionMs', verification: 'verificationMs',
+    total: 'machineTotalMs', human: 'humanConfirmationMs' };
+  for (const [id, key] of Object.entries(mapping)) byId('metric-' + id).textContent = duration(m[key]);
+  const privacy = ['detectionMs', 'redactionMs', 'semanticGuardMs', 'visualGuardMs', 'contextGuardMs'].map((key) => m[key]);
+  byId('metric-privacy').textContent = duration(privacy.every(Number.isFinite) ? privacy.reduce((a, b) => a + b, 0) : undefined);
+  byId('metric-payload').textContent = Number.isFinite(m.safeContextBytes) && m.safeContextBytes >= 0 ? m.safeContextBytes + ' bytes' : '--';
+}

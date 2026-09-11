@@ -1,0 +1,87 @@
+{
+  "datasetVersion": 1,
+  "origin": "Synthetic System.Drawing text layouts; no browser captures",
+  "samples": [
+    {
+      "id": "filled",
+      "width": 1000,
+      "height": 760,
+      "scale": 1,
+      "text": [
+        "Employee Travel Request",
+        "Employee Name",
+        "Email",
+        "Phone",
+        "Employee ID",
+        "Destination",
+        "Bengaluru",
+        "Purpose",
+        "Conference",
+        "Password",
+        "Continue"
+      ]
+    },
+    {
+      "id": "missing-purpose",
+      "width": 1000,
+      "height": 760,
+      "scale": 1,
+      "text": [
+        "Employee Travel Request",
+        "Employee Name",
+        "Email",
+        "Phone",
+        "Employee ID",
+        "Destination",
+        "Bengaluru",
+        "Purpose",
+        "Select purpose",
+        "Password",
+        "Continue"
+      ]
+    },
+    {
+      "id": "submitted",
+      "width": 1000,
+      "height": 400,
+      "scale": 1,
+      "text": [
+        "Travel Request Submitted",
+        "Your request has been recorded"
+      ]
+    },
+    {
+      "id": "filled-small",
+      "width": 750,
+      "height": 570,
+      "scale": 0.75,
+      "text": [
+        "Employee Travel Request",
+        "Employee Name",
+        "Email",
+        "Phone",
+        "Employee ID",
+        "Destination",
+        "Bengaluru",
+        "Purpose",
+        "Conference",
+        "Password",
+        "Continue"
+      ]
+    },
+    {
+      "id": "multiple-buttons",
+      "width": 1000,
+      "height": 500,
+      "scale": 1,
+      "text": [
+        "Travel Options",
+        "Review request",
+        "Save draft",
+        "Cancel",
+        "Continue",
+        "Return to form"
+      ]
+    }
+  ]
+}

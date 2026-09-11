@@ -63,3 +63,17 @@ test('reopening popup reads retained safe result without planning or executing',
   assert.equal(p.elements.get('verification-observation').textContent, 'obs_after');
   assert.deepEqual(p.calls, [MSG.GET_VERIFICATION]);
 });
+
+test('Phase 9 popup displays supplied current-run timings, never quality percentages or missing values as zero', async () => {
+  const p = await popup();
+  p.update({ status: 'VERIFIED', measurements: { planMs: 124.25, perceptionMs: 80,
+    clickDispatchMs: 0, postExecutionMs: 900, machineTotalMs: 1024.25, humanConfirmationMs: 5000,
+    safeContextBytes: 1553, detectionMs: 1, redactionMs: 2, semanticGuardMs: 3, visualGuardMs: 4, contextGuardMs: 5 } });
+  assert.equal(p.elements.get('metric-plan').textContent, '124.3 ms');
+  assert.equal(p.elements.get('metric-click').textContent, '0.0 ms');
+  assert.equal(p.elements.get('metric-privacy').textContent, '15.0 ms');
+  assert.equal(p.elements.get('metric-planner').textContent, '--');
+  assert.equal(p.elements.get('metric-human').textContent, '5000.0 ms');
+  assert.equal(p.elements.get('metric-payload').textContent, '1553 bytes');
+  assert.ok(![...p.elements.values()].some((v) => String(v.textContent).includes('%')));
+});
