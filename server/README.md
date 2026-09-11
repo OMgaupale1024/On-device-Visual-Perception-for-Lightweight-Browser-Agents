@@ -31,6 +31,7 @@ $plannerKeyInput = Read-Host "NVIDIA API key" -AsSecureString
 $env:NVIDIA_API_KEY = [System.Net.NetworkCredential]::new("", $plannerKeyInput).Password
 Remove-Variable plannerKeyInput
 $env:PLANNER_MODE = "ai"
+$env:NVIDIA_TIMEOUT_SECONDS = "30" # optional; also the default
 $env:NVIDIA_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"
 .venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
@@ -46,10 +47,14 @@ commit a .env. Remove the process variable when finished:
 - NVIDIA_API_KEY: server-side credential, required only for AI requests.
 - NVIDIA_BASE_URL: default https://integrate.api.nvidia.com/v1 (non-secret override).
 - NVIDIA_MODEL: default nvidia/nemotron-3.5-lightning-30b-a3b (non-secret override).
+- NVIDIA_TIMEOUT_SECONDS: default 30; finite seconds from 1 through 120 (non-secret).
+  Invalid values fail startup with a fixed message. Restart the server after changing it.
 - EDGESIGHT_EXTENSION_ORIGIN: exact chrome-extension://[a-p]{32} origin.
 - Provider: **NVIDIA NIM**, OpenAI-compatible Chat Completions at `<NVIDIA_BASE_URL>/chat/completions`.
   One provider/model only. httpx is the compatible HTTP client; no openai SDK.
-- Provider deadline: 15s; browser deadline: 20s. No retry or fallback chain.
+- Provider deadline: 30s by default, applied to HTTP and overall AI work; browser/smoke
+  deadline: 35s. Server overrides do not change that independent client limit, so values
+  above 30s may outlast the browser/smoke budget. No retry or fallback chain.
 - Input cap: 32,000 UTF-8 bytes; response envelope cap: 64,000 bytes; output token cap: 256.
 - Request: temperature=0, stream=false, response_format={"type":"json_object"},
   chat_template_kwargs.enable_thinking=false; no tools, prior conversation, images,
@@ -145,7 +150,8 @@ after trimming/case folding → CLICK its supplied ID; otherwise STOP/null.
 
 AI errors do not invoke that planner:
 - Missing/blank key, network error, provider 401/403/429/5xx or redirect: generic 503.
-- Provider/overall deadline: generic 504.
+- Provider/overall deadline: generic 504; internal PlannerFailure.timed_out=true.
+  The diagnostic does not expose exception text, provider bodies or request data.
 - Invalid JSON, refusal, incomplete/empty/tool output, invalid decision or unknown ID: generic 502.
 - Invalid/unsafe/oversized input: generic 422, before provider invocation.
 
@@ -175,7 +181,7 @@ From server/:
 .venv/Scripts/python.exe -m pip check
 ```
 
-50 methods pass, including 26 new AI tests with parameterized cases. Exact provider
+61 methods pass, including timeout configuration and AI tests with parameterized cases. Exact provider
 HTTP bodies are tested using httpx.MockTransport and a synthetic credential, with
 no live network. Both 20-case contamination matrices (direct AI entry and /plan)
 assert zero provider calls. Provider status/timeout/refusal and malicious-output
@@ -187,8 +193,10 @@ From repository root with the matching server mode running:
 The latter is an opt-in real-provider smoke using a safe synthetic fixture, not a
 Chrome/manual test. It checks mode, health, CLICK/STOP and observation binding.
 
-**Real NVIDIA provider smoke status: PENDING — no NVIDIA_API_KEY was configured in
-this session's shell (the NVIDIA endpoint was verified out-of-band by the user).**
+**Real NVIDIA provider smoke with the 30s timeout: PENDING user retest.** Candidate
+grounding is live-verified; the preceding AI run timed out at 15s. If 30s also times
+out, investigate provider latency/connectivity/availability and request size before
+changing timeout again. See docs/HANDOFF.md for the latest live status.
 After tests: run AI server, reload extension, Analyze / Plan on Employee Travel
 Request, inspect the sanitized browser POST, and verify Planner NVIDIA AI / actual
 Continue ID / no browser click. Provider-bound content is tested automatically; manual

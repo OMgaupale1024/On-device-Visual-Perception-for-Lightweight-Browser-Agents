@@ -14,7 +14,7 @@ async def plan_ai(candidate: dict, provider: PlanningProvider) -> PlanResponse:
     try:
         text = await asyncio.wait_for(provider.complete(prepared.content), timeout=PROVIDER_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
-        raise PlannerFailure(504) from None
+        raise PlannerFailure(504, timed_out=True) from None
     except PlannerFailure:
         raise
     except Exception:

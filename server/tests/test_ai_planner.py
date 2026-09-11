@@ -183,6 +183,7 @@ class AIPlannerTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(PlannerFailure) as error:
                 await plan_ai(fixture(), HangingProvider())
         self.assertEqual(error.exception.status_code, 504)
+        self.assertTrue(error.exception.timed_out)
 
     async def test_provider_exception_is_generic(self):
         class BrokenProvider:
@@ -266,6 +267,52 @@ class ProviderHTTPTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(PlannerFailure) as error:
                 await plan_ai(fixture(), NvidiaProvider(transport=httpx.MockTransport(handler)))
             self.assertEqual(error.exception.status_code, expected)
+            self.assertEqual(error.exception.timed_out, expected == 504)
+
+    async def test_provider_wall_deadline_cancels_one_request(self):
+        calls = 0
+        cancelled = False
+        async def handler(request):
+            nonlocal calls, cancelled
+            calls += 1
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled = True
+        with patch("app.nvidia_provider.PROVIDER_TIMEOUT_SECONDS", 0.01):
+            with self.assertRaises(PlannerFailure) as error:
+                await NvidiaProvider(transport=httpx.MockTransport(handler)).complete("{}")
+        self.assertEqual(error.exception.status_code, 504)
+        self.assertTrue(error.exception.timed_out)
+        self.assertEqual(str(error.exception), "AI planner unavailable.")
+        self.assertEqual(calls, 1)
+        self.assertTrue(cancelled)
+
+    async def test_all_httpx_timeouts_map_to_504_without_retry(self):
+        for exception_type in [httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout]:
+            with self.subTest(exception=exception_type.__name__):
+                calls = 0
+                async def handler(request):
+                    nonlocal calls
+                    calls += 1
+                    raise exception_type("private exception detail")
+                with self.assertRaises(PlannerFailure) as error:
+                    await NvidiaProvider(transport=httpx.MockTransport(handler)).complete("{}")
+                self.assertEqual(error.exception.status_code, 504)
+                self.assertTrue(error.exception.timed_out)
+                self.assertEqual(str(error.exception), "AI planner unavailable.")
+                self.assertEqual(calls, 1)
+
+    async def test_configured_deadline_reaches_http_client_and_wall_timer(self):
+        original_client = httpx.AsyncClient
+        original_wait = asyncio.wait_for
+        with patch("app.nvidia_provider.PROVIDER_TIMEOUT_SECONDS", 25.5), \
+             patch("app.nvidia_provider.httpx.AsyncClient", wraps=original_client) as client, \
+             patch("app.nvidia_provider.asyncio.wait_for", wraps=original_wait) as wait:
+            provider = NvidiaProvider(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=envelope())))
+            await provider.complete("{}")
+            self.assertEqual(client.call_args.kwargs["timeout"], 25.5)
+            self.assertEqual(wait.call_args.kwargs["timeout"], 25.5)
 
     async def test_refusal_empty_multiple_and_tool_outputs_reject(self):
         assistant = envelope()["choices"][0]
@@ -362,6 +409,20 @@ class AIModeEndpointTests(unittest.TestCase):
             self.assertEqual(response.status_code, 502)
             self.assertEqual(response.headers[MODE_HEADER], "ai")
             self.assertNotIn("action", response.json())
+
+    def test_timeout_is_generic_504_with_ai_mode_and_no_fallback(self):
+        class HangingProvider:
+            async def complete(self, content):
+                await asyncio.Event().wait()
+        with patch("app.ai_planner.PROVIDER_TIMEOUT_SECONDS", 0.01), \
+             patch("app.main.plan") as deterministic, \
+             TestClient(create_app(ORIGIN, mode="ai", provider=HangingProvider())) as client:
+            response = client.post("/plan", json=fixture())
+            self.assertEqual(response.status_code, 504)
+            self.assertEqual(response.headers[MODE_HEADER], "ai")
+            self.assertEqual(response.json(), {"detail": "AI planner unavailable."})
+            self.assertNotIn("X-EdgeSight-Planner-Upstream-Status", response.headers)
+            deterministic.assert_not_called()
 
     def test_deterministic_mode_never_calls_provider(self):
         provider = FakeProvider("invalid")

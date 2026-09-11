@@ -132,6 +132,20 @@ for (const stage of ['fetch', 'body']) test(`timeout bounds ${stage} and aborts 
   assert.equal(signal.aborted, true);
 });
 
+test('default client deadline permits a 30-second provider response', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let signal;
+  const pending = requestPlan(approvedContext(), { fetchImpl: async (_url, options) => {
+    signal = options.signal;
+    await new Promise((resolve) => setTimeout(resolve, 30_000));
+    return reply();
+  } });
+  t.mock.timers.tick(20_000);
+  assert.equal(signal.aborted, false);
+  t.mock.timers.tick(10_000);
+  assert.equal((await pending).status, 'READY');
+});
+
 test('transport imports only privacy approval and endpoint config, never raw modules', async () => {
   const source = await readFile(new URL('../src/transport/planner-client.js', import.meta.url), 'utf8');
   const imports = [...source.matchAll(/from '([^']+)'/g)].map((m) => m[1]);
@@ -161,5 +175,5 @@ test('AI failure remains visibly AI and never invents a fallback decision', asyn
     ok: false, status: 503, headers: { get: () => 'ai' },
   }) });
   assert.equal(result.status, 'UNAVAILABLE'); assert.equal(result.plannerMode, 'ai');
-  assert.equal(result.plan, undefined); assert.equal(PLANNER_CONFIG.timeoutMs, 20_000);
+  assert.equal(result.plan, undefined); assert.equal(PLANNER_CONFIG.timeoutMs, 35_000);
 });

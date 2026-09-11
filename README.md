@@ -40,8 +40,8 @@ never paste a key into the extension, repository, logs or chat. No .env auto-loa
 Reload unpacked extension/ at chrome://extensions (Chrome 116+), enable file URL
 access, open demo-page/index.html and keep all seven fields and Continue visible.
 Click **ANALYZE / PLAN** with the default travel-request goal. Opening the popup
-alone sends nothing. OCR has a 45s limit; planning through localhost has a 20s limit
-(provider work is bounded to 15s).
+alone sends nothing. OCR has a 45s limit; planning through localhost has a 35s limit
+(provider work defaults to 30s; see NVIDIA_TIMEOUT_SECONDS in server/README.md).
 
 The planner panel displays **NVIDIA AI**, **Deterministic**, or **Unknown** based on an
 allowlisted server header. AI failures show unavailable/rejected and never silently

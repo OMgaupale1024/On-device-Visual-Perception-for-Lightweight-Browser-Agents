@@ -63,17 +63,17 @@ RE-OBSERVATION  verification/verify-*.js (fresh pixels, local)   [IMPLEMENTED]
 - Phase 9 controlled benchmarks (5 synthetic screens) + current-run timing panel.
 
 ## Current blocking issues
-- **Live candidate acceptance pending:** user confirmed AI mode at `b5bc9c5`, but
-  `actionCandidates=[]` despite OCR controls. Generic fusion fix is automated-test
-  verified; the user must reload Chrome and confirm a current button candidate + AI CLICK.
-- Styled control OCR/refinement can still misread; this fix does not prove live OCR accuracy.
+- **Provider latency / live AI PLAN acceptance:** user confirmed the grounding fix in
+  Chrome after `076a81f`: a current button candidate is present, privacy remains 5/5
+  and rawPiiIncluded=false, but AI `/plan` returns 504 and the AI smoke is UNAVAILABLE.
+  The prior provider/overall deadline was 15s. It now defaults to 30s; live retest pending.
 - Manual Phase 7 execution, Phase 8 visual verification and Phase 9 resource/timing
   acceptance remain pending. Automated unit doubles are not acceptance.
 
 ## Current task
-Generic action-candidate fusion fix completed from Claude's interrupted working tree.
-Stop for the user's manual Chrome ANALYZE / PLAN retest, **without Execute**. Do not
-debug NVIDIA again or start the autonomous loop. Read `HANDOFF.md` for exact expectations.
+Make NVIDIA timeout configurable, then run real AI smoke and Chrome ANALYZE / PLAN
+without Execute. OCR, fusion, candidates, privacy and grounding are live-verified:
+leave them unchanged. Read `HANDOFF.md` for test and local credential availability.
 
 ## Critical architecture decisions (do not break)
 - **One privacy boundary out of the browser:** only the frozen builder-approved
@@ -81,9 +81,12 @@ debug NVIDIA again or start the autonomous loop. Read `HANDOFF.md` for exact exp
 - **Server never returns selectors, coordinates, screenshots or code** — only WHAT
   (`visual_N`) or `STOP`, plus fixed non-sensitive reason phrases. The browser resolves
   WHERE/HOW locally.
-- **Deterministic is the default;** `ai` (NVIDIA) is explicit, bounded (15s/64KB), no
+- **Deterministic is the default;** `ai` (NVIDIA) is explicit, bounded (30s default/64KB), no
   tools/history/retries/fallback. This is an **LLM over sanitized structured context,
   not a VLM** — no images are sent.
+- **NVIDIA_TIMEOUT_SECONDS:** non-secret startup setting, finite 1–120 seconds;
+  invalid values fail startup. Browser/smoke has an independent 35s limit. Timeout
+  remains generic HTTP 504; internal timed_out flag carries no provider data.
 - **CLICK execution** is one document-pinned, single-use `element.click()` bound to
   (observation, tab, window, document), 60s TTL. DOM text is an execution safety check
   only, never planner success evidence.
@@ -119,20 +122,20 @@ debug NVIDIA again or start the autonomous loop. Read `HANDOFF.md` for exact exp
 
 ## Commands
 ```bash
-npm test            # extension suite (node --test) — 247 entries
+npm test            # extension suite (node --test)
 npm run build       # package pinned local OCR assets
 npm run check       # syntax / manifest / packaged-asset integrity
 npm run benchmark   # Phase 9 controlled benchmark (needs server venv)
 # server tests (from server/):
-.venv/Scripts/python.exe -m unittest discover -s tests   # 54 methods
+.venv/Scripts/python.exe -m unittest discover -s tests
 # server run (from server/, deterministic):
 .venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 Full Windows setup (venv, extension origin, AI mode) is in `README.md` / `server/README.md`.
 
 ## Git state
-- Branch `main`; recovered from `b5bc9c5` with three uncommitted Claude files preserved.
-- The current HEAD is the candidate-grounding fix containing this file — resolve with
+- Branch `main`; timeout task started clean at `076a81f` (grounding fix).
+- The current HEAD is the timeout fix containing this file — resolve with
   `git log -1 --format=%H` (a commit cannot embed its own hash).
 
 ## Manual verification
@@ -147,7 +150,11 @@ Full Windows setup (venv, extension origin, AI mode) is in `README.md` / `server
 - **VERIFIED (user, Chrome, after `b5bc9c5`):** `/plan` 200,
   `X-EdgeSight-Planner: ai`, sensitive/redacted counts 5/5, `rawPiiIncluded=false`.
   Nemotron returned STOP with null target while `actionCandidates=[]`; controls were
-  present in OCR. NVIDIA is confirmed; candidate generation is the acceptance blocker.
+  present in OCR. This was before the grounding fix.
+- **VERIFIED (user, Chrome, after `076a81f`):** actionCandidates includes the current
+  Continue candidate; sensitive/redacted counts remain 5/5, rawPiiIncluded=false.
+  `/plan` returns 504 with planner header ai; AI smoke reports UNAVAILABLE. The
+  current blocker is provider timeout, not perception or grounding.
 - **PENDING (never observed):** AI CLICK against a current approved candidate; Phase 7 positive click +
   stale/wrong-page negative; Phase 8 positive/negative visual verification; Phase 9 live
   Chrome timings + CPU/GPU/RAM. Prior Computer-Use attempts stopped on a URL-policy block.
@@ -160,11 +167,12 @@ Tab/capture checks are not atomic. Worker restart loses pending tickets/results.
 automation, no additional provider, no Raspberry Pi.
 
 ## Exact next step
-User: reload EdgeSight at `chrome://extensions`, reload Employee Travel Request, then
-ANALYZE / PLAN without Execute. Confirm `actionCandidates` contains the current safe
-visual ID for the button, `/plan` 200, planner header `ai`, and CLICK targeting that ID.
-Record the live result before deciding the next controlled execution verification.
-No automatic Execute, autonomous loop, or expanded actions in this task.
+Start FastAPI in an AI-configured terminal with the key set locally and default
+NVIDIA_TIMEOUT_SECONDS=30; run node scripts/smoke-planner.mjs --ai from repository root.
+If it times out at 30s, stop increasing the timeout; investigate latency/connectivity,
+model availability, request size and provider health. After smoke passes, reload the
+extension/page and ANALYZE / PLAN: expect 200, header ai, CLICK on a current candidate.
+Do not Execute or start the autonomous loop.
 
 ## Remaining roadmap (not sacred — adjust to repo reality)
 1. Verify one live AI CLICK against an approved candidate (AI mode itself is confirmed).

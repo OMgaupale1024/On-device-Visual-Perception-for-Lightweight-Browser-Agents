@@ -18,12 +18,14 @@ MAX_RESPONSE_BYTES = 64_000
 
 
 class PlannerFailure(Exception):
-    def __init__(self, status_code=503, upstream_status=None):
+    def __init__(self, status_code=503, upstream_status=None, *, timed_out=False):
         super().__init__("AI planner unavailable.")
         self.status_code = status_code
         # Numeric upstream NVIDIA HTTP status when the failure was a provider non-200
         # (e.g. 404 wrong model, 401 bad key, 429 rate limit). Diagnostic only; no body.
         self.upstream_status = upstream_status
+        # Internal diagnostic only; never includes exception text or provider data.
+        self.timed_out = timed_out
 
 
 class PlanningProvider(Protocol):
@@ -86,7 +88,7 @@ class NvidiaProvider:
                 raise PlannerFailure(502)
             return result
         except (asyncio.TimeoutError, httpx.TimeoutException):
-            raise PlannerFailure(504) from None
+            raise PlannerFailure(504, timed_out=True) from None
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise PlannerFailure(502) from None
         except PlannerFailure:

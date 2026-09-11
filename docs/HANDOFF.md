@@ -1,81 +1,68 @@
 # Session Handoff
 
-## Agent / Objective
+## Current Task
 
-Codex takeover from Claude: finish generic DOM/OCR action-candidate grounding,
-preserve interrupted work, validate, commit/push, then stop for manual Chrome verification.
+Make NVIDIA planner timeout configurable; then verify live AI smoke and Chrome PLAN.
+Started clean on main at 076a81f. OCR, fusion, candidates, privacy and grounding are
+live-verified and were not changed. No Execute or autonomous loop.
 
-## Recovered State
+## Confirmed Live Evidence (User)
 
-Baseline: main at b5bc9c5, synchronized with origin/main. Claude had already modified:
+After 076a81f, Chrome sends a current Continue actionCandidate; privacy remains
+5 sensitive / 5 redacted / rawPiiIncluded=false. AI POST /plan returns 504 with
+X-EdgeSight-Planner: ai and the generic unavailable body. AI smoke is UNAVAILABLE.
+Repository confirmed a 15s timeout in the HTTP provider and outer AI planner;
+asyncio/httpx timeouts map to PlannerFailure(504). Provider latency cause is not yet known.
 
-- extension/src/actions/geometry.js — centre-inside OR area-containment matching.
-- extension/src/background/local-observation.js — count-only ACTION_FUSION diagnostics.
-- extension/tests/action.test.mjs — five grounding/scaling regressions.
+## Completed Change
 
-All three were preserved. Initial action tests passed 39/39 without edits.
+- NVIDIA_TIMEOUT_SECONDS is a non-secret startup setting: default 30, finite 1-120.
+  Zero, negative, non-numeric, NaN, infinity and out-of-range values fail startup with
+  a fixed message that does not echo the input. Restart required after configuration.
+- The existing HTTP and overall deadlines use this setting. Timeout remains 504;
+  internal PlannerFailure.timed_out=true distinguishes it without logging data.
+- Browser/smoke deadline increased from 20s to 35s so the default provider deadline
+  can complete. Server overrides do not change the independent 35s client budget.
+- No retries, deterministic fallback, model/prompt changes, or response-contract changes.
+- Updated configuration example, timeout docs, and regression tests.
 
-## Completed Fix
+## Tests
 
-- Old rule required positive intersection covering at least 50% of OCR area. The wide
-  regression has only 1/3 containment despite its centre being inside the control;
-  a read-only comparison confirmed the old matcher rejects it and the fix accepts it.
-- Match when the OCR centre lies inside a mapped DOM control OR positive intersection
-  covers at least 50% of OCR area. Existing mapRect scaling and safe visual IDs remain.
-  Retained the positive-overlap guard even for a caller-supplied zero threshold.
-- Privacy filtering still precedes fusion; overlapping sensitive OCR is withheld.
-  The builder freezes only current approved IDs; unrelated safe text stays non-actionable.
-- Found and closed a client validation gap: response validation and ticket creation now
-  require target membership in current actionCandidates as well as a current visual ID.
-  Server contract/provider code unchanged; observation, stale, replay and execution gates retained.
-- Extended existing worker fixtures with control geometry, privacy/transport assertions,
-  and a count-only diagnostic assertion. No raw OCR/PII/screenshot/key logging added.
+- Configuration: 3/3; AI planner/provider/endpoint: 32/32; transport: 51/51 PASS.
+- Full server suite: 61/61 PASS.
+- Full extension suite: 248/248 PASS, zero skipped.
+- npm run build, npm run check, Python compileall: PASS; packaged OCR assets unchanged.
+- Diff review/whitespace check: PASS. Credential-pattern scan of 101 tracked or new
+  text files (excluding archive/vendor): no findings; no private .env files unignored.
 
 ## Files Changed
 
-- extension/src/actions/{geometry,execute-click}.js
-- extension/src/background/local-observation.js
-- extension/src/transport/planner-client.js
-- extension/tests/{action,background,transport,verification-integration}.test.mjs
-- docs/AI_CONTEXT.md and docs/HANDOFF.md
+- server/app/{config,nvidia_provider,ai_planner}.py
+- server/tests/test_config.py and server/tests/test_ai_planner.py
+- server/.env.example and server/README.md
+- extension/src/transport/config.js and extension/tests/transport.test.mjs
+- README.md, docs/AI_CONTEXT.md, docs/HANDOFF.md
 
-## Tests Run
+## Live Test Ownership / Exact Resume Point
 
-- node --test extension/tests/action.test.mjs: 42/42 PASS.
-- Focused transport/background tests: 52/52 PASS; verification integration: 14/14 PASS.
-- npm test: 247/247 PASS, zero skipped.
-- From server/: .venv/Scripts/python.exe -m unittest discover -s tests: 54/54 PASS.
-- npm run build and npm run check: PASS; packaged OCR assets unchanged.
-- Diff review / whitespace check: PASS. Credential-pattern scan of 100 tracked text
-  files (excluding archive/vendor): no findings; no private .env files tracked.
+The agent shell has no NVIDIA_API_KEY and no local .env files. The user chose to run
+the smoke in their already configured terminal and share the safe result. No key was
+requested in chat, no provider request was run by this agent, and no Chrome run is claimed.
 
-## Live Evidence / Remaining Blocker
-
-User confirmed after b5bc9c5: POST /plan 200, X-EdgeSight-Planner: ai,
-sensitiveFieldCount=5, redactedRegionCount=5, rawPiiIncluded=false. Nemotron returned
-STOP with null target while actionCandidates=[] despite OCR controls. NVIDIA is working.
-This session used automated tests only; no new Chrome/provider run or runtime changes.
-The generic fix still needs live candidate + AI CLICK acceptance.
-
-## Exact Resume Point — User Manual Retest
-
-1. chrome://extensions → EdgeSight → Reload.
-2. Reload Employee Travel Request, then ANALYZE / PLAN. DO NOT EXECUTE.
-3. Inspect request payload: actionCandidates must be nonempty and contain the current
-   safe visual ID corresponding to the button. Actual unchanged wire shape is
-   "actionCandidates": ["visual_x"] (string IDs, not objects with a role).
-4. Confirm POST /plan 200 and X-EdgeSight-Planner: ai. Expected action CLICK, target
-   matching that current candidate ID. Never require a fixed visual number.
-5. Confirm privacy remains 5 sensitive / 5 redacted / rawPiiIncluded=false.
-
-If candidates remain empty, inspect numeric ACTION_FUSION counts and local geometry;
-never log OCR text, PII, screenshots or credentials. Do not resume NVIDIA debugging.
-After live acceptance, record the evidence and discuss controlled single-click execution
-verification. Do not automatically Execute or start another phase.
+1. In that configured terminal, preserve the local key and extension origin, stop the
+   old FastAPI process, set PLANNER_MODE=ai and NVIDIA_TIMEOUT_SECONDS=30, then restart
+   from server/: .venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
+2. From repository root: node scripts/smoke-planner.mjs --ai.
+3. If it times out at 30s, STOP increasing the timeout. Investigate latency,
+   connectivity, model availability, request/prompt size and provider health next.
+4. Only after smoke passes: reload EdgeSight and Employee Travel Request; ANALYZE / PLAN.
+   Expect current candidate, POST /plan 200, header ai, CLICK on that candidate, privacy
+   still 5/5/false. DO NOT EXECUTE. Record live result, then stop this task.
 
 ## Git / Constraints
 
-Commit message: fix: ground visual action candidates to browser controls.
-Resolve the containing commit with git log -1 --format=%H; verify HEAD == origin/main
-and a clean tree after normal push. No force push, reset, restore or cleanup.
-No autonomous loop, new actions, voice, vault, TEE, new OCR engine or action redesign.
+Commit message: fix: make NVIDIA planner timeout configurable.
+Resolve containing commit with git log -1 --format=%H; normal push only; verify
+HEAD == origin/main and clean tree. No reset/restore/cleanup of working files.
+Do not change OCR, fusion, candidates, privacy, grounding, model or action architecture.
+No retries, fallback, blind timeout increase, new actions, automatic Execute or loop.
