@@ -63,17 +63,19 @@ RE-OBSERVATION  verification/verify-*.js (fresh pixels, local)   [IMPLEMENTED]
 - Phase 9 controlled benchmarks (5 synthetic screens) + current-run timing panel.
 
 ## Current blocking issues
-- **Provider latency / live AI PLAN acceptance:** user confirmed the grounding fix in
-  Chrome after `076a81f`: a current button candidate is present, privacy remains 5/5
-  and rawPiiIncluded=false, but AI `/plan` returns 504 and the AI smoke is UNAVAILABLE.
-  The prior provider/overall deadline was 15s. It now defaults to 30s; live retest pending.
+- **Model decision policy / live AI PLAN acceptance:** after `7b34f7a`, user confirmed
+  that the real AI smoke now returns a valid STOP instead of UNAVAILABLE. The complete
+  actionable fixture should yield CLICK. Timeout, provider connectivity, grounding and
+  privacy are working; the explicit model-prompt policy change awaits live acceptance.
 - Manual Phase 7 execution, Phase 8 visual verification and Phase 9 resource/timing
   acceptance remain pending. Automated unit doubles are not acceptance.
 
 ## Current task
-Make NVIDIA timeout configurable, then run real AI smoke and Chrome ANALYZE / PLAN
-without Execute. OCR, fusion, candidates, privacy and grounding are live-verified:
-leave them unchanged. Read `HANDOFF.md` for test and local credential availability.
+Clarify the model prompt: a completed travel form with a unique actionable Continue
+requires CLICK; filled fields do not mean already submitted, and filled redacted values
+are not missing. The model remains the sole decision-maker; validators and reason enum
+are unchanged. Await user-run smoke CLICK/STOP pair and Chrome PLAN before commit/push.
+Do not debug timeout, key, network, OCR, fusion, candidates, privacy or grounding.
 
 ## Critical architecture decisions (do not break)
 - **One privacy boundary out of the browser:** only the frozen builder-approved
@@ -134,9 +136,9 @@ npm run benchmark   # Phase 9 controlled benchmark (needs server venv)
 Full Windows setup (venv, extension origin, AI mode) is in `README.md` / `server/README.md`.
 
 ## Git state
-- Branch `main`; timeout task started clean at `076a81f` (grounding fix).
-- The current HEAD is the timeout fix containing this file — resolve with
-  `git log -1 --format=%H` (a commit cannot embed its own hash).
+- Branch `main`; prompt-policy task started clean at `7b34f7a` (timeout fix).
+- Prompt/tests and these context documents are pending live acceptance before commit.
+  Check `git status` and `git log -1 --format=%H` for the exact current state.
 
 ## Manual verification
 - **VERIFIED (user, Chrome):** Phase 6A — extension → `POST /plan` → FastAPI 200; 7 fields,
@@ -154,7 +156,10 @@ Full Windows setup (venv, extension origin, AI mode) is in `README.md` / `server
 - **VERIFIED (user, Chrome, after `076a81f`):** actionCandidates includes the current
   Continue candidate; sensitive/redacted counts remain 5/5, rawPiiIncluded=false.
   `/plan` returns 504 with planner header ai; AI smoke reports UNAVAILABLE. The
-  current blocker is provider timeout, not perception or grounding.
+  blocker at that point was provider timeout, not perception or grounding.
+- **VERIFIED (user, real AI smoke, after `7b34f7a`):** requestPlan returns READY with
+  model-selected STOP where the complete actionable fixture expects CLICK. The real
+  NVIDIA round-trip and valid response are working. The CLICK/STOP pair has not passed.
 - **PENDING (never observed):** AI CLICK against a current approved candidate; Phase 7 positive click +
   stale/wrong-page negative; Phase 8 positive/negative visual verification; Phase 9 live
   Chrome timings + CPU/GPU/RAM. Prior Computer-Use attempts stopped on a URL-policy block.
@@ -167,12 +172,12 @@ Tab/capture checks are not atomic. Worker restart loses pending tickets/results.
 automation, no additional provider, no Raspberry Pi.
 
 ## Exact next step
-Start FastAPI in an AI-configured terminal with the key set locally and default
-NVIDIA_TIMEOUT_SECONDS=30; run node scripts/smoke-planner.mjs --ai from repository root.
-If it times out at 30s, stop increasing the timeout; investigate latency/connectivity,
-model availability, request size and provider health. After smoke passes, reload the
-extension/page and ANALYZE / PLAN: expect 200, header ai, CLICK on a current candidate.
-Do not Execute or start the autonomous loop.
+User restarts FastAPI in their already configured AI terminal and runs
+node scripts/smoke-planner.mjs --ai: require real CLICK for the complete actionable
+fixture and real STOP when targets are absent. Then reload extension/page, ANALYZE / PLAN:
+require 200, header ai, CLICK on the current candidate, successful target validation and
+privacy 5 sensitive / 5 redacted / rawPiiIncluded=false. No Execute. Only after these
+live checks pass, record Phase 11A acceptance, commit/push and stop; no autonomous loop.
 
 ## Remaining roadmap (not sacred — adjust to repo reality)
 1. Verify one live AI CLICK against an approved candidate (AI mode itself is confirmed).

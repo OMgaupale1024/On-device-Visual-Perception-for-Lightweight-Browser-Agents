@@ -1,68 +1,65 @@
 # Session Handoff
 
-## Current Task
+## Current Task / Baseline
 
-Make NVIDIA planner timeout configurable; then verify live AI smoke and Chrome PLAN.
-Started clean on main at 076a81f. OCR, fusion, candidates, privacy and grounding are
-live-verified and were not changed. No Execute or autonomous loop.
+Phase 11A: correct Nemotron choosing STOP for a complete actionable travel form.
+Started clean at 7b34f7a on main. User confirmed real AI smoke now returns a valid
+STOP instead of UNAVAILABLE. Timeout, key, network, OCR, grounding, candidates and
+privacy are not the current blocker; do not change them.
 
-## Confirmed Live Evidence (User)
+## Diagnosis and Change
 
-After 076a81f, Chrome sends a current Continue actionCandidate; privacy remains
-5 sensitive / 5 redacted / rawPiiIncluded=false. AI POST /plan returns 504 with
-X-EdgeSight-Planner: ai and the generic unavailable body. AI smoke is UNAVAILABLE.
-Repository confirmed a 15s timeout in the HTTP provider and outer AI planner;
-asyncio/httpx timeouts map to PlannerFailure(504). Provider latency cause is not yet known.
+- Exact provider projection contains the goal, all seven filled semantic roles,
+  five privacy placeholders, safe destination/purpose, and a unique Continue element
+  with actionable=true. Coordinates, observation IDs and private values are omitted.
+- Old prompt listed necessary prerequisites without an explicit sufficient CLICK
+  rule or a filled-versus-submitted distinction. This is a plausible policy gap;
+  the model's internal reason for its live STOP is not known.
+- Updated SYSTEM_PROMPT: require CLICK on the actual unique actionable Continue ID
+  for a completed travel form; filled fields alone are not a submitted goal;
+  intentionally redacted filled values count as filled. Explicit STOP conditions
+  retain missing/incomplete/unavailable fields, no target, ambiguity, completed goal
+  and unsafe action. Removed fixed example IDs.
+- Server decision path, provider settings, reason enum and validators are unchanged.
+  No retries, fallback, local CLICK decision, perception or privacy changes.
 
-## Completed Change
+## Tests / Limits
 
-- NVIDIA_TIMEOUT_SECONDS is a non-secret startup setting: default 30, finite 1-120.
-  Zero, negative, non-numeric, NaN, infinity and out-of-range values fail startup with
-  a fixed message that does not echo the input. Restart required after configuration.
-- The existing HTTP and overall deadlines use this setting. Timeout remains 504;
-  internal PlannerFailure.timed_out=true distinguishes it without logging data.
-- Browser/smoke deadline increased from 20s to 35s so the default provider deadline
-  can complete. Server overrides do not change the independent 35s client budget.
-- No retries, deterministic fallback, model/prompt changes, or response-contract changes.
-- Updated configuration example, timeout docs, and regression tests.
-
-## Tests
-
-- Configuration: 3/3; AI planner/provider/endpoint: 32/32; transport: 51/51 PASS.
-- Full server suite: 61/61 PASS.
+- AI planner/provider/endpoint and prompt tests: 36/36 PASS.
+- Full server suite: 65/65 PASS.
 - Full extension suite: 248/248 PASS, zero skipped.
-- npm run build, npm run check, Python compileall: PASS; packaged OCR assets unchanged.
-- Diff review/whitespace check: PASS. Credential-pattern scan of 101 tracked or new
+- npm run check: PASS.
+- New tests inspect exact minimized HTTP message content for the complete fixture,
+  another visual ID and the no-target state. A regression confirms a provider STOP
+  is preserved even for a complete actionable fixture; local code never replaces it.
+- These are automated contract/transport tests, not proof of real model behavior.
+- Diff review and whitespace check: PASS. Credential-pattern scan of 101 tracked
   text files (excluding archive/vendor): no findings; no private .env files unignored.
 
-## Files Changed
+## Live Acceptance / Exact Resume Point
 
-- server/app/{config,nvidia_provider,ai_planner}.py
-- server/tests/test_config.py and server/tests/test_ai_planner.py
-- server/.env.example and server/README.md
-- extension/src/transport/config.js and extension/tests/transport.test.mjs
-- README.md, docs/AI_CONTEXT.md, docs/HANDOFF.md
+The user previously chose to run live tests in their already configured terminal.
+A request is pending for their safe result after restarting FastAPI with the new
+working-tree prompt. Do not request or print the key. No new live run is claimed.
 
-## Live Test Ownership / Exact Resume Point
+1. Restart FastAPI in that AI-configured terminal.
+2. From root: node scripts/smoke-planner.mjs --ai.
+   Require PASS: first fixture CLICK on its supplied candidate; second no-target
+   fixture STOP. Do not change the smoke expectations or substitute mocked evidence.
+3. After smoke passes, reload EdgeSight and the demo; ANALYZE / PLAN, DO NOT EXECUTE.
+   Require actionCandidates contains current Continue ID, /plan 200, planner header ai,
+   CLICK on that same ID, target validation passed, privacy 5/5/rawPiiIncluded=false.
+4. Only after both live checks pass: update these docs with acceptance, test as needed,
+   commit/push normally, verify HEAD == origin/main and clean tree, then stop.
+   Phase 11A is NOT yet marked complete. Do not start an autonomous loop.
 
-The agent shell has no NVIDIA_API_KEY and no local .env files. The user chose to run
-the smoke in their already configured terminal and share the safe result. No key was
-requested in chat, no provider request was run by this agent, and no Chrome run is claimed.
+## Uncommitted Files / Constraints
 
-1. In that configured terminal, preserve the local key and extension origin, stop the
-   old FastAPI process, set PLANNER_MODE=ai and NVIDIA_TIMEOUT_SECONDS=30, then restart
-   from server/: .venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
-2. From repository root: node scripts/smoke-planner.mjs --ai.
-3. If it times out at 30s, STOP increasing the timeout. Investigate latency,
-   connectivity, model availability, request/prompt size and provider health next.
-4. Only after smoke passes: reload EdgeSight and Employee Travel Request; ANALYZE / PLAN.
-   Expect current candidate, POST /plan 200, header ai, CLICK on that candidate, privacy
-   still 5/5/false. DO NOT EXECUTE. Record live result, then stop this task.
+- server/app/ai_contract.py
+- server/tests/test_ai_planner.py
+- docs/AI_CONTEXT.md
+- docs/HANDOFF.md
 
-## Git / Constraints
-
-Commit message: fix: make NVIDIA planner timeout configurable.
-Resolve containing commit with git log -1 --format=%H; normal push only; verify
-HEAD == origin/main and clean tree. No reset/restore/cleanup of working files.
-Do not change OCR, fusion, candidates, privacy, grounding, model or action architecture.
-No retries, fallback, blind timeout increase, new actions, automatic Execute or loop.
+Preserve these changes while waiting for the user's live results. Latest committed
+baseline remains 7b34f7a. No hardcoded action/ID outside the prompt, no fallback,
+no changes to reason enum or approved-candidate validation, no Execute or new phase.
