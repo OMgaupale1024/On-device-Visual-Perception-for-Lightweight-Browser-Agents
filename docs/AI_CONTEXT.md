@@ -105,7 +105,14 @@ short settle and fail closed if observation fails. Tab checks cannot be fully at
 Worker restart drops tickets/run state safely. No private-value typing.
 
 Phase 11C is DONE (live smoke, travel regression, and controlled multi-action workflow
-all user-verified; planner-latency fix confirmed at ~1s-class per call). Optional
-uncontrolled YouTube attempt was not run and is not required for acceptance. Do not
-start voice, vault/TYPE_LOCAL_REF, TEE, Raspberry Pi, another browser, or a new
-perception engine without the user assigning the next phase.
+all user-verified; planner-latency fix confirmed at ~1s-class per call).
+
+**Phase 12 (unified voice + text goal) DONE:** a mic button (browser-native
+SpeechRecognition/webkitSpeechRecognition, popup-only, no cloud/key/audio storage)
+fills the SAME goal input; the user reviews the transcript, then the existing RUN TASK
+controller runs unchanged. Voice never triggers an action itself. Unsupported browsers
+disable the mic and show a fallback message; text mode is unaffected. No server change.
+
+Next phase (not started): final evaluation metrics + demo polish + submission cleanup.
+Do not start vault/TYPE_LOCAL_REF, TEE, Raspberry Pi, another browser, or a new
+perception engine without the user assigning it.

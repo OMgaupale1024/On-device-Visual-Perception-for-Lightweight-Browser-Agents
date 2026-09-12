@@ -1,6 +1,28 @@
 # Session Handoff
 
-## Current task and baseline
+## Phase 12 — unified voice + text goal input (DONE, pending live voice check)
+
+Added a mic button beside the goal input using browser-native SpeechRecognition /
+webkitSpeechRecognition (popup-only). Voice is speech-to-text ONLY: the transcript fills
+the SAME `goal` input, the user reviews/edits it, then the existing RUN TASK path runs the
+autonomous controller unchanged. Voice never triggers an action, no audio is recorded/
+stored/sent, and only the final goal string enters the existing pipeline. Unsupported
+browsers: mic disabled + "Voice input is unavailable… Type your goal instead."; text mode
+unaffected. Recognition error / empty transcript: mic state resets, safe message, no run.
+No server change; no new dependency/API/key.
+
+Files: extension/src/popup/{popup.html,popup.js,popup.css}; test
+extension/tests/voice-popup.test.mjs (6 tests). Checks: npm test 298/298, npm run check
+PASS, git diff --check PASS, npm run scan:secrets PASS. Committed + pushed.
+
+Live check remaining (user): reload EdgeSight; confirm typed travel goal still runs; press
+mic, say "Open YouTube and search for calculus videos", confirm the transcript appears in
+the goal input WITHOUT any browser action, then RUN TASK hands off to the existing agent.
+YouTube behavior itself is out of scope — success = the spoken command reaches the goal path.
+
+Next phase (not started): final evaluation metrics + demo polish + submission cleanup.
+
+## Earlier: Phase 11C (complete, live-verified)
 
 Phase 11C — safe browser action vocabulary (CLICK/TYPE/PRESS_KEY/SCROLL/NAVIGATE/STOP)
 plus a planner-latency diagnostic and fix — is **complete and live-verified**. Baseline

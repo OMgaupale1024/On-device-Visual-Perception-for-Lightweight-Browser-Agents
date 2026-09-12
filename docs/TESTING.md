@@ -1039,3 +1039,36 @@ Phase 11C is now live-verified end to end: real NVIDIA CLICK/STOP, the travel RU
 regression, and the controlled multi-action NAVIGATE/TYPE/ENTER/SCROLL/STOP workflow all
 pass with practical (~1s-class) planner latency. Remaining optional item: an
 uncontrolled YouTube attempt (item 4), not required for acceptance.
+
+## Phase 12 — unified voice + text goal input (2026-09-12)
+
+A mic button beside the goal input uses browser-native SpeechRecognition /
+webkitSpeechRecognition (popup-only). Voice is speech-to-text ONLY: the transcript fills
+the SAME goal input; the user reviews/edits it; the existing RUN TASK controller runs
+unchanged. Voice never triggers an action, no audio is recorded/stored/sent, only the
+final goal string enters the existing pipeline. No server change, no new dependency/API/key.
+
+| Check | Result |
+|---|---|
+| npm test | PASS 298/298 (292 prior + 6 new voice tests) |
+| server unittest discover -s tests | PASS 78/78 (untouched) |
+| npm run check | PASS |
+| git diff --check | PASS |
+| npm run scan:secrets | PASS, no credential patterns |
+
+`extension/tests/voice-popup.test.mjs` runs the real popup.js against DOM/chrome doubles
+with an injected fake SpeechRecognition: (1) typed goal still starts a normal run via the
+existing controller; (2) voice transcript populates the same goal input and does NOT
+auto-run; (3) voice then RUN TASK feeds the transcript through the existing controller;
+(4) empty/whitespace transcript rejected, goal unchanged, no run; (5) recognition error
+resets mic state and starts no run; (6) unsupported SpeechRecognition disables the mic with
+a fallback message while text mode keeps working. Existing autonomous/action/privacy/popup
+suites remain green.
+
+### Live Phase 12 acceptance: PENDING (user)
+
+1. Reload EdgeSight. Type the travel goal and RUN TASK once — confirm existing behavior.
+2. Press the mic, say "Open YouTube and search for calculus videos". Expect the transcript
+   in the goal input, NO browser action yet. Press RUN TASK — the existing agent takes over.
+   Voice acceptance only requires the spoken command reaching the goal path; YouTube-specific
+   behavior is out of scope for this phase.

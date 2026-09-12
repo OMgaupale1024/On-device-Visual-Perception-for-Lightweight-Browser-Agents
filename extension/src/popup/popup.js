@@ -15,6 +15,41 @@ byId('enable-browsing').addEventListener('click', async () => {
   } catch { byId('browsing-note').textContent = 'Browsing permission unavailable.'; }
 });
 
+// Phase 12: voice is speech-to-text ONLY. It fills the existing goal input and never
+// triggers an action. No audio is recorded, stored, or sent anywhere; only the final
+// transcript becomes ordinary goal text the user reviews before pressing RUN TASK.
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const micBtn = byId('mic');
+const voiceStatusEl = byId('voice-status');
+let recognition = null, listening = false;
+function setVoiceStatus(text) { voiceStatusEl.textContent = text; }
+function resetMic() { listening = false; micBtn.disabled = false; micBtn.classList.remove('listening'); }
+if (!SpeechRecognition) {
+  micBtn.disabled = true;
+  setVoiceStatus('Voice input is unavailable in this browser. Type your goal instead.');
+} else {
+  micBtn.addEventListener('click', () => {
+    if (listening) return;
+    recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => {
+      const transcript = (event?.results?.[0]?.[0]?.transcript || '').trim();
+      if (!transcript) { setVoiceStatus('No speech detected. Try again or type your goal.'); return; }
+      byId('goal').value = transcript; // fills the SAME goal path; does not auto-run
+      setVoiceStatus('Voice ready — review the goal, then press RUN TASK.');
+    };
+    recognition.onerror = () => { resetMic(); setVoiceStatus('Voice input error. Type your goal instead.'); };
+    recognition.onend = () => resetMic();
+    try {
+      listening = true; micBtn.disabled = true; micBtn.classList.add('listening');
+      setVoiceStatus('Listening…');
+      recognition.start();
+    } catch { resetMic(); setVoiceStatus('Voice input error. Type your goal instead.'); }
+  });
+}
+
 // Fixed, safe user-facing text for each execution reason code. Never render a
 // server- or page-derived string here.
 const ACTION_REASON = {

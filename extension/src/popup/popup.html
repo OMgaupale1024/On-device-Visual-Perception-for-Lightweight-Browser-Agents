@@ -14,8 +14,12 @@
     </header>
 
     <label class="lbl" for="goal">Goal</label>
-    <input id="goal" class="goal" type="text"
-           value="Check whether this travel request is complete and submit it." />
+    <div class="goal-row">
+      <input id="goal" class="goal" type="text"
+             value="Check whether this travel request is complete and submit it." />
+      <button id="mic" class="btn mic" type="button" title="Speak your goal" aria-label="Speak your goal">🎤</button>
+    </div>
+    <p id="voice-status" class="note"></p>
 
     <button id="run-task" class="btn">RUN TASK (AUTONOMOUS)</button>
     <button id="stop-task" class="btn hidden">STOP TASK</button>
