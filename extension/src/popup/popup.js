@@ -18,37 +18,66 @@ byId('enable-browsing').addEventListener('click', async () => {
 // Phase 12: voice is speech-to-text ONLY. It fills the existing goal input and never
 // triggers an action. No audio is recorded, stored, or sent anywhere; only the final
 // transcript becomes ordinary goal text the user reviews before pressing RUN TASK.
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-const micBtn = byId('mic');
-const voiceStatusEl = byId('voice-status');
-let recognition = null, listening = false;
-function setVoiceStatus(text) { voiceStatusEl.textContent = text; }
-function resetMic() { listening = false; micBtn.disabled = false; micBtn.classList.remove('listening'); }
-if (!SpeechRecognition) {
-  micBtn.disabled = true;
-  setVoiceStatus('Voice input is unavailable in this browser. Type your goal instead.');
-} else {
-  micBtn.addEventListener('click', () => {
-    if (listening) return;
-    recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.onresult = (event) => {
-      const transcript = (event?.results?.[0]?.[0]?.transcript || '').trim();
-      if (!transcript) { setVoiceStatus('No speech detected. Try again or type your goal.'); return; }
-      byId('goal').value = transcript; // fills the SAME goal path; does not auto-run
-      setVoiceStatus('Voice ready — review the goal, then press RUN TASK.');
-    };
-    recognition.onerror = () => { resetMic(); setVoiceStatus('Voice input error. Type your goal instead.'); };
-    recognition.onend = () => resetMic();
-    try {
-      listening = true; micBtn.disabled = true; micBtn.classList.add('listening');
+// The goal input is plain text and is NEVER disabled by voice state — text input must
+// always work regardless of microphone support, permission, or errors. The whole block
+// is guarded so a voice-setup failure can never break the rest of the popup.
+try {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micBtn = byId('mic');
+  const voiceStatusEl = byId('voice-status');
+  let recognition = null, listening = false;
+  const setVoiceStatus = (text) => { voiceStatusEl.textContent = text; };
+  const resetMic = () => { listening = false; micBtn.disabled = false; micBtn.classList.remove('listening'); };
+  if (!SpeechRecognition) {
+    micBtn.disabled = true;
+    setVoiceStatus('Voice input is unavailable in this browser. Type your goal instead.');
+  } else {
+    const startRecognition = () => {
+      recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      recognition.onresult = (event) => {
+        const transcript = (event?.results?.[0]?.[0]?.transcript || '').trim();
+        if (!transcript) { setVoiceStatus('No speech detected. Try again or type your goal.'); return; }
+        byId('goal').value = transcript; // fills the SAME goal path; does not auto-run
+        setVoiceStatus('Voice ready — review the goal, then press RUN TASK.');
+      };
+      recognition.onerror = (event) => {
+        resetMic();
+        setVoiceStatus(event?.error === 'not-allowed' || event?.error === 'service-not-allowed'
+          ? 'Microphone permission denied. Type your goal instead.'
+          : 'Voice input error. Type your goal instead.');
+      };
+      recognition.onend = () => resetMic();
+      recognition.start(); // may throw synchronously; caller handles it
       setVoiceStatus('Listening…');
-      recognition.start();
-    } catch { resetMic(); setVoiceStatus('Voice input error. Type your goal instead.'); }
-  });
-}
+    };
+    micBtn.addEventListener('click', async () => {
+      if (listening) return;
+      listening = true; micBtn.disabled = true; micBtn.classList.add('listening');
+      // Explicitly acquire mic permission first: SpeechRecognition alone often fails in an
+      // extension popup without ever prompting. We immediately stop the tracks — we don't
+      // capture audio ourselves; SpeechRecognition opens its own stream for transcription.
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('nomd'), { name: 'NotSupportedError' });
+        setVoiceStatus('Requesting microphone…');
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (err) {
+        resetMic();
+        const name = err?.name;
+        setVoiceStatus(
+          name === 'NotAllowedError' || name === 'SecurityError' ? 'Microphone permission denied. Type your goal instead.' :
+          name === 'NotFoundError' || name === 'DevicesNotFoundError' ? 'No microphone found. Type your goal instead.' :
+          'Microphone unavailable. Type your goal instead.');
+        return;
+      }
+      try { startRecognition(); }
+      catch { resetMic(); setVoiceStatus('Voice input error. Type your goal instead.'); }
+    });
+  }
+} catch { /* Voice is optional; never let its setup break text input or the rest of the popup. */ }
 
 // Fixed, safe user-facing text for each execution reason code. Never render a
 // server- or page-derived string here.

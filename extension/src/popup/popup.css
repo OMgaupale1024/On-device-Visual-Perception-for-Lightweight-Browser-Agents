@@ -35,11 +35,13 @@ body {
   margin-bottom: 10px;
 }
 .goal:focus { outline: none; border-color: var(--accent); }
-.goal-row { display: flex; gap: 6px; align-items: stretch; }
-.goal-row .goal { margin-bottom: 0; flex: 1; }
-.mic { width: auto; padding: 8px 12px; flex: 0 0 auto; }
-.mic.listening { border-color: var(--accent); animation: mic-pulse 1s ease-in-out infinite; }
-.mic:disabled { opacity: 0.5; cursor: not-allowed; }
+.goal-row { display: flex; gap: 6px; align-items: stretch; margin-bottom: 10px; }
+/* Two-class selectors so these beat .btn's width:100% regardless of source order,
+   otherwise the mic button expands to full width and squeezes the goal input to ~0. */
+.goal-row .goal { margin-bottom: 0; flex: 1 1 auto; min-width: 0; }
+.goal-row .mic { width: auto; flex: 0 0 auto; padding: 8px 12px; }
+.goal-row .mic.listening { border-color: var(--accent); animation: mic-pulse 1s ease-in-out infinite; }
+.goal-row .mic:disabled { opacity: 0.5; cursor: not-allowed; }
 @keyframes mic-pulse { 50% { opacity: 0.5; } }
 .btn {
   width: 100%; padding: 9px 10px; border: 0; border-radius: 8px; cursor: pointer;

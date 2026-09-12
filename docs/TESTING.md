@@ -1065,10 +1065,51 @@ resets mic state and starts no run; (6) unsupported SpeechRecognition disables t
 a fallback message while text mode keeps working. Existing autonomous/action/privacy/popup
 suites remain green.
 
+### Phase 12 hotfix — goal input typing + microphone permission (2026-09-12)
+
+Two live bugs found after the initial Phase 12 commit (b553ba1) were fixed:
+
+- **Goal input not typeable (root cause):** CSS cascade — `.mic { width:auto }` and
+  `.btn { width:100% }` had equal specificity and `.btn` came later, so the mic button
+  took `width:100%` with `flex:0 0 auto` (no shrink), collapsing the `flex:1` goal input
+  to ~0 width. The input was visually collapsed, not disabled. Fixed with higher-specificity
+  `.goal-row .mic` / `.goal-row .goal { flex:1 1 auto; min-width:0 }` that beat `.btn`
+  regardless of source order.
+- **Mic never prompted for permission:** the handler now calls
+  `navigator.mediaDevices.getUserMedia({ audio:true })` first (immediately stopping the
+  returned tracks — no audio captured; SpeechRecognition opens its own stream), then starts
+  recognition. Denied/no-device/unsupported and recognition `not-allowed` map to safe
+  fallback messages; the goal input stays editable and no run starts. The whole voice block
+  is try/catch-wrapped so a voice failure can never break text input. No manifest permission
+  added (getUserMedia prompts from the extension page's secure context).
+
+| Check | Result |
+|---|---|
+| npm test | PASS 303/303 (298 prior + 5 net-new voice tests, now 11 in the file) |
+| server unittest discover -s tests | PASS 78/78 (untouched) |
+| npm run check | PASS |
+| git diff --check | PASS |
+| npm run scan:secrets | PASS, no credential patterns |
+
+`extension/tests/voice-popup.test.mjs` (11 tests) now also injects a fake
+`navigator.mediaDevices.getUserMedia` and asserts: goal input editable by default;
+mic click requests permission BEFORE recognition and stops the temporary tracks; permission
+denial / no-microphone / unsupported all show safe messages, start no run, and leave the
+goal input editable and text mode working; recognition `not-allowed` maps to the
+permission-denied message. Plus the original transcript/no-auto-run/empty-transcript checks.
+
 ### Live Phase 12 acceptance: PENDING (user)
 
-1. Reload EdgeSight. Type the travel goal and RUN TASK once — confirm existing behavior.
-2. Press the mic, say "Open YouTube and search for calculus videos". Expect the transcript
-   in the goal input, NO browser action yet. Press RUN TASK — the existing agent takes over.
+Cannot be automated in the agent environment (loading the unpacked extension needs a native
+file dialog; browser automation init has failed here previously).
+
+1. Reload at chrome://extensions; reopen the popup.
+2. Click the goal box and type "test goal" — MUST work now (the collapse bug is fixed).
+3. Clear it and press the mic. Chrome should now prompt for the microphone. Allow it.
+4. Say "Open YouTube and search for calculus videos". Expect the transcript in the goal
+   input, NO browser action yet. Press RUN TASK — the existing agent takes over.
    Voice acceptance only requires the spoken command reaching the goal path; YouTube-specific
-   behavior is out of scope for this phase.
+   behavior is out of scope.
+5. Known Chrome limitation: even with the mic granted, Web-Speech in an MV3 popup can still
+   return a `network` error on some Chrome builds. The fallback messaging handles this and
+   text mode always works; if it recurs, report the exact recognition `error` code.

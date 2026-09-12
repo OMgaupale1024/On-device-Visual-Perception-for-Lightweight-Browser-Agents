@@ -1,24 +1,50 @@
 # Session Handoff
 
-## Phase 12 — unified voice + text goal input (DONE, pending live voice check)
+## Phase 12 HOTFIX — goal input typing + microphone permission (2026-09-12)
 
-Added a mic button beside the goal input using browser-native SpeechRecognition /
-webkitSpeechRecognition (popup-only). Voice is speech-to-text ONLY: the transcript fills
-the SAME `goal` input, the user reviews/edits it, then the existing RUN TASK path runs the
-autonomous controller unchanged. Voice never triggers an action, no audio is recorded/
-stored/sent, and only the final goal string enters the existing pipeline. Unsupported
-browsers: mic disabled + "Voice input is unavailable… Type your goal instead."; text mode
-unaffected. Recognition error / empty transcript: mic state resets, safe message, no run.
-No server change; no new dependency/API/key.
+Fixes two live bugs reported after the initial Phase 12 commit (b553ba1):
 
-Files: extension/src/popup/{popup.html,popup.js,popup.css}; test
-extension/tests/voice-popup.test.mjs (6 tests). Checks: npm test 298/298, npm run check
-PASS, git diff --check PASS, npm run scan:secrets PASS. Committed + pushed.
+1. **Could not type in the goal input (Priority 1, root-caused).** A CSS cascade bug:
+   `.mic { width:auto }` and `.btn { width:100% }` had equal specificity, and `.btn`
+   appeared later, so the mic button inherited `width:100%` with `flex:0 0 auto`
+   (no shrink) — collapsing the `flex:1` goal input to ~0 width. Typing was impossible
+   because the input was visually collapsed, not disabled. Fixed with higher-specificity
+   `.goal-row .mic { width:auto; flex:0 0 auto }` and `.goal-row .goal { flex:1 1 auto;
+   min-width:0 }`, which beat `.btn` regardless of source order. The goal input is a plain
+   text field and is NEVER disabled by voice state.
 
-Live check remaining (user): reload EdgeSight; confirm typed travel goal still runs; press
-mic, say "Open YouTube and search for calculus videos", confirm the transcript appears in
-the goal input WITHOUT any browser action, then RUN TASK hands off to the existing agent.
-YouTube behavior itself is out of scope — success = the spoken command reaches the goal path.
+2. **Microphone failed with no permission prompt (Priority 2).** SpeechRecognition alone
+   often won't prompt for the mic in an extension popup. The mic handler now calls
+   `navigator.mediaDevices.getUserMedia({ audio: true })` first (then immediately stops the
+   returned tracks — we don't capture audio; SpeechRecognition opens its own stream), and
+   only then starts recognition. Denied/no-device/unsupported and recognition `not-allowed`
+   all map to safe fallback messages; the goal input stays editable and no run starts. The
+   entire voice block is wrapped in try/catch so a voice-setup failure can never break text
+   input or the rest of the popup. No manifest permission was needed (getUserMedia prompts
+   from the extension page's secure context); no broad host permission added.
+
+Voice remains speech-to-text ONLY: transcript fills the SAME goal input, user reviews it,
+existing RUN TASK path is unchanged. No audio stored/sent; no new dependency/API/key; no
+server change.
+
+Files: extension/src/popup/{popup.js,popup.css}; test extension/tests/voice-popup.test.mjs
+(now 11 tests). Checks: npm test 303/303, npm run check PASS, git diff --check PASS,
+npm run scan:secrets PASS.
+
+Live check remaining (user, cannot be automated here — unpacked-extension load needs a
+native dialog): reload at chrome://extensions, reopen popup, (a) click the goal box and
+type — MUST work now; (b) clear it, press mic — Chrome should prompt for the microphone;
+allow it, say "Open YouTube and search for calculus videos"; confirm the transcript appears
+in the goal input with NO browser action, then RUN TASK hands off to the existing agent.
+Known Chrome limitation: even with mic granted, Web-Speech in an MV3 popup can still return
+a `network` error on some Chrome builds — the fallback messaging handles this and text mode
+always works; if it recurs, report the exact recognition `error` code.
+
+## Earlier: Phase 12 — unified voice + text goal input (b553ba1)
+
+Added the mic button beside the goal input using browser-native SpeechRecognition /
+webkitSpeechRecognition (popup-only), feeding the SAME goal path. See the hotfix above for
+the corrected behavior. Only the final goal string enters the existing pipeline.
 
 Next phase (not started): final evaluation metrics + demo polish + submission cleanup.
 
