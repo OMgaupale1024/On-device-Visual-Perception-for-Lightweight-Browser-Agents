@@ -2,64 +2,64 @@
 
 ## Current Task / Baseline
 
-Phase 11A: correct Nemotron choosing STOP for a complete actionable travel form.
-Started clean at 7b34f7a on main. User confirmed real AI smoke now returns a valid
-STOP instead of UNAVAILABLE. Timeout, key, network, OCR, grounding, candidates and
-privacy are not the current blocker; do not change them.
+Phase 11B — make the existing CLICK/STOP pipeline autonomous: one user start drives
+OBSERVE → PLAN → VALIDATE → ACT → SETTLE → RE-OBSERVE until STOP / limit / safe failure.
+Action set intentionally stays CLICK + STOP only. Started clean at d9b3618 on main.
 
-## Diagnosis and Change
+## What was built
 
-- Exact provider projection contains the goal, all seven filled semantic roles,
-  five privacy placeholders, safe destination/purpose, and a unique Continue element
-  with actionable=true. Coordinates, observation IDs and private values are omitted.
-- Old prompt listed necessary prerequisites without an explicit sufficient CLICK
-  rule or a filled-versus-submitted distinction. This is a plausible policy gap;
-  the model's internal reason for its live STOP is not known.
-- Updated SYSTEM_PROMPT: require CLICK on the actual unique actionable Continue ID
-  for a completed travel form; filled fields alone are not a submitted goal;
-  intentionally redacted filled values count as filled. Explicit STOP conditions
-  retain missing/incomplete/unavailable fields, no target, ambiguity, completed goal
-  and unsafe action. Removed fixed example IDs.
-- Server decision path, provider settings, reason enum and validators are unchanged.
-  No retries, fallback, local CLICK decision, perception or privacy changes.
+- `extension/src/background/agent-controller.js` — pure, orchestration-only state machine
+  (`runAgent(goal, deps)`). No planning intelligence: Nemotron (via injected `observePlan`)
+  still decides every action. States: RUNNING/COMPLETED/STOPPED/FAILED/CANCELLED. Guards:
+  `AGENT_MAX_STEPS=5`, cancel token (stops run + blocks a pending plan from acting),
+  duplicate-action guard (`AGENT_DUPLICATE_LIMIT=2` on signature+action+target →
+  LOOP_DETECTED), fail-closed on planner-unavailable / privacy / perception / action
+  failure (no fallback, no retry). Emits safe count/id/status audit events.
+- `service-worker.js` — extracted `observeAndPlan(goal)` (shared by manual Analyze and the
+  loop); added `RUN_TASK`/`CANCEL_TASK` handlers and `observePlanForAgent` (maps privacy/
+  perception failure → explicit stop reasons; computes an unchanged-page signature from the
+  already-safe context). Manual `ANALYZE_PAGE`/`EXECUTE_ACTION` unchanged (now also guard
+  against `agentActive`). Re-observation IS the next step's `observeAndPlan` — real fresh
+  capture + planner call, never faked.
+- `shared/messages.js` — `RUN_TASK`, `CANCEL_TASK`, `AGENT_UPDATE`.
+- Popup — `RUN TASK (AUTONOMOUS)` + `STOP TASK` buttons and an agent status/step/log card;
+  live `AGENT_UPDATE` rendering. Manual Analyze/Plan/Execute untouched.
 
 ## Tests / Limits
 
-- AI planner/provider/endpoint and prompt tests: 36/36 PASS.
-- Full server suite: 65/65 PASS.
-- Full extension suite: 248/248 PASS, zero skipped.
-- npm run check: PASS.
-- New tests inspect exact minimized HTTP message content for the complete fixture,
-  another visual ID and the no-target state. A regression confirms a provider STOP
-  is preserved even for a complete actionable fixture; local code never replaces it.
-- These are automated contract/transport tests, not proof of real model behavior.
-- Diff review and whitespace check: PASS. Credential-pattern scan of 101 tracked
-  text files (excluding archive/vendor): no findings; no private .env files unignored.
+- Extension: **259/259 PASS** (248 prior + `agent-controller.test.mjs` 10 scenarios +
+  `agent-integration.test.mjs` 1 wired end-to-end run). `npm run check`: PASS.
+- Server: **65/65 PASS** (no server code changed).
+- Controller unit tests cover: CLICK→execute→re-observe→STOP; first-step STOP (no action);
+  invalid target; stale observation; planner unavailable; privacy failure (no plan/action);
+  perception failure; MAX_STEPS; cancellation-before-execute; duplicate-action guard.
+- Integration test drives the real service-worker `RUN_TASK` through the full local privacy
+  pipeline (Chrome/Canvas/OCR/fetch doubles): CLICK step 1, fresh re-observe, STOP step 2,
+  exactly one click, planner consulted per observation, no canary leak in any body.
+- Manual-mode regression: existing `background.test.mjs` (Analyze/Execute) still green.
+- These are automated doubles, not proof of live NVIDIA/Chrome behavior.
 
-## Live Acceptance / Exact Resume Point
+## Live Acceptance / Exact Resume Point (PENDING)
 
-The user previously chose to run live tests in their already configured terminal.
-A request is pending for their safe result after restarting FastAPI with the new
-working-tree prompt. Do not request or print the key. No new live run is claimed.
-
-1. Restart FastAPI in that AI-configured terminal.
-2. From root: node scripts/smoke-planner.mjs --ai.
-   Require PASS: first fixture CLICK on its supplied candidate; second no-target
-   fixture STOP. Do not change the smoke expectations or substitute mocked evidence.
-3. After smoke passes, reload EdgeSight and the demo; ANALYZE / PLAN, DO NOT EXECUTE.
-   Require actionCandidates contains current Continue ID, /plan 200, planner header ai,
-   CLICK on that same ID, target validation passed, privacy 5/5/rawPiiIncluded=false.
-4. Only after both live checks pass: update these docs with acceptance, test as needed,
-   commit/push normally, verify HEAD == origin/main and clean tree, then stop.
-   Phase 11A is NOT yet marked complete. Do not start an autonomous loop.
+1. Start FastAPI in AI mode (real `NVIDIA_API_KEY`, server-side only), exact extension origin.
+2. Reload EdgeSight; open the Employee Travel Request demo with all fields + Continue visible.
+3. Goal: "Check whether this travel request is complete and submit it." Press **RUN TASK** ONCE.
+   Do NOT press manual Plan/Execute.
+4. Expect: step 1 observe → privacy SAFE → NVIDIA CLICK Continue → local click; step 2 fresh
+   observe of submitted page → NVIDIA STOP → agent status TASK COMPLETE. Confirm
+   rawPiiIncluded=false and planner NVIDIA AI throughout; no deterministic fallback.
+5. Record the live result in docs/TESTING.md (Phase 11B section), then STOP.
 
 ## Uncommitted Files / Constraints
 
-- server/app/ai_contract.py
-- server/tests/test_ai_planner.py
-- docs/AI_CONTEXT.md
-- docs/HANDOFF.md
+Committed as `feat: add autonomous observe-plan-act loop`. If resuming before commit, changed:
+- extension/src/background/agent-controller.js (new)
+- extension/src/background/service-worker.js
+- extension/src/popup/popup.{html,js}
+- extension/src/shared/messages.js
+- extension/tests/agent-controller.test.mjs (new), extension/tests/agent-integration.test.mjs (new)
+- docs/AI_CONTEXT.md, docs/HANDOFF.md, docs/TESTING.md
 
-Preserve these changes while waiting for the user's live results. Latest committed
-baseline remains 7b34f7a. No hardcoded action/ID outside the prompt, no fallback,
-no changes to reason enum or approved-candidate validation, no Execute or new phase.
+DO NOT: expand the action vocabulary (TYPE/NAVIGATE/SCROLL/PRESS_KEY/WAIT/voice), add a
+deterministic fallback inside the loop, move any planning decision locally, or remove manual
+mode. Privacy failure must stop immediately with no network request.

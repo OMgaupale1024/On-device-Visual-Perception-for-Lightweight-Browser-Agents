@@ -6,6 +6,8 @@ const resultsEl = byId('results');
 const errorEl = byId('error');
 const analyzeBtn = byId('analyze');
 const executeBtn = byId('execute');
+const runBtn = byId('run-task');
+const stopBtn = byId('stop-task');
 
 // Fixed, safe user-facing text for each execution reason code. Never render a
 // server- or page-derived string here.
@@ -229,6 +231,89 @@ executeBtn.addEventListener('click', async () => {
   }
 });
 
+// --- Autonomous agent (Phase 11B) ---------------------------------------
+// Fixed, safe outcome text keyed by controller reason. Never render server- or
+// page-derived strings; target text below is the local, already-guarded OCR text.
+const AGENT_OUTCOME = {
+  PLANNER_STOP: 'Task complete — planner stopped.',
+  MAX_STEPS: 'Stopped: maximum autonomous steps reached.',
+  CANCELLED: 'Stopped by user.',
+  PLANNER_UNAVAILABLE: 'Stopped: planner unavailable.',
+  PRIVACY_FAILED: 'Stopped: privacy guard blocked the run.',
+  PERCEPTION_FAILED: 'Stopped: local perception failed.',
+  OBSERVE_FAILED: 'Stopped: page could not be observed.',
+  INVALID_TARGET: 'Stopped: no valid action target.',
+  ACTION_FAILED: 'Stopped: click could not be executed.',
+  STALE_OBSERVATION: 'Stopped: observation expired before acting.',
+  LOOP_DETECTED: 'Stopped: repeated action with no progress.',
+};
+
+function appendAgentLog(text) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.textContent = text;
+  byId('agent-log').append(row);
+}
+
+function renderAgentEvent(e) {
+  if (e.event === 'AGENT_RUN_STARTED') {
+    byId('agent-log').textContent = '';
+    byId('agent-status').textContent = 'RUNNING';
+    byId('agent-step').textContent = `0 / ${e.maxSteps}`;
+    byId('agent-decision').textContent = '–';
+    return;
+  }
+  if (e.event === 'AGENT_STEP_STARTED') { byId('agent-step').textContent = `${e.step} / 5`; return; }
+  if (e.event === 'OBSERVATION_READY') { appendAgentLog(`Step ${e.step}: observed`); return; }
+  if (e.event === 'REOBSERVATION_READY') { appendAgentLog(`Step ${e.step}: re-observed fresh page`); return; }
+  if (e.event === 'PRIVACY_PASS') { appendAgentLog(`Step ${e.step}: privacy SAFE`); return; }
+  if (e.event === 'PLAN_READY') {
+    const decision = e.action === 'CLICK' ? `CLICK ${e.target ?? ''}`.trim() : 'STOP';
+    byId('agent-decision').textContent = decision;
+    appendAgentLog(`Step ${e.step}: plan → ${decision}`);
+    return;
+  }
+  if (e.event === 'ACTION_EXECUTED') { appendAgentLog(`Step ${e.step}: clicked ${e.target ?? ''}`.trim()); return; }
+  if (['AGENT_COMPLETED', 'AGENT_STOPPED', 'AGENT_FAILED', 'AGENT_CANCELLED'].includes(e.event)) {
+    const label = e.state === 'COMPLETED' ? 'TASK COMPLETE'
+      : e.state === 'FAILED' ? 'FAILED' : e.state === 'CANCELLED' ? 'STOPPED' : 'STOPPED';
+    byId('agent-status').textContent = label;
+    byId('agent-note').textContent = AGENT_OUTCOME[e.reason] || 'Run ended.';
+  }
+}
+
+runBtn.addEventListener('click', async () => {
+  runBtn.disabled = true;
+  analyzeBtn.disabled = true;
+  clearPreviews();
+  hide(resultsEl);
+  hide(errorEl);
+  show(byId('agent-card'));
+  show(stopBtn);
+  setStatus('Running autonomous task…');
+  let res;
+  try { res = await chrome.runtime.sendMessage({ type: MSG.RUN_TASK, goal: byId('goal').value }); }
+  catch { res = null; }
+  hide(stopBtn);
+  runBtn.disabled = false;
+  analyzeBtn.disabled = false;
+  if (res?.ok && res.summary) {
+    renderAgentEvent({ event: 'AGENT_' + res.summary.state, ...res.summary });
+    setStatus('Done');
+  } else {
+    byId('agent-status').textContent = 'FAILED';
+    byId('agent-note').textContent = res?.error || 'Autonomous run failed.';
+    setStatus('Error');
+  }
+});
+
+stopBtn.addEventListener('click', async () => {
+  stopBtn.disabled = true;
+  byId('agent-note').textContent = 'Stopping after the current step…';
+  try { await chrome.runtime.sendMessage({ type: MSG.CANCEL_TASK }); } catch { /* ignore */ }
+  stopBtn.disabled = false;
+});
+
 function renderSensitive(fields, count) {
   const listEl = byId('sensitive-list');
   listEl.textContent = '';
@@ -284,8 +369,9 @@ function renderVerification(result) {
   else if (state !== 'WAITING') analyzeBtn.disabled = false;
 }
 chrome.runtime.onMessage.addListener((message, sender) => {
-  if (sender.id !== chrome.runtime.id || message?.type !== MSG.VERIFICATION_UPDATE) return false;
-  renderVerification(message.verification);
+  if (sender.id !== chrome.runtime.id) return false;
+  if (message?.type === MSG.VERIFICATION_UPDATE) { renderVerification(message.verification); return false; }
+  if (message?.type === MSG.AGENT_UPDATE && message.update) { renderAgentEvent(message.update); return false; }
   return false;
 });
 chrome.runtime.sendMessage({ type: MSG.GET_VERIFICATION }).then(renderVerification).catch(() => {});

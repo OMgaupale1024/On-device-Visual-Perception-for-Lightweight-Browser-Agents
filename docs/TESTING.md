@@ -879,3 +879,65 @@ PENDING (requires a real key, server-side only):
 
 Exact next task: complete the live NVIDIA check above, then **Phase 11B** - autonomous
 OBSERVE -> PLAN -> ACT -> OBSERVE loop. Not started.
+
+## Phase 11B - autonomous observe-plan-act loop (2026-09-12)
+
+Made the existing CLICK/STOP pipeline autonomous. Action set stays CLICK + STOP only; no
+vocabulary expansion, no voice, no NAVIGATE/TYPE. The controller is orchestration only -
+Nemotron still decides every action; local code never plans.
+
+| Check | Actual result |
+| --- | --- |
+| npm test | PASS **259/259 extension entries** (248 prior + 11 new: 10 controller scenarios + 1 wired integration) |
+| server/.venv/Scripts/python.exe -m unittest discover -s tests | PASS **65/65** (server code unchanged) |
+| npm run check | PASS JS/test/script syntax, manifest, packaged OCR asset hashes |
+| git diff --check | PASS |
+| secret scan (changed files) | no api-key/authorization/credential patterns; canary values only match existing fixtures |
+
+### Controller unit tests - `agent-controller.test.mjs` (10 entries)
+
+Pure state machine, all side effects injected. 1: CLICK -> execute -> re-observe -> STOP
+completes with the expected event order. 2: STOP on step 1 executes no action. 3: invalid
+target (no ticket) fails INVALID_TARGET without executing. 4: execution-time
+STALE_OBSERVATION fails the run. 5: planner unavailable -> FAILED PLANNER_UNAVAILABLE (no
+fallback). 6: privacy failure -> FAILED PRIVACY_FAILED with no PLAN_READY and no execute.
+7: thrown perception failure -> FAILED PERCEPTION_FAILED. 8: MAX_STEPS reached -> STOPPED.
+9: cancellation after observe -> CANCELLED, pending plan never executes. 10: identical
+action on unchanged observation past the limit -> FAILED LOOP_DETECTED (two clicks allowed,
+third blocked before dispatch).
+
+### Wired integration - `agent-integration.test.mjs` (1 entry)
+
+Drives the real `service-worker.js` `RUN_TASK` through the full local privacy pipeline with
+Chrome/Canvas/OCR/fetch doubles. Planner returns CLICK on the first observation and STOP on
+the re-observed page. Asserts: state COMPLETED / reason PLANNER_STOP at step 2; planner
+consulted twice (once per fresh observation); exactly one guarded click; two full observe
+transactions; the synthetic canary appears in no request body; a second run succeeds after
+the first releases `agentActive`. Manual-mode regression (`background.test.mjs`
+Analyze/Execute) remains green, proving manual mode survived the refactor.
+
+### Policy tested
+
+MAX_STEPS=5. Duplicate guard limit 2 on (safe-context signature + action + target).
+Post-action settle 750 ms, then the next step re-observes fresh pixels (re-observation is a
+real capture + planner call, never faked). Stale plans cannot act (ticket carries its own
+observationId; execution re-validates). Cancellation stops the run and prevents a pending
+plan from executing. Planner-unavailable / privacy / perception / action failures fail
+closed with no fallback and no retry. Audit events are count/id/status only - never target
+text (popup `AGENT_UPDATE` may carry the already-guarded local target text for display).
+
+### P11B-M1 - live autonomous Chrome demo: PENDING
+
+1. Start FastAPI in AI mode (real NVIDIA_API_KEY, server-side only), exact extension origin.
+2. Reload EdgeSight; open the Employee Travel Request demo, all fields + Continue visible.
+3. Goal: Check whether this travel request is complete and submit it. Press **RUN TASK** once.
+   Do NOT press manual Plan/Execute.
+4. Expect step 1: observe -> privacy SAFE -> NVIDIA CLICK Continue -> local click. Step 2:
+   fresh observe of the submitted page -> NVIDIA STOP -> agent status TASK COMPLETE.
+5. Confirm rawPiiIncluded=false and planner NVIDIA AI throughout; no deterministic fallback.
+
+Actual this session: **PENDING**. No NVIDIA_API_KEY configured and the unpacked extension
+cannot be loaded from the coding shell (native file dialog). Automated doubles above are not
+the live demo. Known limits carry over from Phases 7-9 (single 750 ms settle can miss a slow
+transition; uncalibrated OCR confidence; unknown-PII escape risk; non-atomic tab/capture;
+worker teardown loses the in-flight run).

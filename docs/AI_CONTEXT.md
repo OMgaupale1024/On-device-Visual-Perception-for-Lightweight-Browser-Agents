@@ -16,14 +16,16 @@ sanitized structured state crosses to a localhost FastAPI service, which plans e
 **deterministically** (default) or via one **NVIDIA NIM (Nemotron)** call and returns
 exactly ONE structured action. The browser re-validates the action and performs a single
 guarded local click, then re-observes fresh pixels to verify the outcome locally. The
-autonomous **OBSERVE → PLAN → ACT → OBSERVE** loop remains planned; the current
-acceptance gate is one live AI-generated CLICK against an approved candidate.
+autonomous **OBSERVE → PLAN → ACT → OBSERVE** loop is now implemented (Phase 11B): one
+user start drives observe→plan→validate→act→settle→re-observe until the planner returns
+STOP, a step limit, or a safe failure. Manual Analyze/Plan/Execute remains available.
 
 ## Current architecture
 ```
 VOICE / TEXT GOAL              [PLANNED: voice; text = the current goal string]
       ↓
-AGENT CONTROLLER  service-worker.js        [IMPLEMENTED single-step; loop PLANNED]
+AGENT CONTROLLER  service-worker.js + agent-controller.js  [IMPLEMENTED: manual
+                                                            single-step + autonomous loop]
       ↓
 BROWSER OBSERVATION  local-observation.js + content/observe.js   [IMPLEMENTED]
       ↓
@@ -41,8 +43,20 @@ VALIDATED ACTION  CLICK visual_N | STOP                          [IMPLEMENTED]
 LOCAL EXECUTION  actions/{geometry,execute-click}.js (1 click)   [IMPLEMENTED]
       ↓
 RE-OBSERVATION  verification/verify-*.js (fresh pixels, local)   [IMPLEMENTED]
-      ↺  loop back to PLAN                                       [PLANNED]
+      ↺  loop back to OBSERVE → PLAN  agent-controller.js         [IMPLEMENTED: Phase 11B]
 ```
+
+## Autonomous loop (Phase 11B)
+`extension/src/background/agent-controller.js` is a pure, orchestration-only state machine
+(no planning intelligence — Nemotron still decides each action). `runAgent(goal, deps)`:
+per step it calls `observePlan` (a fresh local OBSERVE + PLAN + validated ticket), gates on
+privacy/perception, then STOP → COMPLETED, or CLICK → validate → `execute` → `settle(750ms)`
+→ next step re-observes fresh pixels. Guards: `AGENT_MAX_STEPS=5`; a cancel token stops a run
+and prevents a pending plan from acting; a duplicate-action guard (same signature+action+target
+past `AGENT_DUPLICATE_LIMIT=2`) fails LOOP_DETECTED; planner-unavailable / privacy / perception
+/ action failures fail closed with no fallback. Stale plans can't act (ticket carries its own
+observationId). Wired in `service-worker.js` via `RUN_TASK`/`CANCEL_TASK`; emits safe
+count/id/status audit events (`AGENT_RUN_STARTED`…`AGENT_COMPLETED`) and popup `AGENT_UPDATE`s.
 
 ## Current working capabilities (code-complete, Node/unit verified)
 - Local screen capture → OCR + DOM semantics → PII detection → Canvas redaction →
@@ -71,11 +85,11 @@ RE-OBSERVATION  verification/verify-*.js (fresh pixels, local)   [IMPLEMENTED]
   acceptance remain pending. Automated unit doubles are not acceptance.
 
 ## Current task
-Clarify the model prompt: a completed travel form with a unique actionable Continue
-requires CLICK; filled fields do not mean already submitted, and filled redacted values
-are not missing. The model remains the sole decision-maker; validators and reason enum
-are unchanged. Await user-run smoke CLICK/STOP pair and Chrome PLAN before commit/push.
-Do not debug timeout, key, network, OCR, fusion, candidates, privacy or grounding.
+Phase 11B autonomous loop is code-complete and unit/integration verified (259 ext + 65
+server tests). Action set stays CLICK/STOP only. Live Chrome acceptance (one RUN TASK
+press drives CLICK Continue → re-observe → STOP with privacy 5/5/rawPiiIncluded=false,
+planner NVIDIA AI, no manual Execute) is PENDING a user run. Do NOT start TYPE/NAVIGATE/
+SCROLL/voice or expand the vocabulary.
 
 ## Critical architecture decisions (do not break)
 - **One privacy boundary out of the browser:** only the frozen builder-approved
@@ -107,9 +121,11 @@ Do not debug timeout, key, network, OCR, fusion, candidates, privacy or groundin
 5. Verification makes zero network/provider calls and never returns pixels or page text.
 
 ## Important files (for the next task)
-- `extension/src/background/service-worker.js` → controller; only place that mints a
-  ticket and calls `requestPlan`. `background/local-observation.js` → shared observe
-  (no planner/network). `content/observe.js` → DOM + control regions.
+- `extension/src/background/service-worker.js` → message router + `observeAndPlan` (shared
+  OBSERVE+PLAN+ticket); wires manual `ANALYZE_PAGE`/`EXECUTE_ACTION` and autonomous
+  `RUN_TASK`/`CANCEL_TASK`. `background/agent-controller.js` → pure Phase 11B loop state
+  machine. `background/local-observation.js` → shared observe (no planner/network).
+  `content/observe.js` → DOM + control regions.
 - `extension/src/privacy/agent-context.js` → builds/freezes SafeAgentContext + actionCandidates.
   Supporting: `privacy/{detect,collect,redact,guard,semantic,visual}.js`.
 - `extension/src/actions/{geometry,execute-click}.js` → viewport mapping,
@@ -172,16 +188,16 @@ Tab/capture checks are not atomic. Worker restart loses pending tickets/results.
 automation, no additional provider, no Raspberry Pi.
 
 ## Exact next step
-User restarts FastAPI in their already configured AI terminal and runs
-node scripts/smoke-planner.mjs --ai: require real CLICK for the complete actionable
-fixture and real STOP when targets are absent. Then reload extension/page, ANALYZE / PLAN:
-require 200, header ai, CLICK on the current candidate, successful target validation and
-privacy 5 sensitive / 5 redacted / rawPiiIncluded=false. No Execute. Only after these
-live checks pass, record Phase 11A acceptance, commit/push and stop; no autonomous loop.
+Live Phase 11B acceptance: start FastAPI in AI mode, reload EdgeSight + the Employee
+Travel Request demo, enter the goal, press **RUN TASK** ONCE (no manual Plan/Execute).
+Expect: step 1 observe → privacy SAFE → NVIDIA CLICK Continue → local click; step 2 fresh
+observe of the submitted page → NVIDIA STOP → TASK COMPLETE. Confirm rawPiiIncluded=false
+and planner NVIDIA AI throughout, no deterministic fallback. Record the result here, then
+STOP — do not begin TYPE/NAVIGATE/voice.
 
 ## Remaining roadmap (not sacred — adjust to repo reality)
 1. Verify one live AI CLICK against an approved candidate (AI mode itself is confirmed).
-2. Autonomous controller loop: OBSERVE → PLAN → ACT → OBSERVE.
+2. Autonomous controller loop: OBSERVE → PLAN → ACT → OBSERVE. **DONE (Phase 11B, code + tests).**
 3. Expanded safe actions: NAVIGATE, CLICK, TYPE, TYPE_LOCAL_REF, PRESS_KEY, SCROLL, WAIT, STOP.
 4. Browser navigation / new-tab control.
 5. Autonomous form filling.
