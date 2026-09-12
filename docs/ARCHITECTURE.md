@@ -1,4 +1,4 @@
-# EdgeSight architecture — Phase 8
+# EdgeSight architecture — Phase 11C
 
 SIH26171 / ISRO: on-device visual perception for lightweight browser agents.
 
@@ -17,16 +17,26 @@ structured JSON POST http://127.0.0.1:8000/plan
  → strict FastAPI/Pydantic validation → deterministic planner OR explicit AI mode:
    minimized/revalidated safe input → provider privacy guard → NVIDIA NIM LLM
    → untrusted structured output → strict action/visual-ID validator
- → observation-bound CLICK / STOP → client validation → decision display
+ → one observation-bound action → client validation → manual display or autonomous execution
 ================ BACK IN THE BROWSER (Phase 7, local only) ================
 CLICK visual_N → LOCAL bbox for the SAME observation → screenshot px → CSS viewport px
  → document.elementFromPoint → clickable-element allowlist + safety validation
  → ONE guarded, single-use element.click()   (STOP → no browser action)
+TYPE / PRESS_KEY → current locally validated editable control → fixed browser routines
+SCROLL → enum-to-bounded-distance mapping; NAVIGATE → HTTP/S validation + tab-load event
+Every non-STOP autonomous action → settle → fresh observation → fresh planner call
 ================ FRESH LOCAL VERIFICATION (Phase 8, no network) ================
 750 ms → same intended active tab → NEW capture/observation → local OCR/privacy again
  → approved safe visual text → full Travel Request Submitted phrase
  → VISUALLY VERIFIED / NOT VERIFIED (no recovery action)
 ```
+
+Phase 11C extends the same Phase 11B controller (eight steps maximum), not a second
+loop. TYPE accepts only non-sensitive guarded-goal text, ENTER is the sole supported
+key, and all tickets retain observation/document/tab/TTL binding. Optional browsing
+permission is required for cross-origin capture. See [current context](AI_CONTEXT.md)
+for the action table and [handoff](HANDOFF.md) for pending live acceptance. The detailed
+Phase 7/8 sections below describe the retained manual CLICK verification path.
 
 Phase 6B calls one real server-side provider adapter; no image upload.
 Phase 7 adds LOCAL execution of a validated CLICK: the server chooses WHAT (visual_N),
@@ -118,15 +128,16 @@ patterns provide defence in depth. Server validation cannot undo a client leak.
 Server `app/planner.py` matches the normalized travel demo goal, requires one filled,
 non-withheld field for each of seven roles, and exactly one trimmed/case-insensitive
 Continue visual element. It returns that ID as CLICK; otherwise STOP with null target.
-See [server README](../server/README.md) for the complete wire contract.
+See [server README](../server/README.md) for server setup; the current action contract is
+defined by ActionPayload in schemas.py and summarized in AI_CONTEXT.md.
 
-Responses contain only schemaVersion, observationId, action, target and reason.
-Client checks exact keys/version/types, action CLICK/STOP, matching observation ID,
-and exactly one current visual ID for CLICK. STOP requires null. Server reasons are
-not rendered; the popup uses the locally guarded target text. There are no selectors,
-XPath, JavaScript, arbitrary coordinates or execution calls. IDs are scoped to the
-submitted observation; they are not stable after another observation. Actual page
-freshness at future execution time remains Phase 7's responsibility.
+Responses contain schemaVersion, observationId, action, reason and only the parameters
+for that action. CLICK/TYPE require a current approved visual target; TYPE also requires
+editable metadata and exact guarded-goal text. PRESS_KEY requires approved editable
+focus. SCROLL and NAVIGATE have enum/URL parameters, never arbitrary coordinates or
+code. STOP retains target=null. The same server ActionPayload underlies model parsing
+and HTTP serialization; the extension shares one validator across transport/tickets.
+IDs belong to the submitted observation. Local execution rechecks freshness/safety.
 
 ## Phase 6B provider boundary
 
@@ -142,7 +153,8 @@ The AI entry accepts a JSON-shaped candidate, takes a JSON snapshot and revalida
 the complete SafeAgentContext BEFORE projection. Nested extra keys, fake PII and
 model-instance validation bypasses block before provider invocation. ai_input.py
 then explicitly copies only goal, safe privacy flags, semantic role/sensitive/filled/
-safe value fields, pixel-OCR ID/text/confidence, and the existing redaction legend.
+safe value fields, pixel-OCR ID/text/confidence/actionability and safe role/editable/
+focused flags, optional guarded page origin (no path/query), and the redaction legend.
 It guards the exact serialized JSON again and rejects inputs over 32KB. Observation
 ID, timestamp, geometry/dimensions, field IDs and debug/extension metadata stay local
 to our server. The provider receives the JSON string, not the internal context.
@@ -154,25 +166,25 @@ of placeholders, and treats only filled=true as evidence of a local value. It as
 for a decision, never hidden reasoning. Prompt separation is not a proof of perfect
 model behavior under injection.
 
-Model output is exactly action/target/reason. The reason must be one of four short
+Model output is action, its allowed parameters, and reason. The reason must be one of four short
 safe phrases (ai_contract.py), so arbitrary private/executable explanation text is
 rejected. Duplicate JSON keys, unknown actions/IDs, null CLICK or non-null STOP,
-extra properties, selectors/code/coordinates/URLs, refusals and incomplete output
+extra properties, selectors/code/coordinates, URLs outside NAVIGATE, refusals and incomplete output
 are rejected without repair. The model never controls schemaVersion/observationId;
 ai_planner.py binds them from the local validated snapshot after ID membership checks.
 Schema validation constrains the response but does not prove the action is correct.
 
 Provider authentication is read only in the server adapter and used only as protocol
-authentication, never model content. No payload/header/exception logging. Fifteen
-seconds bounds provider work and 64KB bounds its response envelope. Generic 503 for
+authentication, never model content. No payload/header/exception logging. Thirty
+seconds defaults provider work (NVIDIA_TIMEOUT_SECONDS, finite 1–120) and 64KB bounds its response envelope. Generic 503 for
 missing key/network/status failures; 504 for timeout; 502 for invalid model/refusal
 output; 422 for unsafe/oversized input. Health remains available with a missing key.
 
-The exact five-key Phase 6A action JSON is unchanged. X-EdgeSight-Planner is a separate
+CLICK/STOP retain their five-key JSON; new actions use only their own parameters. X-EdgeSight-Planner is a separate
 allowlisted/exposed header (ai or deterministic), surfaced by the popup even on
 server-reported AI failure. Missing/unrecognized mode reports Unknown, never inferred
-AI success. No latency metric is added. Explicit Analyze / Plan still initiates all
-browser transport; Phases 1–5 survive planner failure.
+AI success. Manual Analyze / Plan or a user-started autonomous RUN TASK initiates
+browser transport; privacy/planner failure stops the action path without fallback.
 
 ## Phase 7 execution boundary
 

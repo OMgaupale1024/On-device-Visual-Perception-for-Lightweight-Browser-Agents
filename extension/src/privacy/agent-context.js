@@ -78,7 +78,7 @@ function safeVisualElement(item) {
 // Build the canonical SafeAgentContext from already-safe inputs. Structural problems
 // throw (programmer error); a privacy-contamination failure returns {status:'BLOCKED'}
 // (fail closed, generic reason — never echoes the offending value).
-export function buildSafeAgentContext({ goal, semantic, visualState, actionCandidates = [], image, observation, sensitiveValues }) {
+export function buildSafeAgentContext({ goal, semantic, visualState, actionCandidates = [], candidateMetadata = {}, pageOrigin, image, observation, sensitiveValues }) {
   if (!observation || typeof observation.id !== 'string' || !/^obs_[\w-]+$/.test(observation.id) ||
       typeof observation.capturedAt !== 'string' || !observation.viewport ||
       !Number.isFinite(observation.viewport.width) || !Number.isFinite(observation.viewport.height)) {
@@ -105,6 +105,14 @@ export function buildSafeAgentContext({ goal, semantic, visualState, actionCandi
   const visualIds = new Set(visualElements.map((v) => v.id));
   const safeActionCandidates = (Array.isArray(actionCandidates) ? actionCandidates : [])
     .filter((id, i, a) => typeof id === 'string' && visualIds.has(id) && a.indexOf(id) === i);
+  for (const v of visualElements) {
+    const meta = candidateMetadata[v.id];
+    if (!meta || !safeActionCandidates.includes(v.id)) continue;
+    if (!['button', 'link', 'input', 'searchbox', 'textarea'].includes(meta.role) ||
+        typeof meta.editable !== 'boolean' || typeof meta.focused !== 'boolean' ||
+        (meta.editable && !['input', 'searchbox', 'textarea'].includes(meta.role))) throw new Error('Invalid control metadata.');
+    Object.assign(v, { role: meta.role, editable: meta.editable, focused: meta.focused });
+  }
 
   // Legend contains ONLY placeholders actually present, drawn from the fixed legend.
   const redactionScheme = {};
@@ -114,6 +122,7 @@ export function buildSafeAgentContext({ goal, semantic, visualState, actionCandi
 
   const context = {
     schemaVersion: SCHEMA_VERSION,
+    ...(pageOrigin ? { pageOrigin: new URL(pageOrigin).origin } : {}),
     observation: {
       id: observation.id,
       capturedAt: observation.capturedAt,

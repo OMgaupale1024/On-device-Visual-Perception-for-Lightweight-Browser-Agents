@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local learning library</title>
+  <link rel="stylesheet" href="search.css">
+  <script src="search.js" defer></script>
+</head>
+<body>
+  <main>
+    <h1>Learning library</h1>
+    <p>Search the local video catalogue.</p>
+    <form id="library-search" action="search.html" method="get">
+      <label for="query">Search videos</label>
+      <input id="query" name="q" type="search" placeholder="Search videos" autocomplete="off">
+      <button type="submit">Search</button>
+    </form>
+    <section id="results" hidden aria-live="polite">
+      <h2 id="result-heading"></h2>
+      <p>Results continue below. Scroll down to read the first video title.</p>
+      <div class="space" aria-hidden="true"></div>
+      <article>
+        <h2>Calculus: limits and derivatives</h2>
+        <p>Video lesson · 18 minutes</p>
+        <p>End of search results</p>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,4 +1,4 @@
-// Phase 7 — safe, visually grounded single click.
+// Shared single-use action tickets and common observation/tab/freshness gates.
 //
 // The server chose WHAT (CLICK visual_N); the browser decides WHERE and HOW, using
 // only the LOCAL bbox for the SAME observation. No selector/coordinate/code ever
@@ -11,6 +11,8 @@
 //  clickInPage()    SERIALIZED into the observed document (no imports/closures):
 //                   elementFromPoint -> interactive ancestor -> validate -> one click.
 import { toViewportPoint, overlapsSensitive } from './geometry.js';
+import { validateAction } from '../shared/action-contract.js';
+import { executeBrowserAction } from './execute-browser.js';
 
 // Freshness bound for a pending action. Matches the popup's 60s local-preview
 // lifetime; there is no server-side observation store to reuse.
@@ -20,23 +22,25 @@ const blocked = (reason) => ({ status: 'BLOCKED', reason });
 
 // LOCAL-ONLY, single-use capability. Never sent to NVIDIA or FastAPI, never persisted.
 export function createTicket(fields) {
-  return { ...fields, createdAt: fields.now ?? Date.now(), consumed: false };
+  return { action: 'CLICK', ...fields, createdAt: fields.now ?? Date.now(), consumed: false };
 }
 
-// Build a ticket only for a validated CLICK whose observation + target match the
-// exact local context and approved candidates. STOP, mismatched observation, or an
-// unapproved target -> no ticket.
+// Bind one validated action to its exact local observation. Targeted actions also
+// require approved candidate membership; typing/key actions need a local control.
 // `local` carries browser-only execution metadata that never enters SafeAgentContext.
 export function ticketForPlan(plan, context, local, now = Date.now()) {
-  if (!plan || plan.action !== 'CLICK') return null;
+  if (!plan || plan.action === 'STOP') return null;
   if (!context || !context.observation || plan.observationId !== context.observation.id) return null;
-  if (!Array.isArray(context.actionCandidates) || !context.actionCandidates.includes(plan.target)) return null;
+  try { validateAction(plan, context); } catch { return null; }
   const target = (context.visualElements || []).find((v) => v.id === plan.target);
-  if (!target) return null;
+  const focus = context.visualElements.find(v => v.editable && v.focused && context.actionCandidates.includes(v.id));
+  const control = local.candidateControls?.[plan.action === 'PRESS_KEY' ? focus?.id : plan.target];
+  if (['TYPE', 'PRESS_KEY'].includes(plan.action) && (!control?.editable || !control.fieldId)) return null;
   return createTicket({
+    action: plan.action, plan: { ...plan }, control,
     observationId: context.observation.id,
     tabId: local.tabId, windowId: local.windowId, documentId: local.documentId, url: local.url,
-    targetVisualId: target.id, bbox: target.bbox, targetText: target.text,
+    targetVisualId: target?.id, bbox: target?.bbox, targetText: target?.text,
     screenshot: { width: context.observation.image.width, height: context.observation.image.height },
     viewport: context.observation.viewport,
     sensitiveRegions: local.sensitiveRegions || [],
@@ -57,6 +61,15 @@ export async function executeTicket(ticket, deps) {
   const active = await queryActiveTab();
   if (!active || active.id !== ticket.tabId || active.windowId !== ticket.windowId) return blocked('TAB_CHANGED');
   if (ticket.url && tab.url && tab.url !== ticket.url) return blocked('PAGE_CHANGED');
+  if (deps.cancelled?.()) return blocked('CANCELLED');
+  if (ticket.action !== 'CLICK' || (ticket.control && ticket.control.role !== 'button')) {
+    if (ticket.bbox) {
+      const point = toViewportPoint(ticket.bbox, ticket.screenshot, ticket.viewport);
+      if (!point.ok) return blocked(point.reason);
+      if (overlapsSensitive(ticket.bbox, ticket.sensitiveRegions)) return blocked('SENSITIVE_REGION');
+    }
+    return executeBrowserAction(ticket, deps, ticket.createdAt + EXECUTION_TTL_MS);
+  }
 
   const point = toViewportPoint(ticket.bbox, ticket.screenshot, ticket.viewport);
   if (!point.ok) return blocked(point.reason);

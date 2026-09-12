@@ -7,6 +7,7 @@
     "build": "node scripts/package-ocr.mjs",
     "test": "node --test extension/tests/*.test.mjs",
     "check": "node scripts/check.mjs",
+    "scan:secrets": "node scripts/secret-scan.mjs",
     "benchmark": "node scripts/benchmark.mjs",
     "test:metrics": "node --test extension/tests/metrics*.test.mjs"
   },

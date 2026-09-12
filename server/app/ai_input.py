@@ -13,6 +13,9 @@ class PreparedPlan:
     visual_ids: tuple[str, ...]
     actionable_ids: tuple[str, ...]  # Subset the planner may CLICK; others are STOP-only.
     content: str
+    goal: str
+    editable_ids: tuple[str, ...]
+    focused_ids: tuple[str, ...]
 
 
 def prepare_ai_input(candidate: dict) -> PreparedPlan:
@@ -28,6 +31,7 @@ def prepare_ai_input(candidate: dict) -> PreparedPlan:
         raise ValueError("Invalid planning context") from None
     payload = {
         "goal": context.goal,
+        **({"pageOrigin": context.pageOrigin} if context.pageOrigin else {}),
         "privacy": {"status": context.privacy.status, "rawPiiIncluded": False},
         "semanticState": {
             "source": "local-browser-semantics",
@@ -37,7 +41,8 @@ def prepare_ai_input(candidate: dict) -> PreparedPlan:
         "visualState": {
             "source": "local-pixel-ocr",
             "elements": [{"id": v.id, "text": v.text, "confidence": v.confidence,
-                          "actionable": v.id in set(context.actionCandidates)}
+                          "actionable": v.id in set(context.actionCandidates),
+                          **({"role": v.role, "editable": v.editable, "focused": v.focused} if v.role else {})}
                          for v in context.visualElements],
         },
         "redactionScheme": dict(context.redactionScheme),
@@ -48,4 +53,6 @@ def prepare_ai_input(candidate: dict) -> PreparedPlan:
     if len(content.encode("utf-8")) > MAX_INPUT_BYTES:
         raise ValueError("Planning context too large")
     return PreparedPlan(context.observation.id, tuple(v.id for v in context.visualElements),
-                        tuple(context.actionCandidates), content)
+                        tuple(context.actionCandidates), content, context.goal,
+                        tuple(v.id for v in context.visualElements if v.editable and v.id in context.actionCandidates),
+                        tuple(v.id for v in context.visualElements if v.editable and v.focused and v.id in context.actionCandidates))

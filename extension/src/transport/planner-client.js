@@ -1,5 +1,6 @@
 import { prepareAgentContextForTransport } from '../privacy/agent-context.js';
 import { PLANNER_CONFIG } from './config.js';
+import { validateAction, navigationUrl } from '../shared/action-contract.js';
 
 export function parseServerTiming(header) {
   if (typeof header !== 'string' || header.length > 200) return {};
@@ -14,19 +15,11 @@ export function parseServerTiming(header) {
 // No page, OCR, image or secret inputs. Only builder-approved SafeAgentContext.
 export function validatePlannerResponse(value, context) {
   if (!value || Object.getPrototypeOf(value) !== Object.prototype ||
-      Object.keys(value).sort().join(',') !== 'action,observationId,reason,schemaVersion,target' ||
       value.schemaVersion !== 1 || value.observationId !== context.observation.id ||
-      !['CLICK', 'STOP'].includes(value.action) || typeof value.reason !== 'string' ||
+      typeof value.reason !== 'string' ||
       !value.reason.trim() || value.reason.length > 200) throw new Error('Plan rejected.');
-  if (value.action === 'STOP') {
-    if (value.target !== null) throw new Error('Plan rejected.');
-  } else if (typeof value.target !== 'string' || !/^visual_[1-9]\d*$/.test(value.target) ||
-      !Array.isArray(context.actionCandidates) || !context.actionCandidates.includes(value.target) ||
-      context.visualElements.filter((v) => v.id === value.target).length !== 1) {
-    throw new Error('Plan rejected.');
-  }
-  return Object.freeze({ schemaVersion: 1, observationId: value.observationId,
-    action: value.action, target: value.target, reason: value.reason });
+  validateAction(value, context);
+  return Object.freeze({ ...value, ...(value.action === 'NAVIGATE' ? { url: navigationUrl(value.url) } : {}) });
 }
 
 export async function requestPlan(context, { fetchImpl = globalThis.fetch,

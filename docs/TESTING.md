@@ -926,7 +926,7 @@ plan from executing. Planner-unavailable / privacy / perception / action failure
 closed with no fallback and no retry. Audit events are count/id/status only - never target
 text (popup `AGENT_UPDATE` may carry the already-guarded local target text for display).
 
-### P11B-M1 - live autonomous Chrome demo: PENDING
+### P11B-M1 - live autonomous Chrome demo: VERIFIED (user)
 
 1. Start FastAPI in AI mode (real NVIDIA_API_KEY, server-side only), exact extension origin.
 2. Reload EdgeSight; open the Employee Travel Request demo, all fields + Continue visible.
@@ -936,8 +936,57 @@ text (popup `AGENT_UPDATE` may carry the already-guarded local target text for d
    fresh observe of the submitted page -> NVIDIA STOP -> agent status TASK COMPLETE.
 5. Confirm rawPiiIncluded=false and planner NVIDIA AI throughout; no deterministic fallback.
 
-Actual this session: **PENDING**. No NVIDIA_API_KEY configured and the unpacked extension
-cannot be loaded from the coding shell (native file dialog). Automated doubles above are not
-the live demo. Known limits carry over from Phases 7-9 (single 750 ms settle can miss a slow
-transition; uncalibrated OCR confidence; unknown-PII escape risk; non-atomic tab/capture;
-worker teardown loses the in-flight run).
+User confirmation when requesting Phase 11C: one RUN TASK starts the loop, real NVIDIA
+Nemotron plans, CLICK executes locally, fresh re-observation and another planner call
+occur, STOP terminates, privacy remains SAFE, and manual mode works. Stable baseline:
+7a8f5d0. This supersedes the earlier pending status; it is user-reported live evidence.
+
+## Phase 11C — safe browser action vocabulary (2026-09-12)
+
+| Check | Fresh result |
+|---|---|
+| Targeted browser-actions.test.mjs | 24/24 PASS |
+| Complete extension suite, npm test | 284/284 PASS |
+| Complete server suite, unittest discover -s tests | 76/76 PASS |
+| npm run build | PASS; 18 OCR assets/licenses packaged |
+| npm run check | PASS; syntax, manifest, packaged asset integrity |
+| npm run scan:secrets | PASS; credential-pattern scan, no matched values logged |
+| git diff --check | PASS |
+
+New coverage includes strict per-action parameters at server/model/client boundaries;
+TYPE task-text authorization and local sensitive/password/readonly/stale/covered target
+rejection; native setter/input events and revalidation after focus/beforeinput handlers;
+approved editable focus for ENTER; unsupported-key rejection; bounded enum-only SCROLL;
+HTTP/S normalization and invalid-scheme/credential/malformed URL rejection; document,
+active-tab, permission, TTL and cancellation gates for navigation; load-event cleanup.
+Actual observer tests verify stable local control identities without reading field values.
+
+The new wired service-worker regression drives NAVIGATE → TYPE → ENTER → SCROLL → STOP
+through the real privacy/context/transport/ticket/controller path using browser/OCR/provider
+doubles. It checks five unique observations, old-document rejection, safe candidate
+metadata and no private-canary/raw-image leakage. Existing CLICK/STOP, manual execution,
+privacy fail-closed, planner fail-closed, MAX_STEPS, cancellation and duplicate guards pass.
+These are automated tests, not live NVIDIA or Chrome results.
+
+### Live Phase 11C acceptance: PENDING
+
+Browser automation failed twice during initialization with "failed to write kernel assets"
+(Windows error 3). No controlled browser workflow or YouTube run was observed in this
+agent session. The real NVIDIA key remains in the user's configured terminal.
+
+1. Restart that AI server; run node scripts/smoke-planner.mjs --ai from repository root.
+   Require real CLICK for the complete travel fixture and STOP for the no-target fixture.
+2. Reload EdgeSight/demo and repeat the travel RUN TASK regression, plus manual mode.
+   Require planner ai, current approved CLICK, fresh observation, STOP, privacy 5/5 and
+   rawPiiIncluded=false.
+3. From root serve only the controlled fixture directory:
+   py -3.10 -m http.server 8137 --bind 127.0.0.1 --directory demo
+   Enable browsing across sites in the popup. From an ordinary observable page RUN TASK:
+   "Open http://127.0.0.1:8137/search.html and search for calculus videos using Enter.
+   Scroll until the first video title is visible, then stop."
+   Require model-selected NAVIGATE/TYPE/ENTER/SCROLL and STOP from fresh observations;
+   no script in the fixture chooses planner actions. Privacy must remain SAFE; this page
+   has zero sensitive fields, so the travel demo's 5/5 counts do not apply here.
+4. Only after controlled acceptance, try "Open YouTube and search for calculus videos."
+   once. Report any external-site block; synthetic keys and dynamic OCR may limit it.
+5. Record actual evidence, commit/push the acceptance documentation, STOP. No voice phase.

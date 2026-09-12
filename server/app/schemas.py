@@ -3,8 +3,9 @@ import re
 import unicodedata
 from datetime import datetime
 from typing import Annotated, Literal
+from urllib.parse import urlsplit, urlunsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator, model_serializer
 
 
 class StrictModel(BaseModel):
@@ -118,17 +119,37 @@ class VisualElement(StrictModel):
     bbox: Bbox
     confidence: Annotated[float, Field(ge=0, le=1)] | None
     source: Literal["visual"]
+    role: Literal["button", "link", "input", "searchbox", "textarea"] | None = None
+    editable: bool = False
+    focused: bool = False
+
+    @model_validator(mode="after")
+    def editable_role(self):
+        if self.editable and self.role not in {"input", "searchbox", "textarea"}:
+            raise ValueError("Invalid editable role")
+        return self
 
 
 class SafeAgentContext(StrictModel):
     schemaVersion: Literal[1]
     observation: Observation
     goal: Annotated[str, Field(max_length=500)]
+    pageOrigin: Annotated[str, Field(max_length=2048)] | None = None
     privacy: Privacy
     fields: Annotated[list[SemanticField], Field(max_length=200)]
     visualElements: Annotated[list[VisualElement], Field(max_length=1000)]
     actionCandidates: Annotated[list[VisualId], Field(max_length=1000)]
     redactionScheme: dict[str, str]
+
+    @field_validator("pageOrigin")
+    @classmethod
+    def origin_only(cls, value):
+        if value is None:
+            return value
+        parsed = urlsplit(navigation_url(value))
+        if parsed.path != "/" or parsed.query or parsed.fragment:
+            raise ValueError("Origin only")
+        return f"{parsed.scheme}://{parsed.netloc}"
 
     @model_validator(mode="before")
     @classmethod
@@ -160,15 +181,76 @@ class SafeAgentContext(StrictModel):
         return self
 
 
-class PlanResponse(StrictModel):
-    schemaVersion: Literal[1] = 1
-    observationId: ObservationId
-    action: Literal["CLICK", "STOP"]
-    target: VisualId | None
-    reason: Annotated[str, Field(min_length=1, max_length=200)]
+ACTION_FIELDS = {"CLICK": {"target"}, "TYPE": {"target", "text"},
+                 "PRESS_KEY": {"key"}, "SCROLL": {"direction", "amount"},
+                 "NAVIGATE": {"url"}, "STOP": set()}
+
+
+def navigation_url(value: str) -> str:
+    if (not isinstance(value, str) or len(value) > 2048 or
+            re.search(r"[\s\\\x00-\x1f\x7f]", value) or "%0" in value.lower()):
+        raise ValueError("Invalid navigation URL")
+    parts = urlsplit(value)
+    if parts.scheme.lower() not in {"http", "https"} or not parts.hostname or parts.username is not None or parts.password is not None:
+        raise ValueError("Invalid navigation URL")
+    # Accessing port also rejects malformed/non-numeric/out-of-range ports.
+    port = parts.port
+    host = parts.hostname.encode("idna").decode("ascii").lower()
+    if ":" in host:
+        host = f"[{host}]"
+    if not re.fullmatch(r"[a-z0-9.\-\[\]:]+", host):
+        raise ValueError("Invalid navigation URL")
+    scheme = parts.scheme.lower()
+    netloc = host + (f":{port}" if port and port != (443 if scheme == "https" else 80) else "")
+    reject_obvious_pii(value, free_text=True)
+    return urlunsplit((scheme, netloc, parts.path or "/", parts.query, parts.fragment))
+
+
+class ActionPayload(StrictModel):
+    """One canonical action union, shared by model parsing and HTTP responses."""
+    action: Literal["CLICK", "TYPE", "PRESS_KEY", "SCROLL", "NAVIGATE", "STOP"]
+    target: VisualId | None = None
+    text: Annotated[str, Field(min_length=1, max_length=500)] | None = None
+    key: Literal["ENTER"] | None = None
+    direction: Literal["UP", "DOWN"] | None = None
+    amount: Literal["SMALL", "MEDIUM", "LARGE"] | None = None
+    url: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def action_fields(cls, value):
+        if not isinstance(value, dict) or value.get("action") not in ACTION_FIELDS:
+            raise ValueError("Invalid action")
+        allowed = ACTION_FIELDS[value["action"]]
+        for key in {"target", "text", "key", "direction", "amount", "url"}:
+            if key in allowed:
+                if value.get(key) is None:
+                    raise ValueError("Missing action parameter")
+            elif key in value and not (value["action"] == "STOP" and key == "target" and value[key] is None):
+                raise ValueError("Irrelevant action parameter")
+        return value
 
     @model_validator(mode="after")
-    def target_policy(self):
-        if (self.action == "CLICK") != (self.target is not None):
-            raise ValueError("Invalid action target")
+    def parameter_policy(self):
+        if self.action == "TYPE":
+            if not self.text.strip() or any(ord(c) < 32 or ord(c) == 127 for c in self.text):
+                raise ValueError("Invalid task text")
+            reject_obvious_pii(self.text, free_text=True)
+        if self.action == "NAVIGATE":
+            self.url = navigation_url(self.url)
         return self
+
+    @model_serializer(mode="wrap")
+    def serialize_action(self, handler):
+        result = handler(self)
+        for key in {"target", "text", "key", "direction", "amount", "url"} - ACTION_FIELDS[self.action]:
+            result.pop(key, None)
+        if self.action == "STOP":
+            result["target"] = None  # Preserve the existing CLICK/STOP wire contract.
+        return result
+
+
+class PlanResponse(ActionPayload):
+    schemaVersion: Literal[1] = 1
+    observationId: ObservationId
+    reason: Annotated[str, Field(min_length=1, max_length=200)]

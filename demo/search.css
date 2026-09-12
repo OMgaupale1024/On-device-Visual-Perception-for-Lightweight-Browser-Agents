@@ -1,0 +1,7 @@
+body { margin: 0; background: #f5f7fb; color: #172439; font: 22px/1.6 system-ui, sans-serif; }
+main { max-width: 850px; margin: 60px auto; padding: 32px; }
+form { display: grid; gap: 18px; }
+input, button { font: inherit; padding: 18px; border: 2px solid #64748b; border-radius: 8px; }
+button { width: 180px; background: #163d80; color: white; cursor: pointer; }
+.space { height: 65vh; }
+article { background: white; padding: 28px; border: 1px solid #cad4e3; }

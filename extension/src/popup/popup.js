@@ -8,6 +8,12 @@ const analyzeBtn = byId('analyze');
 const executeBtn = byId('execute');
 const runBtn = byId('run-task');
 const stopBtn = byId('stop-task');
+byId('enable-browsing').addEventListener('click', async () => {
+  try {
+    const granted = await chrome.permissions.request({ origins: ['<all_urls>'] });
+    byId('browsing-note').textContent = granted ? 'Browsing across sites enabled. Start your task when ready.' : 'Permission not granted. Navigation tasks are blocked.';
+  } catch { byId('browsing-note').textContent = 'Browsing permission unavailable.'; }
+});
 
 // Fixed, safe user-facing text for each execution reason code. Never render a
 // server- or page-derived string here.
@@ -23,8 +29,9 @@ const ACTION_REASON = {
   INVALID_GEOMETRY: 'Blocked: invalid target geometry.',
   OUT_OF_VIEWPORT: 'Blocked: target is outside the viewport.',
   EXECUTION_FAILED: 'Blocked: action could not be executed.',
+  BROWSING_PERMISSION_REQUIRED: 'Enable browsing across sites before a navigation task.',
 };
-const GUARDED_NOTE = 'One guarded click on the suggested target. No other browser action. Then verify the result using fresh local OCR.';
+const GUARDED_NOTE = 'Execute one validated action. Analyze again for a fresh plan after acting.';
 
 // Fixed, internal display names — safe to render as-is (not page-derived).
 const ROLE_LABEL = {
@@ -176,7 +183,7 @@ function renderPlanner(res) {
   byId('planner-server').textContent = planner?.status === 'READY' ? 'Connected' : 'Unavailable / rejected';
   const target = res.agentContext?.visualElements.find((v) => v.id === plan?.target);
   byId('planner-decision').textContent = plan ?
-    (plan.action === 'CLICK' ? `CLICK ${target.text}` : 'STOP') : '–';
+    (target ? `${plan.action} ${target.text}` : plan.action) : '–';
   // Never render arbitrary server reason strings. The local target text was guarded.
   byId('planner-note').textContent = plan ? 'Suggestion only. Press Execute to act on it.' : planner?.reason || '';
 }
@@ -194,9 +201,11 @@ function renderAction(res) {
     byId('action-note').textContent = 'Planner chose STOP; no browser action.';
     return;
   }
-  if (planner?.status === 'READY' && plan?.action === 'CLICK' && res.execution?.available && target) {
+  if (planner?.status === 'READY' && plan?.action !== 'STOP' && res.execution?.available) {
     byId('action-status').textContent = 'Ready';
-    byId('action-target').textContent = target.text; // local, already-guarded OCR text
+    byId('action-target').textContent = plan.action === 'TYPE' ? `${target?.text || 'Input'}: ${plan.text}` :
+      plan.action === 'NAVIGATE' ? plan.url : plan.action === 'SCROLL' ? `${plan.direction} ${plan.amount}` :
+      plan.action === 'PRESS_KEY' ? plan.key : target?.text || plan.action;
     show(executeBtn);
     return;
   }
@@ -214,8 +223,8 @@ executeBtn.addEventListener('click', async () => {
   hide(executeBtn);
   analyzeBtn.disabled = false;
   if (res?.status === 'EXECUTED') {
-    byId('action-status').textContent = 'CLICK DISPATCHED';
-    byId('action-note').textContent = 'One click dispatched. Result checked locally below.';
+    byId('action-status').textContent = `${res.action || 'CLICK'} DISPATCHED`;
+    byId('action-note').textContent = res.action === 'CLICK' ? 'One click dispatched. Result checked locally below.' : 'Action dispatched. Analyze again for a fresh plan.';
     renderVerification(res.verification || { status: 'NOT_VERIFIED' });
     const elapsed = started === undefined ? undefined : globalThis.performance.now() - started;
     renderMeasurements(res.verification?.measurements, {
@@ -243,7 +252,8 @@ const AGENT_OUTCOME = {
   PERCEPTION_FAILED: 'Stopped: local perception failed.',
   OBSERVE_FAILED: 'Stopped: page could not be observed.',
   INVALID_TARGET: 'Stopped: no valid action target.',
-  ACTION_FAILED: 'Stopped: click could not be executed.',
+  ACTION_FAILED: 'Stopped: action could not be executed.',
+  BROWSING_PERMISSION_REQUIRED: 'Enable browsing across sites before a navigation task.',
   STALE_OBSERVATION: 'Stopped: observation expired before acting.',
   LOOP_DETECTED: 'Stopped: repeated action with no progress.',
 };
@@ -263,17 +273,17 @@ function renderAgentEvent(e) {
     byId('agent-decision').textContent = '–';
     return;
   }
-  if (e.event === 'AGENT_STEP_STARTED') { byId('agent-step').textContent = `${e.step} / 5`; return; }
+  if (e.event === 'AGENT_STEP_STARTED') { byId('agent-step').textContent = `${e.step} / 8`; return; }
   if (e.event === 'OBSERVATION_READY') { appendAgentLog(`Step ${e.step}: observed`); return; }
   if (e.event === 'REOBSERVATION_READY') { appendAgentLog(`Step ${e.step}: re-observed fresh page`); return; }
   if (e.event === 'PRIVACY_PASS') { appendAgentLog(`Step ${e.step}: privacy SAFE`); return; }
   if (e.event === 'PLAN_READY') {
-    const decision = e.action === 'CLICK' ? `CLICK ${e.target ?? ''}`.trim() : 'STOP';
+    const decision = `${e.action} ${e.target ?? ''}`.trim();
     byId('agent-decision').textContent = decision;
     appendAgentLog(`Step ${e.step}: plan → ${decision}`);
     return;
   }
-  if (e.event === 'ACTION_EXECUTED') { appendAgentLog(`Step ${e.step}: clicked ${e.target ?? ''}`.trim()); return; }
+  if (e.event === 'ACTION_EXECUTED') { appendAgentLog(`Step ${e.step}: ${e.action || 'CLICK'} dispatched`); return; }
   if (['AGENT_COMPLETED', 'AGENT_STOPPED', 'AGENT_FAILED', 'AGENT_CANCELLED'].includes(e.event)) {
     const label = e.state === 'COMPLETED' ? 'TASK COMPLETE'
       : e.state === 'FAILED' ? 'FAILED' : e.state === 'CANCELLED' ? 'STOPPED' : 'STOPPED';

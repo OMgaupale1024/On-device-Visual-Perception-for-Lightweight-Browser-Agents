@@ -56,6 +56,29 @@ export function observePage() {
     };
   });
 
+  // Isolated-world capabilities: DOM nodes/structural signals stay on this device.
+  const controlsState = globalThis.__edgeSightControls ??= { ids: new WeakMap(), next: 1, elements: new Map() };
+  controlsState.elements.clear();
+  controlsState.inspect = (el) => ({ tag: el.tagName.toLowerCase(),
+    type: (el.getAttribute('type') || el.tagName).toLowerCase(), name: el.name || '',
+    elementId: el.id || '', label: labelFor(el), autocomplete: el.getAttribute('autocomplete') || '' });
+  const controls = [...new Set([...buttons, ...visible('a[href]'), ...fieldEls])].map(el => {
+    if (!controlsState.ids.has(el)) controlsState.ids.set(el, 'control_' + controlsState.next++);
+    const controlId = controlsState.ids.get(el);
+    controlsState.elements.set(controlId, el);
+    const type = (el.getAttribute('type') || 'text').toLowerCase();
+    const editable = !el.disabled && !el.readOnly && (el.tagName === 'TEXTAREA' ||
+      (el.tagName === 'INPUT' && ['text', 'search', 'url'].includes(type)));
+    const role = editable ? (el.tagName === 'TEXTAREA' ? 'textarea' : type === 'search' ? 'searchbox' : 'input') :
+      el.tagName === 'A' ? 'link' : 'button';
+    const rect = el.getBoundingClientRect();
+    return { controlId, fieldId: state.ids.get(el) || null, role, editable,
+      supported: editable || buttons.includes(el) || el.tagName === 'A',
+      focused: document.activeElement === el,
+      signature: JSON.stringify(controlsState.inspect(el)),
+      rect: { x: rect.left, y: rect.top, width: rect.width, height: rect.height } };
+  });
+
   // Geometry of clickable controls ONLY (no text, no ids) — used LOCALLY to decide
   // which pixel-OCR elements sit on an actionable control. Never sent off-device.
   const buttonRects = buttons.map((el) => {
@@ -67,6 +90,7 @@ export function observePage() {
     title: document.title,
     counts: { inputs: fieldEls.length, buttons: buttons.length, labels: labels.length },
     buttonRects,
+    controls,
     viewport: { width: window.innerWidth, height: window.innerHeight },
     devicePixelRatio: window.devicePixelRatio || 1,
     position: { x: window.scrollX, y: window.scrollY },

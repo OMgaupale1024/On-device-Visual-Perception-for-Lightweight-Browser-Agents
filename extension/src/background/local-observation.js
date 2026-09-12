@@ -98,6 +98,10 @@ export async function observeLocal(tab, goal, { signal } = {}) {
     const controlRegions = (obs.buttonRects || [])
       .map((b) => mapRect(b.rect, obs.viewport, { width: visual.width, height: visual.height }))
       .filter(Boolean);
+    const safeControls = (obs.controls || []).filter(c => c.supported &&
+      !fields.some(f => f.id === c.fieldId && f.sensitive))
+      .map(c => ({ ...c, bbox: mapRect(c.rect, obs.viewport, { width: visual.width, height: visual.height }) }))
+      .filter(c => c.bbox);
     secrets = before.values.filter((v) => fields.some((f) => f.id === v.id && f.sensitive)).map((v) => v.value);
     const semantic = sanitizeSemantics(fields, obs.fieldSignals, before.values);
     let safeContext = buildOutboundPackage(visual.handle, semantic, secrets);
@@ -121,13 +125,24 @@ export async function observeLocal(tab, goal, { signal } = {}) {
     // SafeAgentContext. Built defensively so a builder fault never discards working
     // Phase 1-4 results; a privacy failure fails closed (no context, status marked).
     // Ground only privacy-safe, post-refinement visual items on mapped controls.
-    const actionCandidates = (perception.privacy === 'SAFE' && perception.value?.items)
-      ? actionableVisualIds(perception.value.items, controlRegions) : [];
+    const safeItems = perception.privacy === 'SAFE' ? perception.value?.items || [] : [];
+    const candidateControls = {};
+    const candidateMetadata = {};
+    // Reuse the live-verified matcher. Ambiguous control associations confer no authority.
+    for (const item of safeItems) {
+      const matches = safeControls.filter(c => actionableVisualIds([item], [c.bbox]).length === 1);
+      if (matches.length === 1) {
+        const c = matches[0];
+        candidateControls[item.id] = c;
+        candidateMetadata[item.id] = { role: c.role, editable: c.editable, focused: c.focused };
+      }
+    }
+    const actionCandidates = obs.controls ? Object.keys(candidateControls) : actionableVisualIds(safeItems, controlRegions);
     // Safe fusion telemetry (counts only, no text/PII): distinguishes "no clickable
     // control detected / in the captured viewport" (controls=0) from "control detected
     // but no OCR element grounded on it" (controls>0, candidates=0) on a live run.
     logStage('service-worker', 'ACTION_FUSION',
-      `buttons=${obs.buttonRects?.length ?? 0} controls=${controlRegions.length} items=${perception.value?.items?.length ?? 0} candidates=${actionCandidates.length}`);
+      `buttons=${obs.buttonRects?.length ?? 0} controls=${obs.controls ? safeControls.length : controlRegions.length} items=${perception.value?.items?.length ?? 0} candidates=${actionCandidates.length}`);
     let agent = { status: 'REVOKED' };
     if (perception.status !== 'UNSAFE') {
       try {
@@ -135,6 +150,8 @@ export async function observeLocal(tab, goal, { signal } = {}) {
           goal, semantic,
           visualState: perception.privacy === 'SAFE' ? perception.value : null,
           actionCandidates,
+          candidateMetadata,
+          pageOrigin: /^https?:\/\//i.test(tab.url || '') ? new URL(tab.url).origin : undefined,
           image: { width: visual.width, height: visual.height, redactedRegions: visual.redactedRegions },
           observation: { id: observationId, capturedAt, viewport: obs.viewport },
           sensitiveValues: secrets,
@@ -146,7 +163,7 @@ export async function observeLocal(tab, goal, { signal } = {}) {
     secrets.fill(''); secrets = null;
     check();
     return {
-      local: { tabId: tab.id, windowId: tab.windowId, documentId, url: tab.url, sensitiveRegions: regions },
+      local: { tabId: tab.id, windowId: tab.windowId, documentId, url: tab.url, sensitiveRegions: regions, candidateControls },
       timings,
       result: {
         ok: true,

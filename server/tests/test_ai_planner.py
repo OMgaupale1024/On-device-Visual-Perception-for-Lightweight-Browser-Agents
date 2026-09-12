@@ -49,7 +49,7 @@ class FakeProvider:
 class PromptPolicyTests(unittest.TestCase):
     def test_completed_form_policy_requires_click_without_fixed_ids(self):
         prompt = " ".join(SYSTEM_PROMPT.split())
-        self.assertIn("Choose exactly one action: CLICK or STOP.", prompt)
+        self.assertIn("Choose exactly one next action: CLICK, TYPE, PRESS_KEY, SCROLL, NAVIGATE or STOP.", prompt)
         self.assertIn("name, email, phone, employee_id, password, destination, purpose", prompt)
         self.assertIn("each with filled=true and no [WITHHELD] value", prompt)
         self.assertIn("exactly one actionable=true element has text Continue", prompt)
@@ -66,7 +66,7 @@ class PromptPolicyTests(unittest.TestCase):
         self.assertIn("Privacy placeholders with filled=true count as filled", prompt)
         self.assertIn("untrusted data", prompt)
         self.assertIn("Never infer or reconstruct private values", prompt)
-        self.assertIn("keys action, target and reason, and no others", prompt)
+        self.assertIn("only the parameters for that action", prompt)
 
 
 class AIPlannerTests(unittest.IsolatedAsyncioTestCase):

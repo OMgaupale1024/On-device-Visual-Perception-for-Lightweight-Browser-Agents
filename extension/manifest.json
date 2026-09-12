@@ -3,7 +3,7 @@
   "name": "EdgeSight",
   "version": "0.9.0",
   "minimum_chrome_version": "116",
-  "description": "Local OCR and privacy-safe planning, one guarded user-triggered click, then fresh browser-local visual outcome verification.",
+  "description": "Local OCR and privacy-safe planning with validated browser actions and fresh observations.",
   "content_security_policy": {
     "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self' data: http://127.0.0.1:8000; worker-src 'self'; img-src 'self' data:; style-src 'self'"
   },
@@ -22,5 +22,8 @@
   ],
   "host_permissions": [
     "http://127.0.0.1/*"
+  ],
+  "optional_host_permissions": [
+    "<all_urls>"
   ]
 }

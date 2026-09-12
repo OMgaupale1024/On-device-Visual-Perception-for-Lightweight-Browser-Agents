@@ -9,6 +9,7 @@ import { requestPlan } from '../transport/planner-client.js';
 import { ticketForPlan, executeTicket } from '../actions/execute-click.js';
 import { runAgent } from './agent-controller.js';
 import { logStage } from '../perception/diagnostics.js';
+import { navigateTab } from '../actions/execute-browser.js';
 
 let busy = false;
 let executing = false;
@@ -32,6 +33,8 @@ const executeDeps = {
   queryActiveTab: async () => (await chrome.tabs.query({ active: true, currentWindow: true }))[0],
   getTab: (id) => chrome.tabs.get(id),
   executeScript: (opts) => chrome.scripting.executeScript(opts),
+  canNavigate: () => chrome.permissions.contains({ origins: ['<all_urls>'] }),
+  navigate: (id, url, cancelled) => navigateTab(chrome.tabs, id, url, cancelled),
 };
 
 function fromPopup(sender) {
@@ -57,6 +60,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const executeStarted = performance.now();
     executeTicket(ticket, executeDeps).then(async (action) => {
       if (action.status !== 'EXECUTED') return action;
+      pendingAction = null;
+      if (action.action !== 'CLICK') return action;
       const clickDispatchMs = performance.now() - executeStarted;
       const dispatchedAt = Date.now();
       publishVerification({ status: 'VERIFYING', actionObservationId: action.observationId });
@@ -76,12 +81,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === MSG.RUN_TASK) {
     if (busy || executing || agentActive) { sendResponse({ ok: false, error: 'A task is already running.' }); return false; }
     agentActive = true;
-    const token = agentCancel = { cancelled: false };
+    const token = agentCancel = { cancelled: false, tabId: null, windowId: null };
     pendingAction = null;
     verification = { status: 'WAITING' };
     runAgent(message.goal, {
-      observePlan: observePlanForAgent,
-      execute: (ticket) => executeTicket(ticket, executeDeps),
+      observePlan: (goal) => observePlanForAgent(goal, token),
+      execute: (ticket) => executeTicket(ticket, { ...executeDeps, cancelled: () => token.cancelled }),
       settle: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       emit: agentEmit,
       cancelled: () => token.cancelled,
@@ -108,9 +113,13 @@ function agentEmit(event) {
 
 // One local OBSERVE + PLAN + validated-ticket transaction. Pure of module state,
 // so both manual Analyze (below) and the autonomous controller reuse it.
-async function observeAndPlan(goal) {
+async function observeAndPlan(goal, token) {
   const planStarted = performance.now();
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (token) {
+    if (token.cancelled || (token.tabId !== null && (tab?.id !== token.tabId || tab?.windowId !== token.windowId))) throw new Error('TAB_CHANGED');
+    token.tabId = tab?.id; token.windowId = tab?.windowId;
+  }
   const { result, local } = await observeLocal(tab, goal);
   let planner = { status: 'BLOCKED', privacy: 'BLOCKED', bytes: 0, reason: 'Privacy gate blocked planning.' };
   let plannerRoundTripMs, actionPreparationMs, ticket = null;
@@ -142,10 +151,10 @@ async function runAnalysis(goal) {
 
 // Adapt observeAndPlan to the controller contract, mapping local privacy/perception
 // failures to explicit stop reasons and exposing an unchanged-page signature.
-async function observePlanForAgent(goal) {
+async function observePlanForAgent(goal, token) {
   let bundle;
   try {
-    bundle = await observeAndPlan(goal);
+    bundle = await observeAndPlan(goal, token);
   } catch (error) {
     const reason = error?.message === 'PRIVACY_FAILED' ? 'PRIVACY_FAILED'
       : error?.message === 'PERCEPTION_FAILED' ? 'PERCEPTION_FAILED' : 'OBSERVE_FAILED';

@@ -10,7 +10,7 @@
 // always validated against its own observation (ticket carries the observationId),
 // so a stale plan can never act on a newer page.
 
-export const AGENT_MAX_STEPS = 5;
+export const AGENT_MAX_STEPS = 8;
 export const AGENT_SETTLE_MS = 750;
 // Allow the same action+target on an unchanged observation this many times before
 // declaring a loop. 2 identical attempts is fine; the 3rd fails closed.
@@ -89,12 +89,12 @@ export async function runAgent(goal, {
       return done(AGENT_STATE.COMPLETED, 'PLANNER_STOP', step);
     }
 
-    // CLICK: the ticket already re-validated observation binding + approved candidate.
+    // Every action ticket already re-validated observation binding and parameters.
     if (!op.ticket) return done(AGENT_STATE.FAILED, 'INVALID_TARGET', step);
 
     // Repeated-action guard: same action+target on an effectively unchanged
     // observation (signature) more than the limit means we are stuck.
-    const key = `${op.signature}|${plan.action}|${plan.target}`;
+    const key = JSON.stringify([op.signature, plan.action, plan.target, plan.text, plan.key, plan.direction, plan.amount, plan.url]);
     repeats = key === lastKey ? repeats + 1 : 1;
     lastKey = key;
     if (repeats > duplicateLimit) return done(AGENT_STATE.FAILED, 'LOOP_DETECTED', step);
@@ -108,11 +108,12 @@ export async function runAgent(goal, {
     } catch {
       return done(AGENT_STATE.FAILED, 'ACTION_FAILED', step);
     }
+    if (cancelled()) return done(AGENT_STATE.CANCELLED, 'CANCELLED', step);
     if (exec?.status !== 'EXECUTED') {
       return done(AGENT_STATE.FAILED, exec?.reason || 'ACTION_FAILED', step);
     }
-    emit({ event: 'ACTION_EXECUTED', runId, step, target: op.targetText });
-    stepTimings.push({ step, ms: Date.now() - stepStart, action: 'CLICK' });
+    emit({ event: 'ACTION_EXECUTED', runId, step, action: plan.action, target: op.targetText });
+    stepTimings.push({ step, ms: Date.now() - stepStart, action: plan.action });
 
     // Let the page settle, then loop: the next observePlan re-observes fresh pixels.
     if (cancelled()) return done(AGENT_STATE.CANCELLED, 'CANCELLED', step);

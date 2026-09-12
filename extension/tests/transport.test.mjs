@@ -146,10 +146,10 @@ test('default client deadline permits a 30-second provider response', async (t) 
   assert.equal((await pending).status, 'READY');
 });
 
-test('transport imports only privacy approval and endpoint config, never raw modules', async () => {
+test('transport imports only privacy approval, endpoint config and action contract, never raw modules', async () => {
   const source = await readFile(new URL('../src/transport/planner-client.js', import.meta.url), 'utf8');
   const imports = [...source.matchAll(/from '([^']+)'/g)].map((m) => m[1]);
-  assert.deepEqual(imports, ['../privacy/agent-context.js', './config.js']);
+  assert.deepEqual(imports, ['../privacy/agent-context.js', './config.js', '../shared/action-contract.js']);
   assert.ok(!/chrome\.|rawScreenshot|rawOCR|dataUrl|localPreview|redact\.js|sensitiveValues/.test(source));
   const popup = await readFile(new URL('../src/popup/popup.js', import.meta.url), 'utf8');
   assert.ok(!/fetch|requestPlan/.test(popup));

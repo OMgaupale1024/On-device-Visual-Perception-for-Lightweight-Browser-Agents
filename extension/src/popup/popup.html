@@ -20,6 +20,8 @@
     <button id="run-task" class="btn">RUN TASK (AUTONOMOUS)</button>
     <button id="stop-task" class="btn hidden">STOP TASK</button>
     <button id="analyze" class="btn">ANALYZE / PLAN (MANUAL)</button>
+    <button id="enable-browsing" class="btn">ENABLE BROWSING ACROSS SITES</button>
+    <p id="browsing-note" class="note">Optional permission for tasks that navigate to another site. Current-tab manual use does not need it.</p>
 
     <p class="status">Status: <span id="status">Ready</span></p>
 
@@ -28,7 +30,7 @@
       <div class="row"><span>Status</span><b id="agent-status">Idle</b></div>
       <div class="row"><span>Step</span><b id="agent-step">–</b></div>
       <div class="row"><span>Last decision</span><b id="agent-decision">–</b></div>
-      <p id="agent-note" class="note">One start runs Observe → Plan → Act → Re-observe until the planner stops (max 5 steps).</p>
+      <p id="agent-note" class="note">One start runs Observe → Plan → Act → Re-observe until the planner stops (max 8 steps).</p>
       <div id="agent-log" class="list"></div>
     </section>
 

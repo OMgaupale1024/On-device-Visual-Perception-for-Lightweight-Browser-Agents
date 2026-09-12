@@ -1,209 +1,108 @@
 # EdgeSight — AI Context
 
-Fast-start context for Claude/Codex. Read this + `HANDOFF.md`, then `git status` and
-`git log --oneline -10`, before touching code. **Code, tests and Git outrank docs.**
-Detailed history is in `docs/archive/`; do not read it by default.
+FIRST READ this file and docs/HANDOFF.md, then git status and git log --oneline -10.
+Code, tests and Git outrank documentation. Preserve uncommitted work.
+Do not read docs/archive/ by default.
 
-## Project
-- **EdgeSight** — SIH26171 (ISRO), Smart India Hackathon 2026.
-- On-device visual perception for lightweight, **privacy-preserving** browser agents.
+## Project and current state
 
-## Product in one paragraph
-EdgeSight turns a user goal into safe browser actions while keeping raw perception
-on-device. It captures the visible tab, runs **local** OCR + DOM semantics, detects and
-redacts PII locally, and freezes a privacy-approved **SafeAgentContext**. Only that
-sanitized structured state crosses to a localhost FastAPI service, which plans either
-**deterministically** (default) or via one **NVIDIA NIM (Nemotron)** call and returns
-exactly ONE structured action. The browser re-validates the action and performs a single
-guarded local click, then re-observes fresh pixels to verify the outcome locally. The
-autonomous **OBSERVE → PLAN → ACT → OBSERVE** loop is now implemented (Phase 11B): one
-user start drives observe→plan→validate→act→settle→re-observe until the planner returns
-STOP, a step limit, or a safe failure. Manual Analyze/Plan/Execute remains available.
+EdgeSight — SIH26171, ISRO, Smart India Hackathon 2026. Browser-local visual perception
+and privacy filtering produce a minimal safe state for a cloud next-action planner.
 
-## Current architecture
-```
-VOICE / TEXT GOAL              [PLANNED: voice; text = the current goal string]
-      ↓
-AGENT CONTROLLER  service-worker.js + agent-controller.js  [IMPLEMENTED: manual
-                                                            single-step + autonomous loop]
-      ↓
-BROWSER OBSERVATION  local-observation.js + content/observe.js   [IMPLEMENTED]
-      ↓
-LOCAL PERCEPTION  perception/* (Tesseract WASM OCR + semantics)  [IMPLEMENTED]
-      ↓
-LOCAL PRIVACY  privacy/* (detect → redact → guard)               [IMPLEMENTED]
-      ↓
-SAFE STATE  privacy/agent-context.js (frozen SafeAgentContext)   [IMPLEMENTED]
-      ↓
-PLANNER  localhost FastAPI → deterministic OR NVIDIA NIM         [IMPLEMENTED code;
-                                                                  live AI mode VERIFIED]
-      ↓
-VALIDATED ACTION  CLICK visual_N | STOP                          [IMPLEMENTED]
-      ↓  (expanded NAVIGATE/TYPE/SCROLL/… vocabulary = PLANNED)
-LOCAL EXECUTION  actions/{geometry,execute-click}.js (1 click)   [IMPLEMENTED]
-      ↓
-RE-OBSERVATION  verification/verify-*.js (fresh pixels, local)   [IMPLEMENTED]
-      ↺  loop back to OBSERVE → PLAN  agent-controller.js         [IMPLEMENTED: Phase 11B]
-```
+**Phase 11B is LIVE VERIFIED by the user at baseline 7a8f5d0:** one RUN TASK drives
+real NVIDIA CLICK → local execution → fresh observation → NVIDIA STOP, privacy SAFE;
+manual mode works. Timeout, API key, network, OCR and grounding are not current blockers.
 
-## Autonomous loop (Phase 11B)
-`extension/src/background/agent-controller.js` is a pure, orchestration-only state machine
-(no planning intelligence — Nemotron still decides each action). `runAgent(goal, deps)`:
-per step it calls `observePlan` (a fresh local OBSERVE + PLAN + validated ticket), gates on
-privacy/perception, then STOP → COMPLETED, or CLICK → validate → `execute` → `settle(750ms)`
-→ next step re-observes fresh pixels. Guards: `AGENT_MAX_STEPS=5`; a cancel token stops a run
-and prevents a pending plan from acting; a duplicate-action guard (same signature+action+target
-past `AGENT_DUPLICATE_LIMIT=2`) fails LOOP_DETECTED; planner-unavailable / privacy / perception
-/ action failures fail closed with no fallback. Stale plans can't act (ticket carries its own
-observationId). Wired in `service-worker.js` via `RUN_TASK`/`CANCEL_TASK`; emits safe
-count/id/status audit events (`AGENT_RUN_STARTED`…`AGENT_COMPLETED`) and popup `AGENT_UPDATE`s.
+**Phase 11C is implemented with automated coverage; live acceptance is pending.**
+Vocabulary: CLICK, TYPE, PRESS_KEY, SCROLL, NAVIGATE, STOP. Do not claim live success
+from tests using provider/browser doubles. HANDOFF contains the exact live steps.
 
-## Current working capabilities (code-complete, Node/unit verified)
-- Local screen capture → OCR + DOM semantics → PII detection → Canvas redaction →
-  outbound privacy guard → frozen SafeAgentContext.
-- FastAPI `/plan`: strict validation, deterministic planner, one NVIDIA NIM adapter
-  (no fallback), server-owned observation binding, numeric Server-Timing headers.
-  Phase 11A verified (offline): in AI mode **Nemotron itself** chooses CLICK/STOP + target;
-  the server only validates (target ∈ `actionCandidates`) and never substitutes a decision.
-  AI failures surface a safe numeric `X-EdgeSight-Planner-Upstream-Status` header.
-- `actionCandidates` (Phase 10 groundwork): local geometry maps pixel-OCR text onto
-  clickable DOM control regions so the planner may only `CLICK` a genuine target
-  (e.g. "Continue"), never a label like "Password". Only safe visual ids cross the wire.
-  Fusion accepts OCR centre inside a control OR at least 50% OCR-area containment,
-  after existing `mapRect` scaling and privacy filtering. Client response validation
-  and ticket creation also require current candidate membership. Wire shape: string IDs.
-- Guarded single-use CLICK execution (bbox → viewport → elementFromPoint → allowlist).
-- Fresh same-tab re-observation + local exact-phrase visual verification.
-- Phase 9 controlled benchmarks (5 synthetic screens) + current-run timing panel.
+## Architecture
 
-## Current blocking issues
-- **Model decision policy / live AI PLAN acceptance:** after `7b34f7a`, user confirmed
-  that the real AI smoke now returns a valid STOP instead of UNAVAILABLE. The complete
-  actionable fixture should yield CLICK. Timeout, provider connectivity, grounding and
-  privacy are working; the explicit model-prompt policy change awaits live acceptance.
-- Manual Phase 7 execution, Phase 8 visual verification and Phase 9 resource/timing
-  acceptance remain pending. Automated unit doubles are not acceptance.
+User goal → existing service-worker/controller → fresh browser observation → local
+OCR + DOM semantics → local PII detection/redaction/guard → frozen SafeAgentContext →
+localhost FastAPI → real NVIDIA Nemotron chooses ONE action → server validates →
+client validates → local single-use ticket → execute → settle → fresh observe/plan.
+STOP, cancellation, step limit, repeated actions or unsafe/unavailable stages terminate
+the loop. Manual Analyze/Plan/Execute remains available.
 
-## Current task
-Phase 11B autonomous loop is code-complete and unit/integration verified (259 ext + 65
-server tests). Action set stays CLICK/STOP only. Live Chrome acceptance (one RUN TASK
-press drives CLICK Continue → re-observe → STOP with privacy 5/5/rawPiiIncluded=false,
-planner NVIDIA AI, no manual Execute) is PENDING a user run. Do NOT start TYPE/NAVIGATE/
-SCROLL/voice or expand the vocabulary.
+- agent-controller.js: one orchestration-only loop, MAX_STEPS=8, settle=750ms,
+  duplicate limit=2 (safe-state signature plus action parameters), no fallback/retry.
+- Runs stay on their starting tab/window. Tickets bind observation, document, tab,
+  URL and 60-second TTL. Each execution attempt consumes its ticket. NAVIGATE waits
+  for tab completion with a bounded event listener, then re-observes anew.
+- Fusion remains OCR centre inside a control OR >=50% OCR containment, through
+  existing mapRect scaling. Candidates remain observation-scoped string IDs. Added
+  local associations supply only role/editable/focused flags on safe visual items.
+  Ambiguous associations and detected sensitive controls grant no new authority.
+- Server ActionPayload is reused by NVIDIA parsing and HTTP PlanResponse. Extension
+  shared/action-contract.js is reused by response and ticket validation. Irrelevant
+  action fields are rejected; no alternative action system exists.
 
-## Critical architecture decisions (do not break)
-- **One privacy boundary out of the browser:** only the frozen builder-approved
-  SafeAgentContext leaves; raw screenshots/OCR/DOM/secret lists never do.
-- **Server never returns selectors, coordinates, screenshots or code** — only WHAT
-  (`visual_N`) or `STOP`, plus fixed non-sensitive reason phrases. The browser resolves
-  WHERE/HOW locally.
-- **Deterministic is the default;** `ai` (NVIDIA) is explicit, bounded (30s default/64KB), no
-  tools/history/retries/fallback. This is an **LLM over sanitized structured context,
-  not a VLM** — no images are sent.
-- **NVIDIA_TIMEOUT_SECONDS:** non-secret startup setting, finite 1–120 seconds;
-  invalid values fail startup. Browser/smoke has an independent 35s limit. Timeout
-  remains generic HTTP 504; internal timed_out flag carries no provider data.
-- **CLICK execution** is one document-pinned, single-use `element.click()` bound to
-  (observation, tab, window, document), 60s TTL. DOM text is an execution safety check
-  only, never planner success evidence.
-- **Semantic (DOM) and pixel (OCR) evidence stay separate.** Verification reruns the
-  full local privacy pipeline on fresh pixels and returns only safe metadata.
+## Actions and safety
 
-## Privacy invariants (non-negotiable)
-1. Raw screenshots, raw OCR, raw DOM and secret/known-value lists never cross the wire.
-2. The final local known-value/context guard runs before anything leaves; the Phase 5
-   builder freezes identity → exact safe JSON as the approval boundary.
-3. The NVIDIA provider receives only goal + safe privacy flags + semantic roles/safe
-   values + visual ids/text/confidence + redaction legend. Never images, geometry,
-   observation ids, timestamps, field ids, extension id, env or debug data.
-4. `NVIDIA_API_KEY` is server-side only; never in prompts, logs, the browser or chat.
-   No `.env` auto-loader. `.env` is git-ignored (`.env.example` is the only template).
-5. Verification makes zero network/provider calls and never returns pixels or page text.
+| Action | Parameters and local policy |
+|---|---|
+| CLICK | Current approved visual target; existing button checks retained; safe links/editable controls supported |
+| TYPE | Current approved non-sensitive editable input/searchbox/textarea; exact guarded-goal substring, <=500 characters, no obvious PII/control characters |
+| PRESS_KEY | ENTER only; current focused approved editable control; fixed events and uncancelled native form submission |
+| SCROLL | UP/DOWN; SMALL/MEDIUM/LARGE; bounded distance computed locally |
+| NAVIGATE | Normalized absolute HTTP/S; no credentials/unsupported schemes; old document checked before same-tab update |
+| STOP | No action; null target retained on the wire for compatibility |
 
-## Important files (for the next task)
-- `extension/src/background/service-worker.js` → message router + `observeAndPlan` (shared
-  OBSERVE+PLAN+ticket); wires manual `ANALYZE_PAGE`/`EXECUTE_ACTION` and autonomous
-  `RUN_TASK`/`CANCEL_TASK`. `background/agent-controller.js` → pure Phase 11B loop state
-  machine. `background/local-observation.js` → shared observe (no planner/network).
-  `content/observe.js` → DOM + control regions.
-- `extension/src/privacy/agent-context.js` → builds/freezes SafeAgentContext + actionCandidates.
-  Supporting: `privacy/{detect,collect,redact,guard,semantic,visual}.js`.
-- `extension/src/actions/{geometry,execute-click}.js` → viewport mapping,
-  `actionableVisualIds`, guarded single-use click.
-- `extension/src/verification/{verify-after-click,verify-visual-result}.js` → fresh
-  re-observation + phrase verification.
-- `extension/src/perception/{pipeline,ocr,bridge,config}.js` → local OCR pipeline
-  (incl. the crop-OCR refinement to revisit).
-- `extension/src/transport/planner-client.js` → `POST /plan`. `shared/messages.js`,
-  `manifest.json` (v0.9.0).
-- `server/app/{ai_input,ai_contract,ai_planner,nvidia_provider,schemas,planner,main,config}.py`.
+TYPE reclassifies field sensitivity before acting and rechecks structure after focus/
+beforeinput handlers. Local DOM identities never leave the browser. No model-supplied
+JS, eval, CSS selectors, XPath, coordinates, shell commands or key sequences.
+Nemotron remains the decision-maker; the server never substitutes actions.
+The existing strict four-phrase reason enum is unchanged.
 
-## Commands
-```bash
-npm test            # extension suite (node --test)
-npm run build       # package pinned local OCR assets
-npm run check       # syntax / manifest / packaged-asset integrity
-npm run benchmark   # Phase 9 controlled benchmark (needs server venv)
-# server tests (from server/):
-.venv/Scripts/python.exe -m unittest discover -s tests
-# server run (from server/, deterministic):
-.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
-```
-Full Windows setup (venv, extension origin, AI mode) is in `README.md` / `server/README.md`.
+Cross-origin tasks require optional ENABLE BROWSING ACROSS SITES in the popup
+(<all_urls> for Chrome capture). NAVIGATE fails closed without it. Manual activeTab
+use remains available. No new CSP network destination was added.
 
-## Git state
-- Branch `main`; prompt-policy task started clean at `7b34f7a` (timeout fix).
-- Prompt/tests and these context documents are pending live acceptance before commit.
-  Check `git status` and `git log -1 --format=%H` for the exact current state.
+## Privacy and provider invariants
 
-## Manual verification
-- **VERIFIED (user, Chrome):** Phase 6A — extension → `POST /plan` → FastAPI 200; 7 fields,
-  5 sensitive/redacted, `rawPiiIncluded=false`, `privacy.status=safe`, 5 role placeholders,
-  Bengaluru/Conference retained, deterministic planning. NVIDIA endpoint returns valid JSON
-  (verified out of band).
-- **VERIFIED (offline, Phase 11A):** AI-mode planner path — deterministic live smoke PASS;
-  AI mode with no key returns 503 `X-EdgeSight-Planner: ai` (fails closed, not deterministic);
-  mock-transport tests prove Nemotron's decision is used and hallucinated / non-actionable
-  targets are rejected.
-- **VERIFIED (user, Chrome, after `b5bc9c5`):** `/plan` 200,
-  `X-EdgeSight-Planner: ai`, sensitive/redacted counts 5/5, `rawPiiIncluded=false`.
-  Nemotron returned STOP with null target while `actionCandidates=[]`; controls were
-  present in OCR. This was before the grounding fix.
-- **VERIFIED (user, Chrome, after `076a81f`):** actionCandidates includes the current
-  Continue candidate; sensitive/redacted counts remain 5/5, rawPiiIncluded=false.
-  `/plan` returns 504 with planner header ai; AI smoke reports UNAVAILABLE. The
-  blocker at that point was provider timeout, not perception or grounding.
-- **VERIFIED (user, real AI smoke, after `7b34f7a`):** requestPlan returns READY with
-  model-selected STOP where the complete actionable fixture expects CLICK. The real
-  NVIDIA round-trip and valid response are working. The CLICK/STOP pair has not passed.
-- **PENDING (never observed):** AI CLICK against a current approved candidate; Phase 7 positive click +
-  stale/wrong-page negative; Phase 8 positive/negative visual verification; Phase 9 live
-  Chrome timings + CPU/GPU/RAM. Prior Computer-Use attempts stopped on a URL-policy block.
+- Raw screenshots/OCR, raw DOM, field values, local control identities and secret
+  lists never cross the wire. Existing detection/redaction engines are unchanged.
+- Only the exact frozen builder-approved context reaches transport; final local
+  known-value checks run before approval. Sensitive fields remain placeholders.
+- Provider input: goal, optional guarded origin (no path/query/fragment), privacy flags,
+  semantic roles/filled/safe values, visual IDs/text/confidence/actionability/role/
+  editable/focused, redaction legend. No image, bbox, observation ID or DOM identity.
+- NVIDIA is an LLM over sanitized structured state, not a VLM. AI mode is explicit;
+  deterministic mode exists for offline use, never as fallback in AI mode.
+- NVIDIA_API_KEY stays server-only: never in chat/logs/source/browser/prompts.
+  No .env auto-loader. NVIDIA_TIMEOUT_SECONDS remains finite 1–120, default 30;
+  browser deadline remains 35s. No model/timeout/provider-request behavior changes.
+- Logs contain fixed action/status/reason codes and counts/IDs only. No TYPE text,
+  URL, OCR text, screenshot, prompt, response body or API key in logs.
 
-## Known limitations
-Heuristic, English-only OCR; styled buttons can misread. PII is scoped to detected/known
-values; unknown/transformed secrets can escape. Single 750 ms post-click capture can miss
-slow transitions (no retry). Cross-origin navigation can lose activeTab and fails closed.
-Tab/capture checks are not atomic. Worker restart loses pending tickets/results. No general
-automation, no additional provider, no Raspberry Pi.
+## Files and commands
 
-## Exact next step
-Live Phase 11B acceptance: start FastAPI in AI mode, reload EdgeSight + the Employee
-Travel Request demo, enter the goal, press **RUN TASK** ONCE (no manual Plan/Execute).
-Expect: step 1 observe → privacy SAFE → NVIDIA CLICK Continue → local click; step 2 fresh
-observe of the submitted page → NVIDIA STOP → TASK COMPLETE. Confirm rawPiiIncluded=false
-and planner NVIDIA AI throughout, no deterministic fallback. Record the result here, then
-STOP — do not begin TYPE/NAVIGATE/voice.
+- extension/src/background/{agent-controller,service-worker,local-observation}.js
+- extension/src/content/observe.js, privacy/agent-context.js
+- extension/src/actions/{geometry,execute-click,execute-browser}.js
+- extension/src/shared/action-contract.js, transport/planner-client.js, popup/manifest
+- server/app/{schemas,ai_contract,ai_input,ai_planner,nvidia_provider,config,main}.py
+- extension/tests/{action,browser-actions,browser-actions-integration,agent-controller,agent-integration}.test.mjs
+- server/tests/test_actions.py, demo/search.*, docs/TESTING.md
 
-## Remaining roadmap (not sacred — adjust to repo reality)
-1. Verify one live AI CLICK against an approved candidate (AI mode itself is confirmed).
-2. Autonomous controller loop: OBSERVE → PLAN → ACT → OBSERVE. **DONE (Phase 11B, code + tests).**
-3. Expanded safe actions: NAVIGATE, CLICK, TYPE, TYPE_LOCAL_REF, PRESS_KEY, SCROLL, WAIT, STOP.
-4. Browser navigation / new-tab control.
-5. Autonomous form filling.
-6. Voice + text sharing one goal pipeline.
-7. Local private-value vault / reference mechanism.
-8. Action policy / security layer.
-9. Multi-step browser workflows.
-10. Accuracy / privacy / resource / latency evaluation.
-11. Final UX / polish.
+Commands from root: npm test; npm run build; npm run check; npm run scan:secrets.
+Server tests from server/: .venv/Scripts/python.exe -m unittest discover -s tests.
+Live smoke from root: node scripts/smoke-planner.mjs --ai (user's restarted AI server).
+
+## Limits and exact next step
+
+Heuristic English OCR and detected/known-value privacy are not general PII detection.
+Unknown/transformed secrets remain a limitation. Empty controls need actual safe OCR
+evidence to become candidates. Synthetic ENTER may be ignored by external sites.
+Only explicit NAVIGATE has a load-event wait; other transitions retain the existing
+short settle and fail closed if observation fails. Tab checks cannot be fully atomic.
+Worker restart drops tickets/run state safely. No private-value typing.
+
+Finish Phase 11C live acceptance in HANDOFF: restart real AI server; travel smoke and
+Chrome regression; controlled local NAVIGATE/TYPE/ENTER/SCROLL/STOP workflow; then one
+YouTube attempt. Browser automation initialization failed in this agent environment;
+the user performs live testing with the already configured terminal/key kept local.
+Record observed results, commit/push stable changes, STOP. Do not start voice,
+vault/TYPE_LOCAL_REF, TEE, Raspberry Pi, another browser, or a new perception engine.
