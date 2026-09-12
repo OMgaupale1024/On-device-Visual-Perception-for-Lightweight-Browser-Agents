@@ -41,7 +41,8 @@ def create_app(allowed_origin: str | None = None, *, mode=None, provider=None) -
 
     app.add_middleware(CORSMiddleware, allow_origins=[origin] if origin else [],
                        allow_methods=["GET", "POST"], allow_headers=["Content-Type"], allow_credentials=False,
-                       expose_headers=[MODE_HEADER, "Server-Timing"])
+                       expose_headers=[MODE_HEADER, "Server-Timing", "X-EdgeSight-Planner-Failure",
+                                       "X-EdgeSight-Planner-Upstream-Status"])
 
     @app.get("/health")
     async def health():
@@ -62,7 +63,7 @@ def create_app(allowed_origin: str | None = None, *, mode=None, provider=None) -
         try:
             return measured(await plan_ai(context.model_dump(mode="python"), ai_provider))
         except PlannerFailure as failure:
-            headers = {MODE_HEADER: selected_mode}
+            headers = {MODE_HEADER: selected_mode, "X-EdgeSight-Planner-Failure": failure.failure_code}
             if failure.upstream_status is not None:
                 # Safe numeric diagnostic: the NVIDIA HTTP status behind an opaque 503,
                 # so a live run distinguishes wrong-model / auth / rate-limit. No payload.

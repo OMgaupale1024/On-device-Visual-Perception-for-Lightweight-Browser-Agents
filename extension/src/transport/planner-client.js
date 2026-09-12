@@ -30,6 +30,8 @@ export async function requestPlan(context, { fetchImpl = globalThis.fetch,
   const bytes = new TextEncoder().encode(body).length;
   const base = { privacy: 'SAFE', bytes };
   let plannerMode = 'unknown';
+  let httpStatus = null, upstreamStatus = null;
+  let failureCode = null;
   const controller = new AbortController();
   let timer;
   let timedOut = false;
@@ -45,16 +47,27 @@ export async function requestPlan(context, { fetchImpl = globalThis.fetch,
         credentials: 'omit', redirect: 'error', cache: 'no-store', referrerPolicy: 'no-referrer' });
       const mode = response.headers?.get('X-EdgeSight-Planner');
       plannerMode = ['ai', 'deterministic'].includes(mode) ? mode : 'unknown';
-      if (!response.ok) return { ...base, plannerMode, status: response.status >= 500 ? 'UNAVAILABLE' : 'REJECTED',
-        reason: response.status >= 500 ? 'Planner unavailable.' : 'Plan rejected.' };
+      httpStatus = Number.isInteger(response.status) && response.status >= 100 && response.status <= 599 ? response.status : null;
+      const upstream = response.headers?.get('X-EdgeSight-Planner-Upstream-Status');
+      upstreamStatus = /^[1-5]\d{2}$/.test(upstream || '') ? Number(upstream) : null;
+      const failure = response.headers?.get('X-EdgeSight-Planner-Failure');
+      failureCode = ['PROVIDER_UNAVAILABLE', 'PROVIDER_TIMEOUT', 'UPSTREAM_HTTP_ERROR',
+        'INVALID_PROVIDER_RESPONSE', 'INVALID_DECISION', 'INVALID_REASON', 'INVALID_TARGET',
+        'INVALID_TASK_TEXT', 'INVALID_FOCUS'].includes(failure) ? failure : null;
+      if (!response.ok) {
+        // Release the HTTP body without reading/logging a possibly sensitive error.
+        try { await response.body?.cancel(); } catch { /* Diagnostic outcome is unchanged. */ }
+        return { ...base, plannerMode, httpStatus, upstreamStatus, failureCode, status: response.status >= 500 ? 'UNAVAILABLE' : 'REJECTED',
+          reason: response.status >= 500 ? 'Planner unavailable.' : 'Plan rejected.' };
+      }
       try {
         const plan = validatePlannerResponse(await response.json(), context);
-        return { ...base, plannerMode, status: 'READY', plan,
+        return { ...base, plannerMode, httpStatus, upstreamStatus, status: 'READY', plan,
           serverTiming: parseServerTiming(response.headers?.get('Server-Timing')) };
-      } catch { return { ...base, plannerMode, status: 'REJECTED', reason: 'Plan rejected.' }; }
+      } catch { return { ...base, plannerMode, httpStatus, upstreamStatus, status: 'REJECTED', reason: 'Plan rejected.' }; }
     };
     return await Promise.race([operation(), deadline]);
   } catch {
-    return { ...base, plannerMode, status: 'UNAVAILABLE', reason: timedOut ? 'Planner unavailable: timeout.' : 'Planner unavailable.' };
+    return { ...base, plannerMode, httpStatus, upstreamStatus, status: 'UNAVAILABLE', reason: timedOut ? 'Planner unavailable: timeout.' : 'Planner unavailable.' };
   } finally { clearTimeout(timer); }
 }

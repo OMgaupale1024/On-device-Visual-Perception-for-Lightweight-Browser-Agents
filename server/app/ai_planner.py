@@ -1,5 +1,6 @@
 """Safe context -> one provider -> strict output validation -> local binding."""
 import asyncio
+from pydantic import ValidationError
 
 from .ai_contract import parse_decision
 from .ai_input import prepare_ai_input
@@ -21,15 +22,24 @@ async def plan_ai(candidate: dict, provider: PlanningProvider) -> PlanResponse:
         raise PlannerFailure() from None
     try:
         decision = parse_decision(text)
+    except ValidationError as error:
+        # Inspect only schema locations; never emit input, reason wording, or errors.
+        reason_only = all(e["loc"] == ("reason",) for e in error.errors(include_input=False, include_url=False))
+        raise PlannerFailure(502, failure_code="INVALID_REASON" if reason_only else "INVALID_DECISION") from None
+    except Exception:
+        raise PlannerFailure(502, failure_code="INVALID_DECISION") from None
+    try:
         if decision.action in {"CLICK", "TYPE"}:
             # Target must be a locally-grounded actionable candidate, never just any
             # visible label (e.g. "Password"). Non-actionable CLICK is rejected safely.
             if decision.target not in prepared.actionable_ids:
-                raise ValueError("Non-actionable visual target")
+                raise PlannerFailure(502, failure_code="INVALID_TARGET")
         if decision.action == "TYPE" and (decision.target not in prepared.editable_ids or decision.text not in prepared.goal):
-            raise ValueError("Invalid editable task target")
+            raise PlannerFailure(502, failure_code="INVALID_TASK_TEXT")
         if decision.action == "PRESS_KEY" and not prepared.focused_ids:
-            raise ValueError("No approved keyboard focus")
+            raise PlannerFailure(502, failure_code="INVALID_FOCUS")
         return PlanResponse(observationId=prepared.observation_id, **decision.model_dump())
+    except PlannerFailure:
+        raise
     except Exception:
-        raise PlannerFailure(502) from None
+        raise PlannerFailure(502, failure_code="INVALID_DECISION") from None

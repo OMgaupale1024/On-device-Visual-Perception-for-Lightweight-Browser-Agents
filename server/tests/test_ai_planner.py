@@ -235,7 +235,7 @@ class ProviderHTTPTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(plan.action, "CLICK"); self.assertEqual(len(calls), 1)
         body = calls[0]
         self.assertEqual(body["model"], MODEL); self.assertFalse(body["stream"])
-        self.assertEqual(body["temperature"], 0); self.assertEqual(body["max_tokens"], 256)
+        self.assertEqual(body["temperature"], 0); self.assertEqual(body["max_tokens"], 96)
         self.assertEqual(body["response_format"], {"type": "json_object"})
         self.assertEqual(body["chat_template_kwargs"], {"enable_thinking": False})
         self.assertEqual(set(body), {"model", "temperature", "stream", "max_tokens",

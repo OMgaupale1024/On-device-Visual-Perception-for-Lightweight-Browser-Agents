@@ -13,9 +13,13 @@ and privacy filtering produce a minimal safe state for a cloud next-action plann
 real NVIDIA CLICK → local execution → fresh observation → NVIDIA STOP, privacy SAFE;
 manual mode works. Timeout, API key, network, OCR and grounding are not current blockers.
 
-**Phase 11C is implemented with automated coverage; live acceptance is pending.**
-Vocabulary: CLICK, TYPE, PRESS_KEY, SCROLL, NAVIGATE, STOP. Do not claim live success
-from tests using provider/browser doubles. HANDOFF contains the exact live steps.
+**Phase 11C is LIVE VERIFIED by the user:** real NVIDIA CLICK/STOP smoke, the travel
+RUN TASK regression, and a controlled multi-action NAVIGATE/TYPE/ENTER/SCROLL/STOP
+workflow all pass. Vocabulary: CLICK, TYPE, PRESS_KEY, SCROLL, NAVIGATE, STOP.
+A STOP-stage NVIDIA `504` timeout found during live smoke was root-caused to an
+oversized `max_tokens` (256, lowered to 96) letting the model ramble past the 30s
+deadline on ambiguous STOP decisions — fixed; live latency is now ~1s-class per call.
+See docs/TESTING.md ("Phase 11C planner-latency diagnostic and fix") for evidence.
 
 ## Architecture
 
@@ -100,9 +104,8 @@ Only explicit NAVIGATE has a load-event wait; other transitions retain the exist
 short settle and fail closed if observation fails. Tab checks cannot be fully atomic.
 Worker restart drops tickets/run state safely. No private-value typing.
 
-Finish Phase 11C live acceptance in HANDOFF: restart real AI server; travel smoke and
-Chrome regression; controlled local NAVIGATE/TYPE/ENTER/SCROLL/STOP workflow; then one
-YouTube attempt. Browser automation initialization failed in this agent environment;
-the user performs live testing with the already configured terminal/key kept local.
-Record observed results, commit/push stable changes, STOP. Do not start voice,
-vault/TYPE_LOCAL_REF, TEE, Raspberry Pi, another browser, or a new perception engine.
+Phase 11C is DONE (live smoke, travel regression, and controlled multi-action workflow
+all user-verified; planner-latency fix confirmed at ~1s-class per call). Optional
+uncontrolled YouTube attempt was not run and is not required for acceptance. Do not
+start voice, vault/TYPE_LOCAL_REF, TEE, Raspberry Pi, another browser, or a new
+perception engine without the user assigning the next phase.

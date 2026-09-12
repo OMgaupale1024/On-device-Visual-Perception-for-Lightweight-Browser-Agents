@@ -109,6 +109,27 @@ class ActionContractTests(unittest.TestCase):
                                                "observationId": context()["observation"]["id"]})
             self.assertEqual(provider.calls, 1)
 
+    def test_rejected_output_has_fixed_diagnostic_without_model_text(self):
+        for output, code in [
+            (json.dumps({"action": "STOP", "target": None, "reason": "private-output-canary"}), "INVALID_REASON"),
+            (json.dumps({"action": "STOP", "target": None, "reason": REASON, "selector": "private-output-canary"}), "INVALID_DECISION"),
+            (json.dumps({"action": "CLICK", "target": "visual_99", "reason": REASON}), "INVALID_TARGET"),
+            ("private-output-canary", "INVALID_DECISION"),
+        ]:
+            provider = Provider({})
+            provider.output = output
+            with TestClient(create_app(mode="ai", provider=provider)) as client:
+                response = client.post("/plan", json=context())
+            self.assertEqual(response.status_code, 502)
+            self.assertEqual(response.json(), {"detail": "AI planner unavailable."})
+            self.assertEqual(response.headers["X-EdgeSight-Planner-Failure"], code)
+            self.assertNotIn("private-output-canary", response.text + str(response.headers))
+
+    def test_failure_code_is_allowlisted(self):
+        self.assertEqual(PlannerFailure(504, timed_out=True).failure_code, "PROVIDER_TIMEOUT")
+        self.assertEqual(PlannerFailure(upstream_status=500).failure_code, "UPSTREAM_HTTP_ERROR")
+        self.assertEqual(PlannerFailure(502, failure_code="private-error-canary").failure_code, "INVALID_PROVIDER_RESPONSE")
+
 
 class ActionAuthorizationTests(unittest.IsolatedAsyncioTestCase):
     async def test_type_valid_editable_task_text(self):

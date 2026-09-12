@@ -968,17 +968,15 @@ metadata and no private-canary/raw-image leakage. Existing CLICK/STOP, manual ex
 privacy fail-closed, planner fail-closed, MAX_STEPS, cancellation and duplicate guards pass.
 These are automated tests, not live NVIDIA or Chrome results.
 
-### Live Phase 11C acceptance: PENDING
-
-Browser automation failed twice during initialization with "failed to write kernel assets"
-(Windows error 3). No controlled browser workflow or YouTube run was observed in this
-agent session. The real NVIDIA key remains in the user's configured terminal.
+### Live Phase 11C acceptance: VERIFIED (user), items 1-3
 
 1. Restart that AI server; run node scripts/smoke-planner.mjs --ai from repository root.
    Require real CLICK for the complete travel fixture and STOP for the no-target fixture.
+   **PASS** (see planner-latency diagnostic below for the STOP-stage timeout this uncovered
+   and the fix).
 2. Reload EdgeSight/demo and repeat the travel RUN TASK regression, plus manual mode.
    Require planner ai, current approved CLICK, fresh observation, STOP, privacy 5/5 and
-   rawPiiIncluded=false.
+   rawPiiIncluded=false. **PASS** ("travel regression PASS", user-reported).
 3. From root serve only the controlled fixture directory:
    py -3.10 -m http.server 8137 --bind 127.0.0.1 --directory demo
    Enable browsing across sites in the popup. From an ordinary observable page RUN TASK:
@@ -987,6 +985,57 @@ agent session. The real NVIDIA key remains in the user's configured terminal.
    Require model-selected NAVIGATE/TYPE/ENTER/SCROLL and STOP from fresh observations;
    no script in the fixture chooses planner actions. Privacy must remain SAFE; this page
    has zero sensitive fields, so the travel demo's 5/5 counts do not apply here.
+   **PASS** ("multi-action workflow PASS", user-reported).
 4. Only after controlled acceptance, try "Open YouTube and search for calculus videos."
    once. Report any external-site block; synthetic keys and dynamic OCR may limit it.
-5. Record actual evidence, commit/push the acceptance documentation, STOP. No voice phase.
+   **Not yet reported** — optional stretch check, not required for Phase 11C acceptance.
+5. Record actual evidence (below), commit/push the acceptance documentation, STOP. No voice phase.
+
+## Phase 11C planner-latency diagnostic and fix (2026-09-12)
+
+Live smoke (item 1 above) initially returned real CLICK success but a real STOP-stage
+`504 PROVIDER_TIMEOUT` at the 30s provider deadline, reproduced twice
+(`elapsedMs` 30019 and 30087) while CLICK completed in 5.7s and 3.5s on the same runs —
+smaller STOP input taking longer ruled out prompt/context size as the cause.
+
+Root cause: `max_tokens: 256` on a `response_format: json_object` request let the model
+spend its full output budget on a long freeform `reason` for the ambiguous "empty page"
+STOP case, instead of the short fixed-string reason the contract requires; at the
+observed token rate this reliably exceeded the 30s deadline. Not a browser, privacy,
+action-fusion, connectivity, or Phase 11C-logic issue — confirmed via the earlier
+allowlisted failure-code diagnostics (`X-EdgeSight-Planner-Failure`,
+`X-EdgeSight-Planner-Upstream-Status`) added this phase, which isolated the category
+to `PROVIDER_TIMEOUT` before any code changed.
+
+Fix: `server/app/nvidia_provider.py` lowers `max_tokens` to 96 (a valid one-action
+decision is ~20-80 tokens; temperature/response_format/`enable_thinking:false` unchanged).
+No timeout increase, no model change, no fallback, no prompt/schema weakening.
+
+Live re-verification (user, real NVIDIA, after the fix): both CLICK and STOP now
+`READY` well under the deadline — **planner latency ~1.34s CLICK, ~0.98s STOP**
+("NVIDIA CLICK/STOP smoke PASS").
+
+Tooling added alongside the fix (kept, not diagnostic-only): `requestPlan` and
+`scripts/smoke-planner.mjs` surface `plannerMs` (server `Server-Timing`, isolates real
+provider latency from localhost overhead) and the smoke script supports `--repeat N`
+with a numeric min/median/max summary per stage, for future latency regression checks.
+`extension/tests/smoke-planner.test.mjs` covers: allowlisted-vs-private failure codes
+reaching diagnostics, STOP-stage 504 naming without reading the error body, NVIDIA
+upstream-status passthrough without leaking headers/bodies, repeat-mode summary
+statistics, wrong-decision/health-timeout/unreachable-server handling, and a real CLI
+subprocess exit-code check. `server/tests/test_actions.py` covers rejected-provider-output
+diagnostics without model text and the `PlannerFailure` code allowlist (private codes
+collapse to a fixed generic one).
+
+| Check | Result |
+|---|---|
+| server/.venv/Scripts/python.exe -m unittest discover -s tests | PASS 78/78 |
+| npm test | PASS 292/292 |
+| npm run check | PASS syntax/manifest/packaged-asset integrity |
+| git diff --check | PASS |
+| npm run scan:secrets | PASS, no credential patterns |
+
+Phase 11C is now live-verified end to end: real NVIDIA CLICK/STOP, the travel RUN TASK
+regression, and the controlled multi-action NAVIGATE/TYPE/ENTER/SCROLL/STOP workflow all
+pass with practical (~1s-class) planner latency. Remaining optional item: an
+uncontrolled YouTube attempt (item 4), not required for acceptance.

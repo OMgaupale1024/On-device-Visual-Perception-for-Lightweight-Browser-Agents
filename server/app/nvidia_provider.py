@@ -18,7 +18,7 @@ MAX_RESPONSE_BYTES = 64_000
 
 
 class PlannerFailure(Exception):
-    def __init__(self, status_code=503, upstream_status=None, *, timed_out=False):
+    def __init__(self, status_code=503, upstream_status=None, *, timed_out=False, failure_code=None):
         super().__init__("AI planner unavailable.")
         self.status_code = status_code
         # Numeric upstream NVIDIA HTTP status when the failure was a provider non-200
@@ -26,6 +26,12 @@ class PlannerFailure(Exception):
         self.upstream_status = upstream_status
         # Internal diagnostic only; never includes exception text or provider data.
         self.timed_out = timed_out
+        allowed = {"PROVIDER_UNAVAILABLE", "PROVIDER_TIMEOUT", "UPSTREAM_HTTP_ERROR",
+                   "INVALID_PROVIDER_RESPONSE", "INVALID_DECISION", "INVALID_REASON",
+                   "INVALID_TARGET", "INVALID_TASK_TEXT", "INVALID_FOCUS"}
+        default = ("PROVIDER_TIMEOUT" if timed_out else "UPSTREAM_HTTP_ERROR" if upstream_status is not None
+                   else "INVALID_PROVIDER_RESPONSE" if status_code == 502 else "PROVIDER_UNAVAILABLE")
+        self.failure_code = failure_code if failure_code in allowed else default
 
 
 class PlanningProvider(Protocol):
@@ -47,7 +53,10 @@ class NvidiaProvider:
             "model": MODEL,
             "temperature": 0,
             "stream": False,
-            "max_tokens": 256,
+            # ponytail: 96 caps worst-case latency (~30s hang seen when the model
+            # ran to the old 256-token budget on an ambiguous STOP). A valid one-action
+            # decision is ~20-80 tokens; raise only if a legit long NAVIGATE URL truncates.
+            "max_tokens": 96,
             "response_format": {"type": "json_object"},
             "messages": [{"role": "system", "content": SYSTEM_PROMPT},
                          {"role": "user", "content": safe_input}],
