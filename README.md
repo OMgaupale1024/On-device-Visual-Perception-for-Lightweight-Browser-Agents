@@ -1,161 +1,339 @@
-# EdgeSight
+# EdgeSight Analytics
 
-**Privacy-preserving on-device perception for lightweight browser agents.**
-SIH26171 · ISRO · Smart India Hackathon 2026.
+**Privacy & Performance Benchmarking for Browser Agents**
 
-**Phases 0–9 implemented in code:** browser-local OCR and semantic analysis, local
-redaction, privacy-approved SafeAgentContext, FastAPI validation, one real NVIDIA NIM
-planner adapter (deterministic mode is the default), and **safe visually grounded
-execution** — a validated `CLICK visual_N` is turned into ONE guarded, user-triggered
-click on the locally resolved target. Phase 8 then captures fresh pixels and verifies
-the visible outcome locally. Phase 9 adds controlled evaluation benchmarks and actual
-current-run timings. No heavy dashboard or Raspberry Pi work.
+A professional analytical dashboard for evaluating EdgeSight browser agent performance across websites. Built for Smart India Hackathon 2026 (SIH26171) - ISRO.
 
-**Phase 6A is manually Chrome-verified by the user:** extension → POST /plan →
-FastAPI HTTP 200; seven fields, five sensitive/redacted regions, safe status,
-rawPiiIncluded=false, five role placeholders, Bengaluru/Conference retained, and
-working deterministic planning. The NVIDIA endpoint was manually verified to return
-valid structured JSON. **Phase 6B end-to-end AI verification remains pending:** the
-server-side provider smoke through EdgeSight's parser and the Chrome AI-mode run were
-not performed (no NVIDIA_API_KEY was configured in this session's shell).
+## Overview
 
-## Run on Windows
+EdgeSight Analytics is a standalone dashboard that quantifies how well the EdgeSight privacy-preserving browser AI agent performs on different websites. It computes a comprehensive **EdgeSight Benchmark Score** (0-100) based on five weighted dimensions defined by SIH evaluation criteria.
 
-From repository root (Python 3.10+):
+### Key Features
 
-```powershell
-py -3.10 -m venv server/.venv
-server/.venv/Scripts/python.exe -m pip install -r server/requirements.txt
-$env:EDGESIGHT_EXTENSION_ORIGIN = "chrome-extension://YOUR_EXTENSION_ID"
-$env:PLANNER_MODE = "deterministic"
-Set-Location server
-.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
+- **Comprehensive Scoring**: 5-dimension weighted scoring (Visual 25%, PII 20%, Redaction 20%, Resources 20%, Latency 15%)
+- **Privacy-First**: Prominent PII leakage tracking with "PRIVACY FAILURE" warnings
+- **Multi-Website Comparison**: Side-by-side benchmark comparison with grouped bar and radar charts
+- **Detailed Analysis**: Per-run drill-down with latency breakdown, resource usage, OCR analytics
+- **Data Import/Export**: JSON file import, CSV/JSON export
+- **Local Persistence**: IndexedDB storage (no backend required)
+- **Sample Data**: Pre-loaded demo data clearly marked as "SAMPLE DATA"
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 18+
+- npm or pnpm
+
+### Installation
+
+```bash
+cd edgesight-analytics
+npm install
 ```
 
-Use EdgeSight's actual 32-letter extension ID. For AI mode, set PLANNER_MODE=ai
-and NVIDIA_API_KEY **server-side only**, then restart. The
-[server README](server/README.md) includes a masked PowerShell key-entry procedure;
-never paste a key into the extension, repository, logs or chat. No .env auto-loader.
+### Development
 
-Reload unpacked extension/ at chrome://extensions (Chrome 116+), enable file URL
-access, open demo-page/index.html and keep all seven fields and Continue visible.
-Click **ANALYZE / PLAN** with the default travel-request goal. Opening the popup
-alone sends nothing. OCR has a 45s limit; planning through localhost has a 35s limit
-(provider work defaults to 30s; see NVIDIA_TIMEOUT_SECONDS in server/README.md).
-
-The planner panel displays **NVIDIA AI**, **Deterministic**, or **Unknown** based on an
-allowlisted server header. AI failures show unavailable/rejected and never silently
-fall back to deterministic success. Local Phase 1–5 results remain visible.
-
-For a `CLICK` plan an **EXECUTE SUGGESTED ACTION** button appears (Phase 7). Pressing it
-resolves the chosen `visual_N` locally — screenshot-pixel bbox → CSS viewport point →
-`elementFromPoint` → a small clickable-element allowlist — and performs exactly ONE
-`element.click()`, bound to the same observation, tab and document, single-use. The UI
-then shows **CLICK DISPATCHED → VERIFYING**. After 750 ms, one fresh capture of the same
-active tab runs local OCR and privacy again. Only the full pixel-derived phrase
-**Travel Request Submitted** produces **VISUALLY VERIFIED**; otherwise **NOT VERIFIED —
-Analyze again**. The result panel shows the before/after observation IDs and safe evidence.
-Verification never calls `/plan`, NVIDIA, or another endpoint. A `STOP` plan performs no action. The server never supplies
-selectors, coordinates or code.
-
-## Two privacy boundaries
-
-```text
-Browser screen → local OCR + semantics → local PII detection/redaction
-→ SafeAgentContext → FINAL LOCAL PRIVACY GUARD
-========== Browser → EdgeSight server ==========
-FastAPI strict validation → minimized safe planning input → provider guard
-========== EdgeSight server → NVIDIA NIM (AI mode only) ==========
-LLM → untrusted structured decision → strict action/ID validation
-→ server-owned observation binding → extension validation → decision display
-========== back in the browser (Phase 7, local only) ==========
-CLICK visual_N → local bbox → screenshot px → CSS viewport px → elementFromPoint
-→ clickable-element allowlist → ONE guarded, single-use click (or STOP: no action)
-========== Phase 8, browser local only ==========
-750 ms → fresh same-tab capture → new observation → local OCR + privacy again
-→ safe visual text → Travel Request Submitted → VISUALLY VERIFIED / NOT VERIFIED
+```bash
+npm run dev
 ```
 
-The browser transport still accepts only the exact frozen context approved by the
-Phase 5 builder. It has no normal interface to raw screenshots, raw OCR, raw DOM,
-secret lists or local previews. Its Phase 6A approval boundary is unchanged.
+Open http://localhost:5173
 
-The provider receives only goal, safe privacy flags, semantic roles/filled flags/
-safe values, visual IDs/text/confidence, and the redaction legend. Semantic and
-pixel-OCR evidence remain explicitly separate. Observation IDs, timestamps, field
-IDs, geometry, image metadata, extension IDs, environment and debug data are omitted.
-Authentication uses the server credential as protocol authentication only; it is
-never model content.
+### Build
 
-Selected provider: **NVIDIA NIM**, model **nvidia/nemotron-3.5-lightning-30b-a3b**,
-via the OpenAI-compatible Chat Completions endpoint (https://integrate.api.nvidia.com/v1)
-with JSON-object structured output. The Python `openai` SDK is not used; the server
-speaks the compatible protocol directly over `httpx`. This is an **LLM over sanitized
-structured visual context**, not a VLM integration. No image upload; no screenshots
-are ever sent to NVIDIA in Phase 6B.
-
-Prompt policy treats goal/screen text as untrusted data, forbids hidden-value
-reconstruction, and permits only supplied visual IDs or STOP. All model output is
-validated again; reasons use four fixed non-sensitive phrases. Prompt separation
-does not guarantee perfect resistance to malicious screen text. Known/unknown PII
-limits of local perception also remain; no general arbitrary-site privacy claim.
-
-## Tests and handoff
-
-```powershell
-npm test
-npm run check
-server/.venv/Scripts/python.exe -m pip install -r server/requirements-dev.txt
-Set-Location server
-.venv/Scripts/python.exe -m unittest discover -s tests -v
+```bash
+npm run build
 ```
 
-Current results: **238/238 extension test entries**, **53/53 server test methods**
-(the newest cover Phase 10 `actionCandidates` groundwork). Both browser
-transport and provider boundary contamination tests pass with zero downstream calls.
-Real OCR cold/warm smoke and local deterministic/AI-missing-key HTTP smoke pass. Mocked
-AI tests are not real-provider acceptance. Phase 6B integrated NVIDIA, Phase 7 positive/
-negative, and Phase 8 positive/negative Chrome demos remain **PENDING**. Chrome was
-launched, but Computer Use stopped because it could not reliably determine the current
-browser URL for policy enforcement. No manual click or verification pass was observed.
+### Run Tests
 
-With a separately running server, from repository root:
-`node scripts/smoke-planner.mjs` for deterministic mode, or
-`node scripts/smoke-planner.mjs --ai` for a real, billable NVIDIA smoke using only the
-synthetic safe fixture. The latter was NOT run — no NVIDIA_API_KEY was configured.
+```bash
+npm run test
+```
 
-[AI context](docs/AI_CONTEXT.md) · [Handoff](docs/HANDOFF.md) ·
-[Architecture](docs/ARCHITECTURE.md) · [Decisions](docs/DECISIONS.md) ·
-[Testing](docs/TESTING.md) · [Metrics](docs/METRICS.md) ·
-[Prototype history & phase plans](docs/archive/)
+## Dashboard Pages
 
-Verification uses one attempt, a 60-second transaction deadline, five-second local API
-bounds and the existing 45-second OCR deadline. Navigation is allowed after dispatch;
-the intended tab must remain active. Matching normalizes case/whitespace/punctuation
-spacing and joins at most three spatially adjacent OCR items in bbox reading order.
-Confidence values are recorded without an uncalibrated threshold. This proves visible
-text at capture time, not backend persistence or arbitrary workflow completion.
+| Page | Route | Description |
+|------|-------|-------------|
+| Dashboard Overview | `/` | Main KPI cards, score breakdown, recent runs |
+| Website Comparison | `/comparison` | Multi-site comparison table & charts |
+| Website Details | `/website/:id` | Deep dive into single website |
+| Run Details | `/run/:websiteId/:runIndex` | Individual run analysis |
+| Import Benchmark | `/import` | Upload JSON benchmark data |
+| Settings | `/settings` | Configure scoring thresholds |
 
-Phase 10 groundwork (`actionCandidates`) is committed; the next task is the autonomous
-OBSERVE → PLAN → ACT loop. See [AI context](docs/AI_CONTEXT.md) and [Handoff](docs/HANDOFF.md).
+## Importing Benchmark Data
 
-## Phase 9 controlled prototype benchmark
+### JSON Format
 
-Run `npm run benchmark` from the repository root with Node dependencies and the
-server venv installed. It runs real pixel OCR on five committed synthetic screens,
-the actual PII detector and redaction mask commands, local stages and 10 temporary
-deterministic FastAPI HTTP requests. No NVIDIA call by default.
+The dashboard accepts EdgeSight benchmark JSON with this schema:
 
-Reference: 41/41 safe items on 5 synthetic screens; PII precision **71.43%**, recall
-**75.00%**, F1 **73.17%** on 40 candidates; redaction-command precision **72.09%**,
-recall **75.61%**, safe-region preservation **70.73%** across 3 layouts. These are
-controlled prototype results, not general accuracy or pixel-perfect masking claims.
-Cold OCR median **523.908 ms** (2 new workers); warm inference median **249.229 ms**
-(5 runs), measured in Node/WASM. Live Chrome/NVIDIA latency and resource utilization
-remain unmeasured. Popup Performance shows only current-run timings, initially --;
-human confirmation time is separate from machine processing.
+```json
+{
+  "website": { "name": "string", "domain": "string" },
+  "environment": {
+    "device": "string",
+    "cpu": "string",
+    "ramGB": number,
+    "gpu": "string?",
+    "os": "string",
+    "browser": "string",
+    "browserVersion": "string",
+    "edgeSightVersion": "string",
+    "visionModel": "string"
+  },
+  "page": { "name": "string", "url": "string" },
+  "run": { "runNumber": number, "timestamp": "ISO_STRING" },
+  "groundTruth": { "expectedElements": number, "expectedPII": number, "expectedRedactions": number },
+  "visual": { "correctElements": number, "domAccuracy": number?, "visionAccuracy": number?, "fusionAccuracy": number? },
+  "pii": { "tp": number, "fp": number, "fn": number, "outboundLeakCount": number },
+  "redaction": { "tp": number, "fp": number, "fn": number, "averageIoU": number? },
+  "ocr": { "detections": number, "accepted": number, "rejected": number, "averageConfidence": number },
+  "performance": {
+    "coldRun": boolean,
+    "timingsMs": { "screenCapture": number, "dom": number, "vision": number, "pii": number, "redaction": number, "privacyGuard": number, "server": number, "action": number, "total": number },
+    "cpu": { "average": number, "peak": number },
+    "ramMB": { "average": number, "peak": number },
+    "gpuAverage": number?
+  },
+  "agent": { "tasksAttempted": number, "tasksCompleted": number, "correctActions": number, "incorrectActions": number },
+  "network": { "rawPayloadBytes": number, "sanitizedPayloadBytes": number }
+}
+```
 
-See [Metrics definitions, results and limitations](docs/METRICS.md),
-[Phase 9 plan](docs/archive/PHASE_9_PLAN.md) and
-[reference judge table](benchmarks/reference/table.md). Phase 9 code is complete;
-manual Chrome metrics acceptance remains PENDING.
+### Import Methods
+
+1. **Drag & Drop**: Drop `.json` file on the Import page
+2. **File Picker**: Click "Browse Files" on the Import page
+3. **Multiple Runs**: Import arrays of runs or objects with `runs` array
+4. **Auto-Grouping**: Runs are automatically grouped by website + environment
+
+### Sample Data
+
+Click "Load Sample Data" on the empty dashboard to populate with 7 demo websites:
+- Government Portal (3 pages × 3 runs)
+- Banking Website (2 pages × 2 runs)
+- Healthcare Portal (1 page × 1 run)
+- E-commerce Site (1 page × 1 run)
+- Enterprise Dashboard (1 page × 1 run)
+
+All sample data is clearly marked with **"SAMPLE DATA"** badges.
+
+## Scoring System
+
+### EdgeSight Benchmark Score Formula
+
+```
+Overall Score =
+  (VisualScore × 0.25) +
+  (PIIScore × 0.20) +
+  (RedactionScore × 0.20) +
+  (ResourceScore × 0.20) +
+  (LatencyScore × 0.15)
+```
+
+### Component Scores
+
+| Component | Weight | Calculation |
+|-----------|--------|-------------|
+| Visual Context | 25% | `correctElements / expectedElements × 100` |
+| PII Detection | 20% | F1 = 2 × Precision × Recall / (Precision + Recall) |
+| Redaction | 20% | F1 = 2 × Precision × Recall / (Precision + Recall) |
+| Resources | 20% | (CPU Score + RAM Score) / 2 |
+| Latency | 15% | Threshold-based (see below) |
+
+### Latency Thresholds (EdgeSight Benchmark Thresholds)
+
+| Total Latency | Score |
+|---------------|-------|
+| ≤ 1.0 sec | 100 |
+| 1.0–1.5 sec | 90 |
+| 1.5–2.0 sec | 80 |
+| 2.0–3.0 sec | 70 |
+| 3.0–4.0 sec | 50 |
+| > 4.0 sec | 30 |
+
+### Resource Thresholds (EdgeSight Benchmark Thresholds)
+
+**CPU (Average %)**:
+- ≤ 20% = 100
+- ≤ 35% = 90
+- ≤ 50% = 80
+- ≤ 65% = 65
+- > 65% = 45
+
+**RAM (Average MB)**:
+- ≤ 250 MB = 100
+- ≤ 400 MB = 90
+- ≤ 600 MB = 80
+- ≤ 800 MB = 65
+- > 800 MB = 45
+
+### Status Levels
+
+| Score | Status |
+|-------|--------|
+| 90–100 | Excellent |
+| 80–89 | Good |
+| 70–79 | Moderate |
+| < 70 | Needs Improvement |
+
+### Privacy Status (Separate from Score)
+
+| Condition | Status |
+|-----------|--------|
+| 0 PII leaked | **SAFE** |
+| > 0 PII leaked | **PRIVACY FAILURE** ⚠️ |
+
+Privacy failure is always prominently displayed regardless of overall score.
+
+## Architecture
+
+```
+src/
+├── components/
+│   ├── ui/           # Reusable UI components (Button, Card, Badge, Input, etc.)
+│   ├── charts/       # Chart components (GroupedBarChart, RadarChart, LineChart, PieChart)
+│   └── layout/       # Layout components (Sidebar, Header, Layout)
+├── pages/            # Page components (Dashboard, Comparison, Details, Import, Settings)
+├── services/
+│   └── BenchmarkContext.tsx  # Global state + IndexedDB persistence
+├── scoring/          # Centralized scoring engine (pure functions)
+├── types/            # TypeScript interfaces
+├── utils/            # Formatting utilities
+├── data/             # Sample data
+└── styles/           # Tailwind CSS + custom styles
+```
+
+### Data Flow
+
+```
+JSON Import → BenchmarkContext → IndexedDB → Pages → Scoring Engine → UI
+                     ↓
+              Settings (thresholds)
+```
+
+### Scoring Engine
+
+All calculations in `src/scoring/index.ts` - pure functions, no React dependencies:
+
+```typescript
+calculateVisualScore(run)
+calculatePIIPrecision(run)
+calculatePIIRecall(run)
+calculatePIIF1(run)
+calculateRedactionPrecision(run)
+calculateRedactionRecall(run)
+calculateRedactionF1(run)
+calculateIoU(run)
+calculateLatencyScore(run, thresholds)
+calculateCPUScore(run, thresholds)
+calculateRAMScore(run, thresholds)
+calculateResourceScore(run, thresholds)
+calculatePayloadReduction(run)
+calculatePIILeakageRate(run)
+calculatePIILeakageStatus(run)
+calculateOverallBenchmarkScore(run, thresholds)
+calculateAllScores(run, thresholds)
+aggregateScores(runs[], thresholds)
+getScoreStatus(score)
+```
+
+All functions handle edge cases: division by zero, missing data, null values.
+
+## Connecting to EdgeSight Backend
+
+The dashboard is designed for easy backend integration:
+
+### 1. Replace IndexedDB with API
+
+In `src/services/BenchmarkContext.tsx`, replace the `getDB()` IndexedDB calls with API calls:
+
+```typescript
+// Instead of IndexedDB
+const response = await fetch('/api/benchmarks')
+const benchmarks = await response.json()
+
+// Instead of db.put()
+await fetch('/api/benchmarks', {
+  method: 'POST',
+  body: JSON.stringify(benchmark)
+})
+```
+
+### 2. Repository Pattern
+
+The `BenchmarkContext` already abstracts storage behind:
+- `loadBenchmarks()`
+- `addBenchmark()`
+- `updateBenchmark()`
+- `deleteBenchmark()`
+- `importRuns()`
+- `exportBenchmarks()`
+
+Replace these implementations with API calls - UI components remain unchanged.
+
+### 3. Real-time Updates
+
+Add WebSocket/SSE for live benchmark updates:
+
+```typescript
+useEffect(() => {
+  const ws = new WebSocket('/api/ws')
+  ws.onmessage = (event) => {
+    const benchmark = JSON.parse(event.data)
+    dispatch({ type: 'ADD_BENCHMARK', payload: benchmark })
+  }
+  return () => ws.close()
+}, [])
+```
+
+## Privacy Compliance
+
+The dashboard follows EdgeSight's privacy philosophy:
+
+- **No raw PII stored**: Only category counts (tp/fp/fn), bounding boxes, redacted placeholders
+- **Local-first**: All data stays in browser IndexedDB
+- **No screenshots**: Only metrics and anonymous identifiers
+- **Export sanitization**: Exports contain only aggregated metrics
+
+## Tech Stack
+
+- **React 18** + TypeScript
+- **Vite** for fast development
+- **Tailwind CSS** for styling
+- **Recharts** for visualizations
+- **IndexedDB (idb)** for persistence
+- **React Router** for navigation
+- **Vitest** for unit testing
+
+## Project Structure
+
+```
+edgesight-analytics/
+├── public/
+├── src/
+│   ├── components/
+│   │   ├── ui/
+│   │   ├── charts/
+│   │   └── layout/
+│   ├── pages/
+│   ├── services/
+│   ├── scoring/
+│   ├── types/
+│   ├── utils/
+│   ├── data/
+│   └── styles/
+├── tests/
+├── index.html
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+├── tailwind.config.js
+└── README.md
+```
+
+## License
+
+Built for Smart India Hackathon 2026 - ISRO Problem Statement SIH26171.
