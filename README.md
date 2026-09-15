@@ -1,4 +1,4 @@
-# EdgeSight Analytics
+# EdgeSight Analytics Prototype
 
 **Privacy & Performance Benchmarking for Browser Agents**
 
