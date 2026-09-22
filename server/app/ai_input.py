@@ -11,11 +11,22 @@ MAX_INPUT_BYTES = 32_000
 class PreparedPlan:
     observation_id: str  # Local binding only; never part of content.
     visual_ids: tuple[str, ...]
-    actionable_ids: tuple[str, ...]  # Subset the planner may CLICK; others are STOP-only.
+    actionable_ids: tuple[str, ...]  # Locally grounded controls; others are context only.
+    clickable_ids: tuple[str, ...]  # Actionable and NOT editable: the only CLICK targets.
     content: str
     goal: str
     editable_ids: tuple[str, ...]
     focused_ids: tuple[str, ...]
+
+
+def allowed_actions(element, actionable: bool) -> list[str]:
+    # Derived from the existing role/editable metadata; no new wire field. An editable
+    # field's OCR text is its VALUE (e.g. a city name), never a thing to click.
+    if not actionable:
+        return []
+    if element.editable:
+        return ["TYPE", "PRESS_KEY"] if element.focused else ["TYPE"]
+    return ["CLICK"]
 
 
 def prepare_ai_input(candidate: dict) -> PreparedPlan:
@@ -42,6 +53,7 @@ def prepare_ai_input(candidate: dict) -> PreparedPlan:
             "source": "local-pixel-ocr",
             "elements": [{"id": v.id, "text": v.text, "confidence": v.confidence,
                           "actionable": v.id in set(context.actionCandidates),
+                          "allowedActions": allowed_actions(v, v.id in set(context.actionCandidates)),
                           **({"role": v.role, "editable": v.editable, "focused": v.focused} if v.role else {})}
                          for v in context.visualElements],
         },
@@ -53,6 +65,8 @@ def prepare_ai_input(candidate: dict) -> PreparedPlan:
     if len(content.encode("utf-8")) > MAX_INPUT_BYTES:
         raise ValueError("Planning context too large")
     return PreparedPlan(context.observation.id, tuple(v.id for v in context.visualElements),
-                        tuple(context.actionCandidates), content, context.goal,
+                        tuple(context.actionCandidates),
+                        tuple(v.id for v in context.visualElements if not v.editable and v.id in context.actionCandidates),
+                        content, context.goal,
                         tuple(v.id for v in context.visualElements if v.editable and v.id in context.actionCandidates),
                         tuple(v.id for v in context.visualElements if v.editable and v.focused and v.id in context.actionCandidates))

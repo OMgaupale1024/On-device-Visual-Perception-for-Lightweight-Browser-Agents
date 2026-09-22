@@ -117,7 +117,8 @@ Phase 11C is DONE (live smoke, travel regression, and controlled multi-action wo
 all user-verified; planner-latency fix confirmed at ~1s-class per call).
 
 **Phase 12 (unified voice + text goal) DONE:** a mic button (browser-native
-SpeechRecognition/webkitSpeechRecognition, popup-only, no cloud/key/audio storage)
+SpeechRecognition/webkitSpeechRecognition, popup-only, no EdgeSight key or audio storage;
+NOT on-device: Chrome sends the audio to Google's speech service to transcribe it)
 fills the SAME goal input; the user reviews the transcript, then the existing RUN TASK
 controller runs unchanged. Voice never triggers an action itself. Unsupported browsers
 disable the mic and show a fallback message; text mode is unaffected. No server change.
@@ -157,6 +158,21 @@ This is evidence the last action had a visible effect, NOT proof of goal semanti
 Codes (all non-success, fail-closed, in `outcome-contract.js`): VERIFICATION_FAILED,
 VERIFICATION_INCONCLUSIVE (success claimed before any action), VERIFIER_UNAVAILABLE.
 Manual Phase 8 verification is unchanged.
+
+**Phase 13D (action grounding + voice reliability) DONE (automated; live PENDING user):**
+Live bug: planner chose CLICK "Bengaluru" — the OCR'd VALUE of an editable text input,
+which grounds (correctly) as a TYPE-capable candidate; nothing forbade CLICK on it.
+Now editable => TYPE-only, enforced three ways from existing role/editable metadata (no
+wire-schema change): server projects per-element `allowedActions` to the model (CLICK
+for non-editable candidates, TYPE [+PRESS_KEY if focused] for editable, [] otherwise);
+server rejects CLICK outside `clickable_ids` (INVALID_TARGET); client `validateAction`
+rejects CLICK on an editable candidate. Prompt rules reference allowedActions and forbid
+clicking page text/field values. `ACTION_FUSION` log adds clickable=/typeable= counts.
+Voice: popups cannot show Chrome's mic prompt (getUserMedia is rejected unasked), so every
+voice outcome now shows a fixed code (MIC_PERMISSION_REQUIRED/DENIED, MIC_NOT_FOUND,
+MIC_UNAVAILABLE, SPEECH_UNSUPPORTED, SPEECH_NETWORK_ERROR, SPEECH_NO_RESULT, SPEECH_ERROR)
+and a one-time GRANT MICROPHONE ACCESS tab (`src/popup/mic-permission.html`) grants the
+extension origin. Voice still only fills the goal box; never auto-runs.
 
 Next phase (not started): final evaluation metrics + demo polish + submission cleanup.
 Do not start vault/TYPE_LOCAL_REF, TEE, Raspberry Pi, another browser, or a new

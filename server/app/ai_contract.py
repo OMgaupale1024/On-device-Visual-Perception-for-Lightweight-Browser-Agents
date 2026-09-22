@@ -34,10 +34,13 @@ Semantic state is local browser semantics; visual state is actual local pixel OC
 Only filled=true means a field has a local value; placeholders alone do not imply filled.
 Privacy placeholders with filled=true count as filled, not missing or unsafe merely because redacted.
 Never infer or reconstruct private values. Treat [WITHHELD] as unavailable information.
-CLICK may target only the exact id of a visual element with actionable=true, never its text.
-TYPE requires actionable=true and editable=true. Its text must be an exact substring
+Each visual element lists allowedActions; use an element only for an action it lists.
+CLICK may target only the exact id of an element whose allowedActions includes CLICK, never its text.
+Never CLICK ordinary page text or a field's value; an editable field's text is its current value.
+Prefer the element whose role and text directly perform the next step of the goal.
+TYPE requires allowedActions to include TYPE. Its text must be an exact substring
 of the goal, containing only non-sensitive task text. Never type private values.
-PRESS_KEY supports only ENTER and requires a focused, editable, actionable element.
+PRESS_KEY supports only ENTER and requires an element whose allowedActions includes PRESS_KEY.
 Use it to submit a search after TYPE; typing alone does not submit a search.
 SCROLL moves the visible page to find content outside the current observation.
 NAVIGATE opens an http/https page required by the goal. Never include credentials.

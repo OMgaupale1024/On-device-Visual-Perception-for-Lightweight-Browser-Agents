@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>EdgeSight — microphone access</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <main>
+    <h1>EdgeSight microphone access</h1>
+    <p>Chrome cannot show a microphone prompt inside the extension popup. Allow it here once.</p>
+    <p class="note">Voice only fills the goal box; it never starts a task. Chrome's speech service transcribes the audio.</p>
+    <button id="allow" class="btn" type="button">ALLOW MICROPHONE</button>
+    <p id="result" class="note" aria-live="polite"></p>
+  </main>
+  <script type="module" src="mic-permission.js"></script>
+</body>
+</html>

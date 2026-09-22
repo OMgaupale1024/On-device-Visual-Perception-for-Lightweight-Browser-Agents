@@ -25,6 +25,8 @@ export function validateAction(value, context) {
   const candidates = context?.visualElements?.filter(v => context.actionCandidates?.includes(v.id)) || [];
   const target = candidates.filter(v => v.id === value.target);
   if (['CLICK', 'TYPE'].includes(value.action) && (typeof value.target !== 'string' || !/^visual_[1-9]\d*$/.test(value.target) || target.length !== 1)) throw new Error('Plan rejected.');
+  // An editable field's OCR text is its VALUE, not a control: editable => TYPE-only.
+  if (value.action === 'CLICK' && target[0].editable === true) throw new Error('Plan rejected.');
   if (value.action === 'TYPE' && (target[0].editable !== true || !['input', 'searchbox', 'textarea'].includes(target[0].role) ||
       typeof value.text !== 'string' || !value.text.trim() || value.text.length > 500 || /[\x00-\x1f\x7f]/.test(value.text) || !safeTaskText(value.text) || !context.goal.includes(value.text))) throw new Error('Plan rejected.');
   if (value.action === 'PRESS_KEY' && (value.key !== 'ENTER' || !candidates.some(v => v.editable === true && v.focused === true))) throw new Error('Plan rejected.');

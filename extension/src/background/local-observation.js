@@ -142,7 +142,10 @@ export async function observeLocal(tab, goal, { signal } = {}) {
     // control detected / in the captured viewport" (controls=0) from "control detected
     // but no OCR element grounded on it" (controls>0, candidates=0) on a live run.
     logStage('service-worker', 'ACTION_FUSION',
-      `buttons=${obs.buttonRects?.length ?? 0} controls=${obs.controls ? safeControls.length : controlRegions.length} items=${perception.value?.items?.length ?? 0} candidates=${actionCandidates.length}`);
+      `buttons=${obs.buttonRects?.length ?? 0} controls=${obs.controls ? safeControls.length : controlRegions.length} items=${perception.value?.items?.length ?? 0} candidates=${actionCandidates.length}` +
+      // Candidate capability counts only: CLICK-capable (non-editable) vs TYPE-only (editable).
+      ` clickable=${actionCandidates.filter((id) => candidateMetadata[id]?.editable !== true).length}` +
+      ` typeable=${actionCandidates.filter((id) => candidateMetadata[id]?.editable === true).length}`);
     let agent = { status: 'REVOKED' };
     if (perception.status !== 'UNSAFE') {
       try {

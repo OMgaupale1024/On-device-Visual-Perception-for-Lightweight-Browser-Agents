@@ -7,7 +7,8 @@ import { MSG } from '../src/shared/messages.js';
 // Runs the real popup.js against DOM/chrome doubles, optionally injecting a fake
 // SpeechRecognition and a fake navigator.mediaDevices.getUserMedia so the voice path is
 // exercised without a browser.  media: 'grant' | 'deny' | 'nodevice' | 'nomediadevices'.
-async function popup({ speech = true, media = 'grant' } = {}) {
+// permission: navigator.permissions state for the microphone ('prompt' | 'denied' | 'granted').
+async function popup({ speech = true, media = 'grant', permission = 'denied' } = {}) {
   const html = await readFile(new URL('../src/popup/popup.html', import.meta.url), 'utf8');
   const elements = new Map([...html.matchAll(/id="([^"]+)"/g)].map((m) => [m[1], {
     textContent: '', value: '', disabled: false, width: 0, height: 0, complete: false, naturalWidth: 0, listeners: {},
@@ -18,7 +19,9 @@ async function popup({ speech = true, media = 'grant' } = {}) {
   }]));
   let listener;
   const calls = [];
-  const chrome = { runtime: { id: 'extension-test', onMessage: { addListener(fn) { listener = fn; } },
+  const tabs = [];
+  const chrome = { tabs: { create(opts) { tabs.push(opts); } }, runtime: { id: 'extension-test',
+    getURL: (p) => 'chrome-extension://extension-test/' + p, onMessage: { addListener(fn) { listener = fn; } },
     sendMessage(message) { calls.push(message); return message.type === MSG.GET_VERIFICATION
       ? Promise.resolve({ status: 'WAITING' }) : Promise.resolve({ ok: true, summary: { state: 'COMPLETED', reason: 'PLANNER_STOP' } }); } } };
 
@@ -32,7 +35,7 @@ async function popup({ speech = true, media = 'grant' } = {}) {
   const gum = { calls: 0, stopped: 0 };
   const window = { addEventListener() {} };
   if (speech) window.webkitSpeechRecognition = FakeRecognition;
-  const navigator = {};
+  const navigator = { permissions: { query: async ({ name }) => { assert.equal(name, 'microphone'); return { state: permission }; } } };
   if (media !== 'nomediadevices') {
     navigator.mediaDevices = { getUserMedia: async () => {
       gum.calls++;
@@ -49,10 +52,12 @@ async function popup({ speech = true, media = 'grant' } = {}) {
   } }, setTimeout, clearTimeout, performance: { now: () => 0 } });
   await Promise.resolve();
   const el = (id) => elements.get(id);
-  return { el, calls, instances, gum,
+  return { el, calls, instances, gum, tabs,
     clickMic: () => el('mic').listeners.click?.(),
     clickRun: () => el('run-task').listeners.click?.() };
 }
+
+const tick = () => new Promise((r) => setImmediate(r));
 
 test('goal input is editable by default (never disabled by voice setup)', async () => {
   const p = await popup();
@@ -76,7 +81,7 @@ test('mic click requests media permission before recognition and stops the tempo
   assert.equal(p.gum.stopped, 1, 'temporary track stopped, no ongoing capture');
   assert.equal(p.instances.length, 1, 'recognition started after permission');
   assert.equal(p.instances[0].started, true);
-  assert.equal(p.el('voice-status').textContent, 'Listening…');
+  assert.match(p.el('voice-status').textContent, /^Listening… \(Chrome's speech service transcribes the audio\)$/);
 });
 
 test('voice transcript populates the SAME goal input and does not auto-run', async () => {
@@ -137,7 +142,8 @@ test('recognition error resets mic state and starts no run', async () => {
   const p = await popup();
   await p.clickMic();
   p.instances[0].error('network');
-  assert.match(p.el('voice-status').textContent, /error/i);
+  await tick();
+  assert.match(p.el('voice-status').textContent, /network error.*\(SPEECH_NETWORK_ERROR\)$/);
   assert.equal(p.el('mic').disabled, false);
   assert.equal(p.el('mic').classList.contains('listening'), false);
   assert.equal(p.el('goal').disabled, false);
@@ -148,7 +154,8 @@ test('recognition not-allowed error maps to the permission-denied message', asyn
   const p = await popup();
   await p.clickMic();
   p.instances[0].error('not-allowed');
-  assert.match(p.el('voice-status').textContent, /permission denied/i);
+  await tick();
+  assert.match(p.el('voice-status').textContent, /permission denied.*\(MIC_PERMISSION_DENIED\)$/i);
   assert.equal(p.el('goal').disabled, false);
 });
 
@@ -161,4 +168,54 @@ test('unsupported SpeechRecognition disables mic but leaves text mode working', 
   await p.clickRun();
   await Promise.resolve();
   assert.equal(p.calls.find((c) => c.type === MSG.RUN_TASK).goal, 'typed goal still works');
+});
+
+// --- Phase 13D: visible failure codes + one-time grant for the popup prompt limitation ---
+
+test('popup cannot prompt (permission state "prompt"): MIC_PERMISSION_REQUIRED + one-time grant tab', async () => {
+  const p = await popup({ media: 'deny', permission: 'prompt' });
+  await p.clickMic();
+  assert.equal(p.instances.length, 0);
+  assert.match(p.el('voice-status').textContent, /cannot ask for the microphone inside this popup.*\(MIC_PERMISSION_REQUIRED\)$/);
+  assert.ok(!p.el('mic-grant').classList.contains('hidden'));
+  p.el('mic-grant').listeners.click();
+  assert.deepEqual(p.tabs.map((t) => t.url), ['chrome-extension://extension-test/src/popup/mic-permission.html']);
+  assert.equal(p.calls.filter((c) => c.type === MSG.RUN_TASK).length, 0);
+});
+
+test('each recognition failure shows its own code; the grant button shows only for permission codes', async () => {
+  for (const [error, code] of [['no-speech', 'SPEECH_NO_RESULT'], ['audio-capture', 'MIC_NOT_FOUND'], ['aborted', 'SPEECH_ERROR']]) {
+    const p = await popup();
+    await p.clickMic();
+    p.instances[0].error(error);
+    await tick();
+    assert.ok(p.el('voice-status').textContent.endsWith(`(${code})`), code);
+    assert.ok(p.el('mic-grant').classList.contains('hidden'), code);
+  }
+  const p = await popup({ media: 'deny' });
+  await p.clickMic();
+  assert.ok(!p.el('mic-grant').classList.contains('hidden'));
+});
+
+test('recognition that ends with no result and no error reports SPEECH_NO_RESULT, not Listening forever', async () => {
+  const p = await popup();
+  await p.clickMic();
+  p.instances[0].onend();
+  assert.match(p.el('voice-status').textContent, /\(SPEECH_NO_RESULT\)$/);
+  assert.equal(p.el('mic').disabled, false);
+});
+
+test('unsupported speech shows SPEECH_UNSUPPORTED; missing mic API shows MIC_UNAVAILABLE', async () => {
+  assert.match((await popup({ speech: false })).el('voice-status').textContent, /\(SPEECH_UNSUPPORTED\)$/);
+  const p = await popup({ media: 'nomediadevices' });
+  await p.clickMic();
+  assert.match(p.el('voice-status').textContent, /\(MIC_UNAVAILABLE\)$/);
+});
+
+test('status never echoes the transcript except into the goal box', async () => {
+  const p = await popup();
+  await p.clickMic();
+  p.instances[0].result('check whether this travel request is complete and submit it.');
+  assert.equal(p.el('goal').value, 'check whether this travel request is complete and submit it.');
+  assert.doesNotMatch(p.el('voice-status').textContent, /travel/);
 });

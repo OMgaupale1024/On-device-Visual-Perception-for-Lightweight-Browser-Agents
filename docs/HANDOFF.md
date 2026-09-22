@@ -1,5 +1,58 @@
 # Session Handoff
 
+## Phase 13D — action grounding + voice reliability (2026-09-23)
+
+### A. Target accuracy — root cause (inspected, not guessed)
+Live run: step 1 `CLICK Bengaluru`, then a planner STOP that was NOT VERIFIED (13C correctly
+withheld TASK COMPLETE). On `demo-page/index.html` the destination is
+`<input type="text" value="Bengaluru">`. `observe.js` marks it editable (role `input`); OCR
+reads the VALUE inside that input's box, so the value grounds as a candidate with
+`role=input, editable=true` — correct as a TYPE target. But nothing stopped CLICK on it:
+- server `ai_planner.py` accepted CLICK on any `actionable_ids` member;
+- client `validateAction` accepted CLICK on any candidate;
+- the model saw only `actionable=true` for both the value and Continue.
+So it was contract/metadata (B), not over-permissive candidate generation (A): checkbox,
+radio, select, email/tel/password inputs and plain text are already NOT candidates.
+
+**Fix (general; no text, id or demo-specific rule):** editable => TYPE-only.
+- `server/app/ai_input.py`: model input gains per-element `allowedActions`, derived from the
+  existing role/editable/focused metadata (wire schema unchanged); `PreparedPlan.clickable_ids`
+  = actionable AND not editable.
+- `server/app/ai_planner.py`: CLICK outside `clickable_ids` => 502 `INVALID_TARGET`.
+- `server/app/ai_contract.py`: prompt uses allowedActions; never CLICK page text or a
+  field's value; prefer the element whose role/text directly performs the next step.
+- `extension/src/shared/action-contract.js`: CLICK on an editable candidate rejected.
+- `extension/src/background/local-observation.js`: `ACTION_FUSION` adds `clickable=`/`typeable=`
+  counts (numbers only).
+Not done (not needed for this bug): exposing DOM labels (e.g. "Destination") to the planner
+would send page text off-device, a privacy change; checkbox/radio/select are still not
+candidates. If the model still picks the value, the run now fails as PLANNER_UNAVAILABLE
+(invalid target) instead of clicking it — no retry, by design.
+
+### B. Voice — failure category
+Phase 12 assumed getUserMedia prompts from the popup. Chrome cannot show permission prompts
+in an extension popup: the call is rejected unasked (NotAllowedError), which the popup showed
+as "permission denied" — indistinguishable from a real block or a speech `network` error.
+Now: `navigator.permissions` state `prompt` => MIC_PERMISSION_REQUIRED (+ GRANT MICROPHONE
+ACCESS button opening `src/popup/mic-permission.html`, an extension-owned tab that can prompt;
+the grant covers the popup); `denied` => MIC_PERMISSION_DENIED; recognition errors map to
+SPEECH_NETWORK_ERROR / SPEECH_NO_RESULT / MIC_NOT_FOUND / SPEECH_ERROR; a recognition that ends
+silently now reports SPEECH_NO_RESULT instead of "Listening…" forever. Status never contains the
+transcript; nothing is logged. **Privacy wording corrected:** webkitSpeechRecognition sends
+audio to Google's speech service; voice is not on-device (popup comment, AI_CONTEXT, the
+Listening status and the grant page all say so). No cloud API or key added.
+
+Tests: extension **379/379** (+10: `action-grounding.test.mjs` 5, voice 5; voice pins updated
+for codes; ACTION_FUSION format pin extended). Server **79/79** (+1 editable-target test; two
+projection pins now include allowedActions) — run locally with the untracked
+`server/.venv-mac` (Python 3.12, fastapi 0.141.1), which was not modified. Mutations: removing
+the client guard fails 3; server guard fails 1; projecting editable as CLICK fails 4.
+npm run check, git diff --check, scan:secrets (197 files, venv excluded for the run) PASS.
+Phases 13A/13B/13C code untouched.
+
+**Live acceptance: PENDING (user)** — no NVIDIA key on this machine. See docs/TESTING.md
+"Phase 13D".
+
 ## Phase 13C — autonomous result verification (2026-09-23)
 
 **Gap closed:** TASK COMPLETE meant only "the planner says the goal is achieved".

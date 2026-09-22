@@ -1326,3 +1326,67 @@ mode never claims GOAL_ACHIEVED, so it can only end TASK STOPPED.
    "result verification NOT VERIFIED" -> **TASK STOPPED** ("before any action was taken").
    If it instead chooses a non-success STOP, that is also correct (never TASK COMPLETE).
 4. Manual path: ANALYZE / PLAN -> EXECUTE still reaches VISUALLY VERIFIED as before.
+
+---
+
+## Phase 13D — action grounding + voice reliability (2026-09-23)
+
+### Target accuracy
+
+Root cause: an editable input's OCR'd value ("Bengaluru") is a valid TYPE candidate, but
+server and client both allowed CLICK on any candidate. Fix: editable => TYPE-only, via a
+derived `allowedActions` projection plus server and client CLICK guards.
+
+| # | Requirement | Test | Result |
+|---|-------------|------|--------|
+| 1 | plain value "Bengaluru" not CLICK-capable | `action-grounding.test.mjs` 1/3; server `test_editable_field_value_is_type_only_never_click` | PASS |
+| 2 | real button CLICK-capable | `action-grounding` 2; server test (`allowedActions == ["CLICK"]`, CLICK accepted) | PASS |
+| 3 | textbox TYPE-capable, not CLICK | `action-grounding` 3; server (`["TYPE"]`, `["TYPE","PRESS_KEY"]` when focused) | PASS |
+| 4 | CLICK target must be CLICK-compatible | server 502 INVALID_TARGET; client validateAction; worker test: planner CLICK on the value => not READY, nothing executable | PASS |
+| 5 | non-interactive OCR text = context only | `action-grounding` 5; server (`allowedActions == []`) | PASS |
+| 6 | live-shaped form resolves generically | `action-grounding` 4/6 (real pipeline: value => input/editable, button => CLICK-capable, heading => context; safe `clickable=1 typeable=1` log with no text) | PASS |
+| 7 | TYPE/SCROLL/NAVIGATE green | `browser-actions*.test.mjs`, `action.test.mjs` unchanged | PASS |
+| 8 | privacy unchanged | privacy/redaction suites unchanged; no new wire field; log counts only | PASS |
+| 9 | 13C verifier unchanged | `agent-verification.test.mjs` unchanged, green | PASS |
+
+Mutations: remove client guard => 3 fail; remove server guard => 1 fails; project editable as
+CLICK => 4 fail. All reverted.
+
+### Voice
+
+Failure category found in code: an extension popup cannot show Chrome's mic prompt, so
+getUserMedia is rejected unasked and the popup reported "permission denied" — the same text
+as a real block; a `network` error showed a generic error. Now each outcome carries a code,
+and a one-time grant tab fixes the prompt limitation.
+
+| Case | Code / behaviour | Test | Result |
+|---|---|---|---|
+| never granted (state `prompt`) | MIC_PERMISSION_REQUIRED + grant button opens `src/popup/mic-permission.html` | voice-popup | PASS |
+| blocked (state `denied`) / recognition `not-allowed` | MIC_PERMISSION_DENIED | voice-popup | PASS |
+| no device / `audio-capture` | MIC_NOT_FOUND | voice-popup | PASS |
+| no mediaDevices | MIC_UNAVAILABLE | voice-popup | PASS |
+| no SpeechRecognition | SPEECH_UNSUPPORTED, mic disabled | voice-popup | PASS |
+| `network` | SPEECH_NETWORK_ERROR | voice-popup | PASS |
+| `no-speech`, empty transcript, silent end | SPEECH_NO_RESULT | voice-popup | PASS |
+| transcript | fills the same goal box, no RUN_TASK, not echoed in status | voice-popup | PASS |
+
+`npm test` **379/379** (was 369). Server **79/79** (was 78) via untracked `server/.venv-mac`
+(Python 3.12), unmodified. `npm run check`, `git diff --check`, `scan:secrets` (197 files,
+venv excluded for the run) PASS.
+
+### Live Phase 13D acceptance: PENDING (user)
+
+Needs Chrome + AI mode (`PLANNER_MODE=ai`, `NVIDIA_API_KEY`); restart the server (server code
+changed) and reload the unpacked extension.
+
+A. Travel demo, goal "Check whether this travel request is complete and submit it.":
+   expect `Step 1: plan → CLICK Continue` (never `CLICK Bengaluru`) → CLICK dispatched →
+   fresh observation → planner success → `result verification VERIFIED` → TASK COMPLETE.
+   The service-worker console shows `ACTION_FUSION ... clickable=N typeable=M` (counts only).
+   If the model still picks the field value, expect TASK FAILED / planner unavailable (the
+   invalid target is rejected), never a click on it — report that result.
+B. Voice: press 🎤. If the status ends `(MIC_PERMISSION_REQUIRED)`, press GRANT MICROPHONE
+   ACCESS, allow in the tab, reopen EdgeSight. Press 🎤, say the goal: the transcript appears
+   in the goal box, nothing runs until RUN TASK. Any failure shows a code in parentheses —
+   report it (e.g. SPEECH_NETWORK_ERROR means Chrome's speech service was unreachable; text
+   input remains the primary path).

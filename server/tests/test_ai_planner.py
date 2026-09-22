@@ -78,7 +78,7 @@ class AIPlannerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(set(data), {"goal", "privacy", "semanticState", "visualState", "redactionScheme"})
         self.assertEqual(data["semanticState"]["source"], "local-browser-semantics")
         self.assertEqual(data["visualState"]["source"], "local-pixel-ocr")
-        self.assertEqual(data["visualState"]["elements"], [{"id": "visual_12", "text": "Continue", "confidence": 0.95, "actionable": True}])
+        self.assertEqual(data["visualState"]["elements"], [{"id": "visual_12", "text": "Continue", "confidence": 0.95, "actionable": True, "allowedActions": ["CLICK"]}])
         for role in ["NAME", "EMAIL", "PHONE", "EMPLOYEE_ID", "PASSWORD"]:
             self.assertIn(f"[{role}]", content)
         for value in SECRETS + ["obs_demo-abc", "capturedAt", "bbox", "viewport", "redactedRegions", "field_1"]:
@@ -199,6 +199,38 @@ class AIPlannerTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(PlannerFailure):
             await plan_ai(none_actionable, FakeProvider(decision(target="visual_12")))
 
+    async def test_editable_field_value_is_type_only_never_click(self):
+        # Live regression: the planner chose CLICK "Bengaluru", the OCR'd VALUE inside an
+        # editable text input grounded as a candidate. Editable => TYPE-only; only a
+        # non-editable control may be clicked. Nothing here keys off specific text.
+        def live_shape():
+            data = fixture()
+            data["visualElements"][0].update({"role": "button", "editable": False, "focused": False})
+            data["visualElements"].append({"id": "visual_9", "text": "Bengaluru",
+                "bbox": {"x": 10, "y": 120, "width": 100, "height": 20}, "confidence": 0.9, "source": "visual",
+                "role": "input", "editable": True, "focused": False})
+            data["actionCandidates"] = ["visual_12", "visual_9"]
+            return data
+        prepared = prepare_ai_input(live_shape())
+        elements = {e["id"]: e for e in json.loads(prepared.content)["visualState"]["elements"]}
+        self.assertEqual(elements["visual_12"]["allowedActions"], ["CLICK"])
+        self.assertEqual(elements["visual_9"]["allowedActions"], ["TYPE"])
+        self.assertEqual(prepared.clickable_ids, ("visual_12",))
+        self.assertIn("allowedActions", SYSTEM_PROMPT)
+        self.assertIn("Never CLICK ordinary page text or a field's value", SYSTEM_PROMPT)
+        with self.assertRaises(PlannerFailure) as error:
+            await plan_ai(live_shape(), FakeProvider(decision(target="visual_9")))
+        self.assertEqual((error.exception.status_code, error.exception.failure_code), (502, "INVALID_TARGET"))
+        plan = await plan_ai(live_shape(), FakeProvider(decision(target="visual_12")))
+        self.assertEqual((plan.action, plan.target), ("CLICK", "visual_12"))
+        # A focused editable field also allows ENTER; a non-candidate allows nothing.
+        focused = live_shape(); focused["visualElements"][1]["focused"] = True
+        focused["visualElements"].append({"id": "visual_30", "text": "Travel",
+            "bbox": {"x": 10, "y": 160, "width": 100, "height": 20}, "confidence": 0.9, "source": "visual"})
+        elements = {e["id"]: e for e in json.loads(prepare_ai_input(focused).content)["visualState"]["elements"]}
+        self.assertEqual(elements["visual_9"]["allowedActions"], ["TYPE", "PRESS_KEY"])
+        self.assertEqual(elements["visual_30"]["allowedActions"], [])
+
     async def test_provider_timeout_is_bounded(self):
         class HangingProvider:
             async def complete(self, content): await asyncio.sleep(60)
@@ -278,7 +310,8 @@ class ProviderHTTPTests(unittest.IsolatedAsyncioTestCase):
                     "privacy": {"status": "safe", "rawPiiIncluded": False},
                     "semanticState": {"source": "local-browser-semantics", "fields": expected_fields},
                     "visualState": {"source": "local-pixel-ocr", "elements": [] if visual_id is None else [
-                        {"id": visual_id, "text": "Continue", "confidence": 0.95, "actionable": True}]},
+                        {"id": visual_id, "text": "Continue", "confidence": 0.95, "actionable": True,
+                         "allowedActions": ["CLICK"]}]},
                     "redactionScheme": data["redactionScheme"],
                 })
 

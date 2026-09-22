@@ -34,6 +34,9 @@ async def plan_ai(candidate: dict, provider: PlanningProvider) -> PlanResponse:
             # visible label (e.g. "Password"). Non-actionable CLICK is rejected safely.
             if decision.target not in prepared.actionable_ids:
                 raise PlannerFailure(502, failure_code="INVALID_TARGET")
+        # An editable field is TYPE-only: its OCR text is the field's value, not a control.
+        if decision.action == "CLICK" and decision.target not in prepared.clickable_ids:
+            raise PlannerFailure(502, failure_code="INVALID_TARGET")
         if decision.action == "TYPE" and (decision.target not in prepared.editable_ids or decision.text not in prepared.goal):
             raise PlannerFailure(502, failure_code="INVALID_TASK_TEXT")
         if decision.action == "PRESS_KEY" and not prepared.focused_ids:

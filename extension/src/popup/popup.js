@@ -16,65 +16,99 @@ byId('enable-browsing').addEventListener('click', async () => {
 });
 
 // Phase 12: voice is speech-to-text ONLY. It fills the existing goal input and never
-// triggers an action. No audio is recorded, stored, or sent anywhere; only the final
-// transcript becomes ordinary goal text the user reviews before pressing RUN TASK.
+// triggers an action. EdgeSight records, stores and sends no audio itself, but Chrome's
+// Web Speech implementation (webkitSpeechRecognition) sends the audio to Google's speech
+// service to transcribe it, so voice is NOT on-device. Only the final transcript becomes
+// ordinary goal text the user reviews before pressing RUN TASK.
 // The goal input is plain text and is NEVER disabled by voice state — text input must
 // always work regardless of microphone support, permission, or errors. The whole block
 // is guarded so a voice-setup failure can never break the rest of the popup.
+//
+// Every outcome shows a fixed code so a live failure is diagnosable, never a transcript.
+// Chrome cannot show a permission prompt inside an extension popup: getUserMedia is
+// rejected without asking. MIC_PERMISSION_REQUIRED therefore offers a one-time grant in
+// an extension-owned tab (same origin), after which the popup's mic works.
+const VOICE_STATUS = {
+  LISTENING: 'Listening… (Chrome\'s speech service transcribes the audio)',
+  READY: 'Voice ready — review the goal, then press RUN TASK.',
+  MIC_PERMISSION_REQUIRED: 'Chrome cannot ask for the microphone inside this popup. Grant access once, then press 🎤 again.',
+  MIC_PERMISSION_DENIED: 'Microphone permission denied. Type your goal instead, or allow the microphone for EdgeSight.',
+  MIC_NOT_FOUND: 'No microphone found. Type your goal instead.',
+  MIC_UNAVAILABLE: 'Microphone unavailable. Type your goal instead.',
+  SPEECH_UNSUPPORTED: 'Voice input is unavailable in this browser. Type your goal instead.',
+  SPEECH_NETWORK_ERROR: 'Speech service network error: Chrome could not reach its speech service. Type your goal instead.',
+  SPEECH_NO_RESULT: 'No speech detected. Try again or type your goal.',
+  SPEECH_ERROR: 'Voice input error. Type your goal instead.',
+};
 try {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   const micBtn = byId('mic');
+  const grantBtn = byId('mic-grant');
   const voiceStatusEl = byId('voice-status');
-  let recognition = null, listening = false;
-  const setVoiceStatus = (text) => { voiceStatusEl.textContent = text; };
+  let listening = false;
+  const setVoice = (code) => {
+    voiceStatusEl.textContent = ['LISTENING', 'READY'].includes(code) ? VOICE_STATUS[code] : `${VOICE_STATUS[code]} (${code})`;
+    grantBtn.classList[code === 'MIC_PERMISSION_REQUIRED' || code === 'MIC_PERMISSION_DENIED' ? 'remove' : 'add']('hidden');
+  };
   const resetMic = () => { listening = false; micBtn.disabled = false; micBtn.classList.remove('listening'); };
+  // 'prompt' means never decided: the popup simply cannot ask. Anything else is a real block.
+  const permissionCode = async () => {
+    try { return (await navigator.permissions.query({ name: 'microphone' })).state === 'prompt'
+      ? 'MIC_PERMISSION_REQUIRED' : 'MIC_PERMISSION_DENIED'; }
+    catch { return 'MIC_PERMISSION_REQUIRED'; }
+  };
+  grantBtn.addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('src/popup/mic-permission.html') });
+  });
   if (!SpeechRecognition) {
     micBtn.disabled = true;
-    setVoiceStatus('Voice input is unavailable in this browser. Type your goal instead.');
+    setVoice('SPEECH_UNSUPPORTED');
   } else {
     const startRecognition = () => {
-      recognition = new SpeechRecognition();
+      const recognition = new SpeechRecognition();
+      let settled = false;
       recognition.lang = 'en-US';
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
       recognition.onresult = (event) => {
+        settled = true;
         const transcript = (event?.results?.[0]?.[0]?.transcript || '').trim();
-        if (!transcript) { setVoiceStatus('No speech detected. Try again or type your goal.'); return; }
+        if (!transcript) { setVoice('SPEECH_NO_RESULT'); return; }
         byId('goal').value = transcript; // fills the SAME goal path; does not auto-run
-        setVoiceStatus('Voice ready — review the goal, then press RUN TASK.');
+        setVoice('READY');
       };
-      recognition.onerror = (event) => {
+      recognition.onerror = async (event) => {
+        settled = true;
         resetMic();
-        setVoiceStatus(event?.error === 'not-allowed' || event?.error === 'service-not-allowed'
-          ? 'Microphone permission denied. Type your goal instead.'
-          : 'Voice input error. Type your goal instead.');
+        const code = event?.error;
+        setVoice(code === 'not-allowed' || code === 'service-not-allowed' ? await permissionCode()
+          : code === 'network' ? 'SPEECH_NETWORK_ERROR'
+          : code === 'no-speech' ? 'SPEECH_NO_RESULT'
+          : code === 'audio-capture' ? 'MIC_NOT_FOUND' : 'SPEECH_ERROR');
       };
-      recognition.onend = () => resetMic();
+      // Ended with neither a result nor an error: report it instead of "Listening…" forever.
+      recognition.onend = () => { resetMic(); if (!settled) setVoice('SPEECH_NO_RESULT'); };
       recognition.start(); // may throw synchronously; caller handles it
-      setVoiceStatus('Listening…');
+      setVoice('LISTENING');
     };
     micBtn.addEventListener('click', async () => {
       if (listening) return;
       listening = true; micBtn.disabled = true; micBtn.classList.add('listening');
-      // Explicitly acquire mic permission first: SpeechRecognition alone often fails in an
-      // extension popup without ever prompting. We immediately stop the tracks — we don't
-      // capture audio ourselves; SpeechRecognition opens its own stream for transcription.
+      // Acquire mic permission first; we immediately stop the tracks — we don't capture
+      // audio ourselves; SpeechRecognition opens its own stream for transcription.
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('nomd'), { name: 'NotSupportedError' });
-        setVoiceStatus('Requesting microphone…');
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach((track) => track.stop());
       } catch (err) {
         resetMic();
         const name = err?.name;
-        setVoiceStatus(
-          name === 'NotAllowedError' || name === 'SecurityError' ? 'Microphone permission denied. Type your goal instead.' :
-          name === 'NotFoundError' || name === 'DevicesNotFoundError' ? 'No microphone found. Type your goal instead.' :
-          'Microphone unavailable. Type your goal instead.');
+        setVoice(name === 'NotAllowedError' || name === 'SecurityError' ? await permissionCode()
+          : name === 'NotFoundError' || name === 'DevicesNotFoundError' ? 'MIC_NOT_FOUND' : 'MIC_UNAVAILABLE');
         return;
       }
       try { startRecognition(); }
-      catch { resetMic(); setVoiceStatus('Voice input error. Type your goal instead.'); }
+      catch { resetMic(); setVoice('SPEECH_ERROR'); }
     });
   }
 } catch { /* Voice is optional; never let its setup break text input or the rest of the popup. */ }
