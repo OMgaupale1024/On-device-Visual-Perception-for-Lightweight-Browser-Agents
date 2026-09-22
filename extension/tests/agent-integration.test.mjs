@@ -22,7 +22,8 @@ test('RUN_TASK: autonomous CLICK then re-observe STOP completes without manual s
     return { ok: true, headers: { get: () => 'ai' }, json: async () => ({
       schemaVersion: 1, observationId: context.observation.id,
       action: click ? 'CLICK' : 'STOP', target: click ? context.actionCandidates[0] : null,
-      reason: 'Test.' }) };
+      // The re-observed page reports the goal achieved: the only reason that completes.
+      reason: click ? 'A suitable visual target is visible.' : 'The goal is already achieved.' }) };
   };
   globalThis.chrome = {
     runtime: {
@@ -72,7 +73,7 @@ test('RUN_TASK: autonomous CLICK then re-observe STOP completes without manual s
 
   assert.equal(summary.ok, true);
   assert.equal(summary.summary.state, 'COMPLETED');
-  assert.equal(summary.summary.reason, 'PLANNER_STOP');
+  assert.equal(summary.summary.reason, 'GOAL_ACHIEVED');
   assert.equal(summary.summary.step, 2);      // step 1 clicked, step 2 re-observed and STOPped
   assert.equal(plannerCalls, 2);              // planner consulted on each fresh observation
   assert.equal(clicks, 1);                    // exactly one guarded click dispatched

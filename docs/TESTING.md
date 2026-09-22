@@ -1113,3 +1113,78 @@ file dialog; browser automation init has failed here previously).
 5. Known Chrome limitation: even with the mic granted, Web-Speech in an MV3 popup can still
    return a `network` error on some Chrome builds. The fallback messaging handles this and
    text mode always works; if it recurs, report the exact recognition `error` code.
+
+---
+
+## Phase 13A — autonomous STOP / completion semantics (2026-09-23)
+
+Regression target: the controller returned `COMPLETED` for **every** planner STOP, so a
+run that performed no action (no usable target, or unsafe to continue) was displayed as
+**TASK COMPLETE**. Only `The goal is already achieved.` may complete a run.
+
+| # | Test | Purpose | Input | Expected | Actual | Result |
+|---|------|---------|-------|----------|--------|--------|
+| 1 | `13A-1` achieved-goal STOP | Success is reachable | STOP + `The goal is already achieved.` | COMPLETED / `GOAL_ACHIEVED` | as expected | PASS |
+| 2 | `13A-2` x7 non-success reasons | No false success | Each real AI + deterministic STOP reason | STOPPED, never COMPLETED | as expected | PASS |
+| 3 | `13A-3` x6 fail-closed | Unknown reason cannot succeed | `undefined`, `null`, `''`, unknown string, `constructor`, `42` | STOPPED / `STOP_UNCLASSIFIED` | as expected | PASS |
+| 4 | `13A-4` live success shape | CLICK -> re-observe -> STOP | achieved-goal STOP on step 2 | COMPLETED, timings `[CLICK, STOP]` | as expected | PASS |
+| 5 | `13A-5` live non-success shape | Click happened, success withheld | no-target STOP on step 2 | STOPPED, timings `[CLICK, STOP]` | as expected | PASS |
+| 6 | popup: success label | UI says complete only on success | COMPLETED / `GOAL_ACHIEVED` | `TASK COMPLETE` | as expected | PASS |
+| 7 | popup: 15 non-success states | UI never implies success | every STOPPED/FAILED/CANCELLED code | `TASK STOPPED` / `TASK FAILED` / `TASK CANCELLED` | as expected | PASS |
+| 8 | popup: unmapped code | Unknown code is not success | `SOME_FUTURE_CODE` | `TASK STOPPED`, note without "complete" | as expected | PASS |
+| 9 | planner unavailable (existing `5`) | Fail closed, no fallback | planner `UNAVAILABLE` | FAILED / `PLANNER_UNAVAILABLE` | unchanged | PASS |
+| 10 | privacy failure (existing `6`) | Fail closed before planning | `observeReason: PRIVACY_FAILED` | FAILED, no PLAN_READY, no execute | unchanged | PASS |
+| 11 | MAX_STEPS (existing `8`) | Not a completion | 8 non-STOP steps | STOPPED / `MAX_STEPS` | unchanged | PASS |
+| 12 | cancellation (existing) | Cancel is its own state | `cancelled() === true` | CANCELLED | unchanged | PASS |
+| 13 | drift guard: constant parity | JS mirrors server | read `ai_contract.py` | JS constant == `GOAL_ACHIEVED_REASON` | as expected | PASS |
+| 14 | drift guard: enum coverage | No unclassified server reason | read `SafeReason` literal | all 5 classified, exactly 1 success | as expected | PASS |
+| 15 | drift guard: deterministic reasons | None may succeed | read `planner.py` `stop("...")` | all classified, all non-success | as expected | PASS |
+| 16 | manual path untouched | No regression | existing verification popup + integration suites | unchanged behaviour | unchanged | PASS |
+
+`npm test`: **343/343 PASS** (was 303; +40). `npm run check` PASS. `git diff --check` PASS.
+`npm run scan:secrets` PASS (191 text files, 0 credential patterns).
+
+### Mutation verification
+
+Each mutation was applied, observed to fail, and reverted — so these tests are known to
+detect the defect rather than merely pass alongside it.
+
+| Mutation | Result |
+|---|---|
+| Controller restored to `return done(COMPLETED, ...)` for every STOP | **14 tests fail** |
+| Popup renders non-success state as `TASK COMPLETE` | **9 tests fail** |
+| Server gains a `SafeReason` value with no classification | drift guard fails |
+| Extension `GOAL_ACHIEVED_REASON` drifts from the server constant | 2 drift guards fail |
+
+### Server tests: NOT RUN — environment blocker
+
+Python 3.9.6 only on this machine; `fastapi==0.141.1` requires >= 3.10, and `server/.venv`
+is a Windows virtualenv. Python changes were verified by `py_compile` and by AST-extracting
+`SafeReason` (5 values, success value present) and comparing `GOAL_ACHIEVED_REASON` against
+the JS constant (exact match). **User action:** run
+`.venv/Scripts/python.exe -m unittest discover -s tests -v` from `server/` on the Windows
+3.10 venv and confirm the 53 server test methods still pass with the extended enum.
+
+### Live Phase 13A acceptance: PENDING (user)
+
+Cannot be automated here (unpacked-extension load needs a native dialog; no NVIDIA key).
+**AI mode is required** — deterministic mode cannot observe completion and will always end
+TASK STOPPED, which is correct behaviour, not a regression.
+
+1. `PLANNER_MODE=ai` with `NVIDIA_API_KEY` set server-side; restart the server.
+2. **Success case.** Open `demo-page/index.html` with all seven fields filled and Continue
+   visible. RUN TASK with "Check whether this travel request is complete and submit it."
+   Expect: step 1 CLICK Continue -> settle -> step 2 re-observe -> STOP with
+   `The goal is already achieved.` -> **TASK COMPLETE**, note "the planner reported the
+   goal achieved".
+3. **Non-success case.** Clear one required field (e.g. Purpose) and RUN TASK again.
+   Expect STOP with a non-success reason -> **TASK STOPPED** (or TASK FAILED), and the note
+   explaining the goal was not confirmed. It must NEVER read TASK COMPLETE.
+4. **Deterministic control.** Set `PLANNER_MODE=deterministic`, restart, repeat step 2.
+   Expect TASK STOPPED — deterministic mode cannot assert completion.
+5. Manual path regression: press ANALYZE / PLAN then EXECUTE SUGGESTED ACTION. Behaviour
+   must be identical to Phase 12 (CLICK DISPATCHED -> VERIFYING -> VISUALLY VERIFIED).
+
+Note: `TASK COMPLETE` currently reflects the **planner's** judgement that the goal was
+reached, not independent pixel verification. Wiring Phase 8 verification into the
+autonomous loop is a later phase and remains an open issue.

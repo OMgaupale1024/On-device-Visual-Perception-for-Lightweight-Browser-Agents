@@ -164,7 +164,10 @@ test('each new action settles then reobserves and plans fresh; STOP ends the exi
     observePlan: async () => {
       const action = actions[index++], observationId = 'obs_' + index;
       calls.push('observe ' + action);
-      return { observeStatus: 'READY', observationId, planner: { status: 'READY', plan: { action } },
+      // STOP carries the achieved-goal reason so the sequence completes; any
+      // other reason would (correctly) end the run as STOPPED instead.
+      const reason = action === 'STOP' ? 'The goal is already achieved.' : 'A suitable visual target is visible.';
+      return { observeStatus: 'READY', observationId, planner: { status: 'READY', plan: { action, reason } },
         ticket: { observationId, action }, signature: String(index) };
     }, execute: async ticket => { calls.push('execute ' + ticket.action); return { status: 'EXECUTED' }; },
     settle: async () => { calls.push('settle'); }, emit: e => events.push(e),

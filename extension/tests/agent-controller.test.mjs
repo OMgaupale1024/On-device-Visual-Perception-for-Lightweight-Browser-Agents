@@ -2,12 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { runAgent, AGENT_STATE } from '../src/background/agent-controller.js';
+import { GOAL_ACHIEVED_REASON, STOP_CODE } from '../src/shared/outcome-contract.js';
 
 globalThis.crypto ??= { randomUUID };
 
 // One READY observe/plan result. CLICK unless action overridden.
-function ok({ action = 'CLICK', target = 'visual_1', signature = 'sig', observationId = 'obs_1' } = {}) {
-  const plan = { action, target: action === 'CLICK' ? target : null, observationId };
+// `reason` is the planner's server-supplied reason. A STOP defaults to the
+// achieved-goal reason so the existing success cases stay explicit about WHY
+// they complete; non-success STOP tests pass a real non-success reason instead.
+function ok({ action = 'CLICK', target = 'visual_1', signature = 'sig', observationId = 'obs_1',
+  reason = action === 'STOP' ? GOAL_ACHIEVED_REASON : 'A suitable visual target is visible.' } = {}) {
+  const plan = { action, target: action === 'CLICK' ? target : null, observationId, reason };
   return { observeStatus: 'READY', observationId, planner: { status: 'READY', plan },
     ticket: action === 'CLICK' ? { observationId, target } : null,
     targetText: action === 'CLICK' ? 'Continue' : null, signature, measurements: {} };
@@ -28,10 +33,10 @@ function drive(steps, { execute = async () => ({ status: 'EXECUTED' }), cancelle
     emit: (e) => events.push(e), ...opts }).then((r) => ({ ...r, events }));
 }
 
-test('1: CLICK executes, re-observes, then STOP completes the run', async () => {
+test('1: CLICK executes, re-observes, then an achieved-goal STOP completes the run', async () => {
   const r = await drive([ok(), ok({ action: 'STOP', observationId: 'obs_2' })]);
   assert.equal(r.state, AGENT_STATE.COMPLETED);
-  assert.equal(r.reason, 'PLANNER_STOP');
+  assert.equal(r.reason, STOP_CODE.GOAL_ACHIEVED);
   const names = r.events.map((e) => e.event);
   assert.deepEqual(names, ['AGENT_RUN_STARTED', 'AGENT_STEP_STARTED', 'OBSERVATION_READY', 'PRIVACY_PASS',
     'PLAN_READY', 'ACTION_VALIDATED', 'ACTION_EXECUTED', 'AGENT_STEP_STARTED', 'REOBSERVATION_READY',
@@ -43,6 +48,77 @@ test('2: STOP on the first step executes no action', async () => {
   const r = await drive([ok({ action: 'STOP' })], { execute: async () => { executed++; return { status: 'EXECUTED' }; } });
   assert.equal(r.state, AGENT_STATE.COMPLETED);
   assert.equal(executed, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Phase 13A — terminal-state truthfulness.
+//
+// Regression guard for the false-completion bug: the controller used to return
+// COMPLETED for EVERY STOP, so "no target available" and "unsafe to continue"
+// were both reported to the user as TASK COMPLETE. Only the achieved-goal
+// reason may complete; everything else is a non-success terminal state.
+// ---------------------------------------------------------------------------
+
+test('13A-1: STOP with the achieved-goal reason is the ONLY success', async () => {
+  const r = await drive([ok({ action: 'STOP', reason: GOAL_ACHIEVED_REASON })]);
+  assert.equal(r.state, AGENT_STATE.COMPLETED);
+  assert.equal(r.reason, STOP_CODE.GOAL_ACHIEVED);
+});
+
+// Every non-success reason the two planner modes can actually emit.
+const NON_SUCCESS_STOP_REASONS = [
+  // AI mode — server/app/ai_contract.py SafeReason
+  ['No suitable visual target is available.', STOP_CODE.NO_TARGET],
+  ['The request cannot be completed safely.', STOP_CODE.UNSAFE],
+  ['Required fields are filled and Continue is visible.', STOP_CODE.NO_PROGRESS],
+  ['A suitable visual target is visible.', STOP_CODE.NO_PROGRESS],
+  // deterministic mode — server/app/planner.py
+  ['Goal is not supported by the deterministic travel planner.', STOP_CODE.UNSUPPORTED_GOAL],
+  ['Required travel fields are missing, ambiguous or incomplete.', STOP_CODE.INCOMPLETE_CONTEXT],
+  ['A unique Continue visual element is unavailable.', STOP_CODE.NO_TARGET],
+];
+
+for (const [reason, code] of NON_SUCCESS_STOP_REASONS) {
+  test(`13A-2: STOP "${reason}" is NOT completed`, async () => {
+    const r = await drive([ok({ action: 'STOP', reason })]);
+    assert.notEqual(r.state, AGENT_STATE.COMPLETED);
+    assert.equal(r.state, AGENT_STATE.STOPPED);
+    assert.equal(r.reason, code);
+    // The terminal event must not be the completion event either.
+    assert.equal(r.events.at(-1).event, 'AGENT_STOPPED');
+  });
+}
+
+// Fail closed: an unknown/absent/malformed reason must never complete.
+// The reason is assigned onto the plan directly rather than passed through ok(),
+// because a destructuring default would replace `undefined` with the success
+// reason and the test would silently stop exercising the missing-reason path.
+for (const reason of [undefined, null, '', 'Some brand new server reason.', 'constructor', 42]) {
+  test(`13A-3: unrecognised STOP reason ${JSON.stringify(reason)} fails closed to STOPPED`, async () => {
+    const fixture = ok({ action: 'STOP' });
+    fixture.planner.plan.reason = reason;
+    const r = await drive([fixture]);
+    assert.notEqual(r.state, AGENT_STATE.COMPLETED);
+    assert.equal(r.state, AGENT_STATE.STOPPED);
+    assert.equal(r.reason, STOP_CODE.UNCLASSIFIED);
+  });
+}
+
+test('13A-4: CLICK -> re-observe -> achieved-goal STOP completes (live success shape)', async () => {
+  const r = await drive([ok(), ok({ action: 'STOP', observationId: 'obs_2', reason: GOAL_ACHIEVED_REASON })]);
+  assert.equal(r.state, AGENT_STATE.COMPLETED);
+  assert.equal(r.reason, STOP_CODE.GOAL_ACHIEVED);
+  assert.equal(r.step, 2);
+  assert.deepEqual(r.timings.map((t) => t.action), ['CLICK', 'STOP']);
+});
+
+test('13A-5: CLICK -> re-observe -> no-target STOP does NOT complete', async () => {
+  const r = await drive([ok(), ok({ action: 'STOP', observationId: 'obs_2',
+    reason: 'No suitable visual target is available.' })]);
+  assert.equal(r.state, AGENT_STATE.STOPPED);
+  assert.equal(r.reason, STOP_CODE.NO_TARGET);
+  // The click still happened; only the success claim is withheld.
+  assert.deepEqual(r.timings.map((t) => t.action), ['CLICK', 'STOP']);
 });
 
 test('3: invalid target (no ticket) fails safely without executing', async () => {

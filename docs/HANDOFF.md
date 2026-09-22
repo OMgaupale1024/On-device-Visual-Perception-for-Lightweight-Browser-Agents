@@ -1,5 +1,77 @@
 # Session Handoff
 
+## Phase 13A — autonomous STOP / completion semantics (2026-09-23)
+
+**Bug fixed: false task completion.** `agent-controller.js` returned
+`AGENT_STATE.COMPLETED` for *every* planner STOP, and the popup rendered that as
+**TASK COMPLETE**. Two of the four AI reasons and all three deterministic STOP
+reasons mean the agent could NOT proceed, so a run that clicked nothing — because
+no target existed, or because continuing was unsafe — reported success to the user.
+
+**Root cause was the contract, not the controller.** `ai_contract.py` instructed the
+model to "STOP ... if the observed goal is already achieved" but gave it no reason
+string that could say so. On a real success the model had to pick one of the four
+existing reasons, and the natural pick after submission is "No suitable visual target
+is available." (the Continue button is gone) — byte-identical to a genuine failure.
+STOP therefore carried success and failure simultaneously, and no pure mapping could
+separate them.
+
+**Change:**
+- `server/app/ai_contract.py` — added `GOAL_ACHIEVED_REASON = "The goal is already
+  achieved."` to the canonical `SafeReason` enum (now five values) plus prompt text
+  stating it is the only reason that reports success and must not be used for any
+  other STOP cause. No new enum; no model, schema or action change.
+- `extension/src/shared/outcome-contract.js` (new) — the single reason -> outcome
+  mapping covering every reason both planner modes can emit. `classifyStop()` is
+  fail-closed (unknown, absent, non-string, or prototype-chain key => non-success)
+  and uses `Object.hasOwn` so `"constructor"` cannot resolve to an inherited value.
+- `extension/src/background/agent-controller.js` — STOP now classifies:
+  success => `COMPLETED`, everything else => `STOPPED`. Reason codes replace the old
+  single `PLANNER_STOP`. All other controller behaviour is untouched.
+- `extension/src/popup/popup.js` — TASK COMPLETE / TASK STOPPED / TASK FAILED /
+  TASK CANCELLED (previously CANCELLED rendered as "STOPPED" and FAILED as "FAILED"),
+  with fixed per-code explanatory text. No server- or page-derived string is rendered.
+
+**Deterministic mode cannot report success.** It has no way to observe that the goal
+was reached, so all three of its STOP reasons classify as non-success and a
+deterministic run never shows TASK COMPLETE. Adding submission detection would be
+hardcoded travel logic and duplicate Phase 8 verification; both were out of scope.
+Demonstrating the success path requires AI mode.
+
+**Tests: 343/343 PASS** (was 303; +40). New: `extension/tests/outcome-contract.test.mjs`
+(7 — unit + drift guards that read the real server files) and
+`extension/tests/agent-outcome-popup.test.mjs` (17 — every terminal state's label).
+`agent-controller.test.mjs` gained 15 (success, each non-success reason, fail-closed
+cases, CLICK->re-observe success and non-success shapes). Four existing fixtures that
+encoded the bug now carry an explicit reason.
+
+**Mutation-verified** (each mutation applied, observed, reverted): reintroducing the
+original bug fails 14 tests; mislabelling the popup fails 9; adding an unclassified
+server SafeReason fails the drift guard; drifting the JS constant fails 2.
+
+Checks: npm test 343/343, npm run check PASS, git diff --check PASS,
+npm run scan:secrets PASS (191 files).
+
+**Server tests NOT RUN — environment blocker.** This machine has Python 3.9.6 only and
+`fastapi==0.141.1` requires >= 3.10; `server/.venv` is a Windows venv. The Python edits
+were verified by `py_compile` and by AST-extracting `SafeReason` (5 values, success
+value present) and cross-checking the constant against the JS one. Run
+`python -m unittest discover -s tests -v` under the Windows 3.10 venv to confirm the
+53 server tests still pass with the extended enum.
+
+**Live acceptance remaining (user — needs Chrome + AI mode):**
+1. Success: `PLANNER_MODE=ai` + `NVIDIA_API_KEY`, open demo-page/index.html with all
+   seven fields filled, RUN TASK with the default goal. Expect CLICK Continue ->
+   re-observe -> STOP "The goal is already achieved." -> **TASK COMPLETE**.
+2. Non-success: clear one required field (e.g. Purpose) and RUN TASK. Expect STOP with
+   a non-success reason -> **TASK STOPPED**, never TASK COMPLETE.
+3. Deterministic mode: any run ends TASK STOPPED, never TASK COMPLETE (expected).
+
+**Known issues NOT addressed here (later phases):** popup run-state rehydration;
+Phase 8 verification is still not wired into autonomous mode, so COMPLETED reflects the
+planner's judgement rather than verified pixels; voice cloud-transcription claim;
+benchmark/dashboard schema mismatch; missing-measurement handling; dashboard UI bugs.
+
 ## Phase 12 HOTFIX — goal input typing + microphone permission (2026-09-12)
 
 Fixes two live bugs reported after the initial Phase 12 commit (b553ba1):

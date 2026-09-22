@@ -30,7 +30,10 @@ test('wired NAVIGATE -> TYPE -> ENTER -> SCROLL -> STOP uses fresh observations 
       TYPE: { target: candidate.id, text: 'calculus videos' }, PRESS_KEY: { key: 'ENTER' },
       SCROLL: { direction: 'DOWN', amount: 'MEDIUM' }, STOP: { target: null } }[action];
     return { ok: true, headers: { get: () => 'ai' }, json: async () => ({ schemaVersion: 1,
-      observationId: context.observation.id, action, ...params, reason: 'A suitable visual target is visible.' }) };
+      observationId: context.observation.id, action, ...params,
+      // Non-STOP steps report a visible target; the terminating STOP reports the
+      // goal achieved, which is what makes the run complete rather than stop.
+      reason: action === 'STOP' ? 'The goal is already achieved.' : 'A suitable visual target is visible.' }) };
   };
   globalThis.chrome = {
     runtime: { id: 'test', getURL: p => 'chrome-extension://test/' + p,

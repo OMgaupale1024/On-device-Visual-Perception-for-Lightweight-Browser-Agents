@@ -10,6 +10,8 @@
 // always validated against its own observation (ticket carries the observationId),
 // so a stale plan can never act on a newer page.
 
+import { classifyStop } from '../shared/outcome-contract.js';
+
 export const AGENT_MAX_STEPS = 8;
 export const AGENT_SETTLE_MS = 750;
 // Allow the same action+target on an unchanged observation this many times before
@@ -84,9 +86,14 @@ export async function runAgent(goal, {
     const plan = op.planner.plan;
     emit({ event: 'PLAN_READY', runId, step, action: plan.action, target: op.targetText ?? null });
 
+    // A STOP is terminal, but it is NOT automatically a success: the planner
+    // stops both when the goal is achieved and when it cannot safely continue.
+    // classifyStop owns that distinction (fail-closed: unknown => not success),
+    // so only an explicitly achieved goal reaches COMPLETED.
     if (plan.action === 'STOP') {
       stepTimings.push({ step, ms: Date.now() - stepStart, action: 'STOP' });
-      return done(AGENT_STATE.COMPLETED, 'PLANNER_STOP', step);
+      const outcome = classifyStop(plan.reason);
+      return done(outcome.success ? AGENT_STATE.COMPLETED : AGENT_STATE.STOPPED, outcome.code, step);
     }
 
     // Every action ticket already re-validated observation binding and parameters.

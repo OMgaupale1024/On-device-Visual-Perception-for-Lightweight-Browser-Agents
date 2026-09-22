@@ -52,13 +52,20 @@ the loop. Manual Analyze/Plan/Execute remains available.
 | PRESS_KEY | ENTER only; current focused approved editable control; fixed events and uncancelled native form submission |
 | SCROLL | UP/DOWN; SMALL/MEDIUM/LARGE; bounded distance computed locally |
 | NAVIGATE | Normalized absolute HTTP/S; no credentials/unsupported schemes; old document checked before same-tab update |
-| STOP | No action; null target retained on the wire for compatibility |
+| STOP | No action; null target retained on the wire for compatibility. Terminal outcome is classified from the reason (Phase 13A): only `The goal is already achieved.` completes the run |
 
 TYPE reclassifies field sensitivity before acting and rechecks structure after focus/
 beforeinput handlers. Local DOM identities never leave the browser. No model-supplied
 JS, eval, CSS selectors, XPath, coordinates, shell commands or key sequences.
 Nemotron remains the decision-maker; the server never substitutes actions.
-The existing strict four-phrase reason enum is unchanged.
+
+The strict reason enum now has **five** phrases (Phase 13A added one). The added
+value `The goal is already achieved.` is the ONLY reason that reports success, and
+it is what makes a STOP mean completion rather than a stall. `server/app/
+ai_contract.py` exports it as `GOAL_ACHIEVED_REASON`; the browser mirrors it in
+`extension/src/shared/outcome-contract.js`, and a drift guard test fails if the two
+diverge or if any server reason loses its classification. Reasons remain a fixed,
+non-sensitive vocabulary validated server-side; no free model text is displayed.
 
 Cross-origin tasks require optional ENABLE BROWSING ACROSS SITES in the popup
 (<all_urls> for Chrome capture). NAVIGATE fails closed without it. Manual activeTab
@@ -112,6 +119,20 @@ SpeechRecognition/webkitSpeechRecognition, popup-only, no cloud/key/audio storag
 fills the SAME goal input; the user reviews the transcript, then the existing RUN TASK
 controller runs unchanged. Voice never triggers an action itself. Unsupported browsers
 disable the mic and show a fallback message; text mode is unaffected. No server change.
+
+**Phase 13A (autonomous STOP/completion semantics) DONE:** the controller used to
+return `COMPLETED` for every STOP, so a run that took no action — no usable target,
+or unsafe to continue — was shown as **TASK COMPLETE**. Root cause was contractual,
+not cosmetic: the reason vocabulary had no way to say "achieved", so STOP carried
+success and failure at once. One success reason was added to the canonical enum,
+and `shared/outcome-contract.js` now owns the single reason -> outcome mapping
+(fail-closed: unknown/absent reason => STOPPED, never COMPLETED). The popup renders
+TASK COMPLETE / TASK STOPPED / TASK FAILED / TASK CANCELLED from fixed display text
+keyed by code — no server or page string is rendered. Deterministic mode cannot
+observe completion, so none of its STOP reasons reports success; only AI mode can
+complete a run. Controller guards (max steps, cancellation, stale observation,
+planner/privacy fail-closed, duplicate detection) and all action behaviour are
+unchanged, as is the manual Analyze/Plan/Execute path.
 
 Next phase (not started): final evaluation metrics + demo polish + submission cleanup.
 Do not start vault/TYPE_LOCAL_REF, TEE, Raspberry Pi, another browser, or a new

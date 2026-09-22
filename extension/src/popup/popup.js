@@ -305,10 +305,19 @@ executeBtn.addEventListener('click', async () => {
 });
 
 // --- Autonomous agent (Phase 11B) ---------------------------------------
-// Fixed, safe outcome text keyed by controller reason. Never render server- or
-// page-derived strings; target text below is the local, already-guarded OCR text.
+// Fixed, safe outcome text keyed by controller reason code (see
+// shared/outcome-contract.js). Never render server- or page-derived strings, so
+// model output and page text can never reach the UI; target text below is the
+// local, already-guarded OCR text.
+// Only GOAL_ACHIEVED reports success — every other entry must read as non-success.
 const AGENT_OUTCOME = {
-  PLANNER_STOP: 'Task complete — planner stopped.',
+  GOAL_ACHIEVED: 'Task complete — the planner reported the goal achieved.',
+  STOP_NO_TARGET: 'Stopped: no suitable target was available. The goal was not confirmed.',
+  STOP_UNSAFE: 'Stopped: the planner judged it unsafe to continue.',
+  STOP_NO_PROGRESS: 'Stopped: the planner took no action and the goal was not confirmed.',
+  STOP_UNSUPPORTED_GOAL: 'Stopped: this goal is not supported by the current planner.',
+  STOP_INCOMPLETE_CONTEXT: 'Stopped: required information was missing or incomplete.',
+  STOP_UNCLASSIFIED: 'Stopped: the planner stopped for an unrecognised reason.',
   MAX_STEPS: 'Stopped: maximum autonomous steps reached.',
   CANCELLED: 'Stopped by user.',
   PLANNER_UNAVAILABLE: 'Stopped: planner unavailable.',
@@ -349,10 +358,13 @@ function renderAgentEvent(e) {
   }
   if (e.event === 'ACTION_EXECUTED') { appendAgentLog(`Step ${e.step}: ${e.action || 'CLICK'} dispatched`); return; }
   if (['AGENT_COMPLETED', 'AGENT_STOPPED', 'AGENT_FAILED', 'AGENT_CANCELLED'].includes(e.event)) {
+    // Only AGENT_STATE.COMPLETED may read as success. Every other terminal
+    // state is shown as stopped/failed/cancelled, never as TASK COMPLETE.
     const label = e.state === 'COMPLETED' ? 'TASK COMPLETE'
-      : e.state === 'FAILED' ? 'FAILED' : e.state === 'CANCELLED' ? 'STOPPED' : 'STOPPED';
+      : e.state === 'FAILED' ? 'TASK FAILED'
+      : e.state === 'CANCELLED' ? 'TASK CANCELLED' : 'TASK STOPPED';
     byId('agent-status').textContent = label;
-    byId('agent-note').textContent = AGENT_OUTCOME[e.reason] || 'Run ended.';
+    byId('agent-note').textContent = AGENT_OUTCOME[e.reason] || 'Run ended without a confirmed result.';
   }
 }
 
