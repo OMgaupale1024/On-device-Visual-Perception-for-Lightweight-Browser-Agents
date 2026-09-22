@@ -55,18 +55,20 @@ export const SCENARIOS = [
 ];
 
 export async function runSemantics({ fetchImpl = globalThis.fetch, write = console.log } = {}) {
-  let failures = 0;
+  let passed = 0;
   for (const scenario of SCENARIOS) {
     const result = await requestPlan(scenario.context(), { fetchImpl });
     const plan = result.plan;
     const outcome = result.status !== 'READY' ? `NOT_READY:${result.failureCode || result.httpStatus || 'NETWORK'}`
       : plan.action === 'STOP' ? `STOP:${classifyStop(plan.reason).code}` : plan.action;
     const ok = result.status === 'READY' && scenario.pass(plan);
-    if (!ok) failures++;
+    if (ok) passed++;
     write(`${ok ? 'PASS' : 'FAIL'} ${scenario.name}: got ${outcome}; want ${scenario.want}`);
   }
-  write(failures ? `FAIL semantics: ${failures}/${SCENARIOS.length} scenarios` : `PASS semantics: ${SCENARIOS.length}/${SCENARIOS.length}`);
-  return failures === 0;
+  // Always the PASS count out of the total (it once printed the failure count).
+  const ok = passed === SCENARIOS.length;
+  write(`${ok ? 'PASS' : 'FAIL'} semantics: ${passed}/${SCENARIOS.length}`);
+  return ok;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

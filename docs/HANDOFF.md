@@ -1,5 +1,31 @@
 # Session Handoff
 
+## Phase 13G — planner terminal semantics refinement (2026-09-23)
+
+Live `smoke-semantics` (user, real model): PASS form-ready-submit, generic-ready-send,
+search-typed-no-results, navigate-pending; FAIL result-visible (STOP:STOP_NO_TARGET) and
+no-target-unfinished (NOT_READY:INVALID_TARGET — the model invented a target; the server's
+strict validation rejected it, as it should). The summary line wrongly read "2/6": it printed
+the failure count.
+
+- `server/app/ai_contract.py`: Decision policy rewritten as an explicit order — 1 RESULT
+  visibly present -> STOP GOAL_ACHIEVED (even with no action available; generic examples:
+  submission confirmation, requested search results, destination page loaded); 2 otherwise
+  one action whose element's allowedActions lists it (NAVIGATE/SCROLL need none) ->
+  ADVANCE_GOAL; 3 otherwise STOP NO_VALID_TARGET / INSUFFICIENT_CONTEXT, never invent a
+  target. "The rules below refine step 2 only; they never override step 1" — likely cause of
+  the result-visible miss: its goal mentions submitting a request, and the pre-existing
+  form bullet ("STOP if a required field is missing") applied to a result page with no fields.
+  No demo strings added to the generic policy (test-enforced).
+- `scripts/smoke-semantics.mjs`: summary is `PASS|FAIL semantics: <passed>/<total>`.
+- Server validation untouched (INVALID_TARGET stays strict). No model/timeout/controller/
+  verifier/OCR/privacy/voice/grounding change.
+
+Tests: server 81/81 (decision-order pin incl. ordering), extension 386/386 (+1: the live
+4-pass/2-fail shape prints `FAIL semantics: 4/6`). check, diff-check, secret scan PASS.
+**Live PENDING (user):** restart the AI server (prompt changed), run
+`node scripts/smoke-semantics.mjs`, target `PASS semantics: 6/6`; no Chrome testing before that.
+
 ## Phase 13F — stable planner reason codes (2026-09-23)
 
 **Live semantics run (user):** PASS form-ready-submit, result-visible; FAIL generic-ready-send,

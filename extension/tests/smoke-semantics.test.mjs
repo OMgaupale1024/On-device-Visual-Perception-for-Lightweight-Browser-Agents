@@ -51,3 +51,33 @@ test('a missing success claim on a visible result also fails', async () => {
     'result-visible': { action: 'STOP', target: null, reason: 'No suitable visual target is available.' } }), write: () => {} });
   assert.equal(ok, false);
 });
+
+test('summary reports the PASS count: the live 4 pass + 2 fail run prints 4/6', async () => {
+  // The exact live failures: a visible result reported as no-target, and an invented target.
+  const lines = [];
+  const ok = await runSemantics({ fetchImpl: fakeServer({ ...GOOD,
+    'result-visible': { action: 'STOP', target: null, reason: 'No suitable visual target is available.' } }),
+  write: (l) => lines.push(l) });
+  // One failure => 5 of 6 passed, and the summary says so.
+  assert.equal(ok, false);
+  assert.equal(lines.filter((l) => l.startsWith('PASS ')).length, 5);
+  assert.equal(lines.at(-1), `FAIL semantics: ${SCENARIOS.length - 1}/${SCENARIOS.length}`);
+
+  // The live run: plus the server rejecting an invented target (INVALID_TARGET) => not READY.
+  const live = [];
+  let i = 0;
+  const liveServer = async (_url, options) => {
+    const context = JSON.parse(options.body);
+    const name = SCENARIOS[i++].name;
+    if (name === 'no-target-unfinished') {
+      return { ok: false, status: 502, headers: { get: (h) => (h === 'X-EdgeSight-Planner-Failure' ? 'INVALID_TARGET' : 'ai') },
+        json: async () => ({ detail: 'AI planner unavailable.' }) };
+    }
+    const answer = name === 'result-visible' ? { action: 'STOP', target: null, reason: 'No suitable visual target is available.' } : GOOD[name];
+    return { ok: true, headers: { get: () => 'ai' }, json: async () => ({ schemaVersion: 1, observationId: context.observation.id, ...answer }) };
+  };
+  assert.equal(await runSemantics({ fetchImpl: liveServer, write: (l) => live.push(l) }), false);
+  assert.equal(live.filter((l) => l.startsWith('PASS ')).length, 4);
+  assert.equal(live.filter((l) => l.startsWith('FAIL ') && !l.startsWith('FAIL semantics')).length, 2);
+  assert.equal(live.at(-1), 'FAIL semantics: 4/6');
+});

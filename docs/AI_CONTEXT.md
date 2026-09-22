@@ -190,6 +190,14 @@ the wire `reason`, so the extension controller/13A-13C paths are unchanged. Non-
 always carry the ADVANCE_GOAL message; GOAL_ACHIEVED with zero visual elements becomes
 INSUFFICIENT_CONTEXT (no visible evidence). Prompt policy is explicit per code.
 
+**Phase 13G (terminal semantics refinement):** live semantics 4/6 — `result-visible` came back
+STOP_NO_TARGET (the form-specific rule "STOP if a required field is missing" overrode a visible
+confirmation) and `no-target-unfinished` invented a target (server correctly rejected it,
+INVALID_TARGET). Prompt now has an explicit decision order: 1 RESULT visible -> GOAL_ACHIEVED;
+2 one valid allowed action -> that action / ADVANCE_GOAL; 3 otherwise STOP NO_VALID_TARGET /
+INSUFFICIENT_CONTEXT, never invent a target; form rules refine step 2 only. Server validation
+unchanged (strict). `smoke-semantics` summary now prints the PASS count (it printed failures).
+
 Next phase (not started): final evaluation metrics + demo polish + submission cleanup.
 Do not start vault/TYPE_LOCAL_REF, TEE, Raspberry Pi, another browser, or a new
 perception engine without the user assigning it.

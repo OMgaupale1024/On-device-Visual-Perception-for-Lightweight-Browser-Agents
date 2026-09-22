@@ -59,26 +59,37 @@ class PromptPolicyTests(unittest.TestCase):
         self.assertNotRegex(prompt, r"visual_[0-9]+|obs_[a-zA-Z0-9_-]+")
 
     def test_ready_state_is_not_achieved_policy(self):
-        # Live regressions: step-1 STOP "achieved" on a filled, unsubmitted form, and
-        # GOAL_ACHIEVED when nothing could be done. Success needs visible evidence.
+        # Live regressions: success claimed on a ready (unsubmitted) form; then, too
+        # conservative, a visible result reported as no-target; and invented targets
+        # when nothing was actionable. The decision order fixes all three generically.
         prompt = " ".join(SYSTEM_PROMPT.split())
-        for rule in ["GOAL_ACHIEVED only when the requested RESULT is visibly present in the current observation",
+        order = ["1. RESULT: is the requested result itself visibly present in the current observation?",
+                 "2. ACTION: otherwise, is there one valid action that advances the goal?",
+                 "3. OTHERWISE: STOP with NO_VALID_TARGET"]
+        positions = [prompt.index(step) for step in order]
+        self.assertEqual(positions, sorted(positions))
+        for rule in ["decide in this order; the first step that applies decides",
+                     "YES -> the goal is already achieved: STOP with GOAL_ACHIEVED, even if no action is available",
+                     "a submission confirmation is visible (submit goal)",
+                     "the requested search results are visible (search goal)",
+                     "the destination page is visibly loaded (open/navigate goal)",
                      "READY is not ACHIEVED",
-                     "filled fields, typed text, a visible submit/search control, being on some other page, "
-                     "having no candidate, or being uncertain are never evidence that the goal is already achieved",
+                     "Having no candidate or being uncertain is never evidence of success",
                      "A goal that asks to check AND act is achieved only after the act",
-                     "choose that one action with ADVANCE_GOAL",
+                     "YES -> output that ONE action with ADVANCE_GOAL",
                      "Do not STOP merely because prerequisites are satisfied",
-                     "STOP with NO_VALID_TARGET when there is no valid actionable target, or INSUFFICIENT_CONTEXT",
-                     "Never GOAL_ACHIEVED in these cases",
-                     "Proceeding would be unsafe: STOP with UNSAFE_TO_CONTINUE",
+                     "Never invent a target; never emit CLICK/TYPE/PRESS_KEY without a supporting element",
+                     "if proceeding would be unsafe: STOP with UNSAFE_TO_CONTINUE",
+                     "The rules below refine step 2 only; they never override step 1",
                      "reasonCode is exactly one of: ADVANCE_GOAL, GOAL_ACHIEVED, NO_VALID_TARGET, "
                      "UNSAFE_TO_CONTINUE, INSUFFICIENT_CONTEXT.",
                      "Output no reason text"]:
             self.assertIn(rule, prompt)
+        # Form-specific refinements come after the generic order, never before it.
+        self.assertLess(prompt.index("refine step 2 only"), prompt.index("For a goal to submit/continue"))
         # The generic policy names no page text, site or demo value; no reason sentences remain.
-        policy = prompt[prompt.index("GOAL_ACHIEVED only when"):prompt.index("- For a goal to submit/continue")]
-        for token in ["Continue", "Bengaluru", "travel", "YouTube", "visual_"]:
+        policy = prompt[prompt.index("Decision policy"):prompt.index("- For a goal to submit/continue")]
+        for token in ["Continue", "Bengaluru", "travel", "YouTube", "visual_", "Travel Request Submitted"]:
             self.assertNotIn(token, policy)
         for sentence in REASON_MESSAGES.values():
             self.assertNotIn(sentence, prompt)

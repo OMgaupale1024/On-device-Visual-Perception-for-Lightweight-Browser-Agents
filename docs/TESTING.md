@@ -1448,3 +1448,16 @@ Server **81/81**, extension **385/385**, check, diff-check, scan:secrets PASS.
 
 Not runnable here (no NVIDIA key). Restart the server, run it, expect `PASS semantics: 6/6`.
 Only then run the travel RUN TASK in Chrome.
+
+---
+
+## Phase 13G — planner terminal semantics refinement (2026-09-23)
+
+| Live failure | Fix | Offline check |
+|---|---|---|
+| result-visible -> STOP_NO_TARGET | explicit order: visible RESULT decides first; form rules refine step 2 only | server `test_ready_state_is_not_achieved_policy` (order + precedence pinned) |
+| no-target-unfinished -> invented target (INVALID_TARGET) | step 3: never invent a target, never emit CLICK/TYPE/PRESS_KEY without a supporting element; server stays strict | same; existing INVALID_TARGET tests unchanged |
+| summary printed failures as "2/6" | prints PASS count | `smoke-semantics.test.mjs`: live 4 pass + 2 fail => `FAIL semantics: 4/6` |
+
+Server 81/81, extension 386/386, check, diff-check, scan:secrets PASS.
+Live: restart AI server, `node scripts/smoke-semantics.mjs` => target `PASS semantics: 6/6` (PENDING user).
