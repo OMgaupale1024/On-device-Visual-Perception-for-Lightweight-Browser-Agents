@@ -174,6 +174,14 @@ MIC_UNAVAILABLE, SPEECH_UNSUPPORTED, SPEECH_NETWORK_ERROR, SPEECH_NO_RESULT, SPE
 and a one-time GRANT MICROPHONE ACCESS tab (`src/popup/mic-permission.html`) grants the
 extension origin. Voice still only fills the goal box; never auto-runs.
 
+**Phase 13E (ready state vs achieved goal) DONE (automated; live PENDING user):** live
+step-1 STOP "The goal is already achieved." on a filled, unsubmitted form (13C correctly
+refused it). Prompt-only fix in `server/app/ai_contract.py`: READY is not ACHIEVED;
+prerequisites (filled fields, typed text, visible submit control, another page) are not
+results; action goals are achieved only when the result is visible; check-AND-act goals
+only after the act; if one element's allowedActions clearly advances an unfinished goal,
+take it. Model behaviour is checked live by `node scripts/smoke-semantics.mjs` (6 scenarios).
+
 Next phase (not started): final evaluation metrics + demo polish + submission cleanup.
 Do not start vault/TYPE_LOCAL_REF, TEE, Raspberry Pi, another browser, or a new
 perception engine without the user assigning it.

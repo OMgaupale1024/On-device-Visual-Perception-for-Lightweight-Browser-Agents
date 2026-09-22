@@ -1390,3 +1390,38 @@ B. Voice: press 🎤. If the status ends `(MIC_PERMISSION_REQUIRED)`, press GRAN
    in the goal box, nothing runs until RUN TASK. Any failure shows a code in parentheses —
    report it (e.g. SPEECH_NETWORK_ERROR means Chrome's speech service was unreachable; text
    input remains the primary path).
+
+---
+
+## Phase 13E — ready state vs achieved goal (2026-09-23)
+
+Prompt-only fix: GOAL_ACHIEVED needs visible evidence of the requested result; prerequisites
+are not results. Model behaviour can only be proven live; offline tests pin the policy and the
+live checker's own logic.
+
+| # | Requirement | Offline test | Live check (`scripts/smoke-semantics.mjs`) |
+|---|-------------|--------------|------------------------------|
+| 1 | completed form + submit goal + submit-like candidate -> not GOAL_ACHIEVED | smoke-semantics: STOP:GOAL_ACHIEVED fails `form-ready-submit` | `form-ready-submit` expects CLICK visual_12 |
+| 2 | completed form + candidate -> CLICK allowed | `form-ready-submit`, `generic-ready-send` pass on CLICK; server accepts | same, PENDING |
+| 3 | visible post-action result -> GOAL_ACHIEVED allowed | `result-visible` passes only on achieved STOP | PENDING |
+| 4 | search typed, no results -> not achieved | `search-typed-no-results` fails on achieved STOP | PENDING |
+| 5 | navigation pending -> not achieved | `navigate-pending` fails on achieved STOP | PENDING |
+| 6 | STOP failure semantics unchanged | outcome-contract + controller 13A tests unchanged; `no-target-unfinished` | PENDING |
+| 7 | 13A/13B/13C green | full suite 383/383 | - |
+| - | policy text pinned, generic | server `test_ready_state_is_not_achieved_policy` (no Continue/Bengaluru/travel/YouTube/visual_ ids in the new policy) | - |
+
+All six scenario contexts and their correct decisions were run through the real server
+`prepare_ai_input` + `plan_ai` validation (mac venv) — all accepted.
+
+Extension **383/383**, server **80/80**, `npm run check`, `git diff --check`, `scan:secrets`
+(199 files, untracked venv excluded for the run) PASS.
+
+### Live Phase 13E acceptance: PENDING (user)
+
+1. Restart the server in AI mode (prompt changed). Run `node scripts/smoke-semantics.mjs`.
+   Expect `PASS semantics: 6/6`; any FAIL line names the scenario and the fixed outcome code.
+2. Reload the extension. Travel goal "Check whether this travel request is complete and
+   submit it." Expect: step 1 CLICK Continue -> dispatched -> step 2 fresh observation ->
+   STOP / GOAL_ACHIEVED -> result verification VERIFIED -> TASK COMPLETE.
+3. If step 1 is a non-success STOP instead, read `ACTION_FUSION ... clickable=N` in the
+   service-worker console: `clickable=0` means Continue was not grounded (e.g. not in view).

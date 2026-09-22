@@ -1,5 +1,39 @@
 # Session Handoff
 
+## Phase 13E — ready state vs achieved goal (2026-09-23)
+
+**Live bug:** travel goal, step 1 planner STOP with `The goal is already achieved.`; 13C
+correctly returned VERIFICATION_INCONCLUSIVE (no action taken). The planner treated
+"all required fields filled" as "goal achieved" — the goal is "check ... AND submit it".
+
+**Could not inspect the live observation from here** (no key/Chrome on this machine). Two
+causes fit: (H1) Continue was CLICK-capable and the model misjudged success, or (H2) Continue
+was not a CLICK-capable candidate in that observation (e.g. off-screen), so the model could
+not click and misused the success reason. Evidence for H2: before 13D the model clicked
+"Bengaluru" despite the existing "MUST CLICK Continue" rule. The prompt fix is correct under
+both; if the next live run ends with a non-success STOP instead of CLICK Continue, check the
+service-worker line `ACTION_FUSION ... clickable=N` (0 => Continue not grounded; scroll it
+into view) or the manual ANALYZE agent-context preview (`actionCandidates`).
+
+**Change (prompt only, generic):** `server/app/ai_contract.py` Decision policy gains:
+READY is not ACHIEVED; prerequisites are not results; action goals (submit, send, open,
+search, navigate, click, type, continue) are achieved only when the RESULT is visible now;
+check-AND-act goals only after the act; if exactly one element's allowedActions clearly
+advances an unfinished goal, choose it; success STOP needs visible evidence. No verifier,
+outcome contract, grounding, privacy, OCR, controller, timeout, model or voice change.
+
+**Tests:** server **80/80** (+1 policy pin, asserts no page/demo tokens in the new policy).
+Extension **383/383** (+4, `smoke-semantics.test.mjs`). New live check
+`scripts/smoke-semantics.mjs` (6 scenarios: form ready -> CLICK submit; generic ready -> CLICK
+Send; result visible -> GOAL_ACHIEVED; search typed, no results -> not achieved; navigation
+pending -> not achieved; no target -> non-success STOP); every scenario context was validated
+through the real server schema/projection/target checks. A fake provider cannot prove model
+behaviour — only the live run does.
+
+**Live acceptance: PENDING (user)** — restart the AI server, then
+`node scripts/smoke-semantics.mjs` (expect `PASS semantics: 6/6`) and the travel RUN TASK
+(expect step 1 CLICK Continue ... TASK COMPLETE). See docs/TESTING.md "Phase 13E".
+
 ## Phase 13D — action grounding + voice reliability (2026-09-23)
 
 ### A. Target accuracy — root cause (inspected, not guessed)

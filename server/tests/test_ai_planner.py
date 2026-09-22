@@ -58,6 +58,23 @@ class PromptPolicyTests(unittest.TestCase):
         self.assertIn("Filled fields alone do not mean the form has been submitted", prompt)
         self.assertNotRegex(prompt, r"visual_[0-9]+|obs_[a-zA-Z0-9_-]+")
 
+    def test_ready_state_is_not_achieved_policy(self):
+        # Live regression: step-1 STOP "The goal is already achieved." on a filled, unsubmitted
+        # form. Success needs visible evidence of the RESULT; prerequisites are not results.
+        prompt = " ".join(SYSTEM_PROMPT.split())
+        for rule in ["READY is not ACHIEVED",
+                     "Filled fields, typed text, a visible submit/search control, or being on some other page are prerequisites, not results",
+                     "it is achieved only when the RESULT of that act is visible in the current observation",
+                     "A goal that asks to check AND act is achieved only after the act",
+                     "exactly one element's allowedActions clearly advances it, choose that one action",
+                     "Do not STOP merely because prerequisites are satisfied",
+                     "with visible evidence of the result"]:
+            self.assertIn(rule, prompt)
+        # The generic policy names no page text, site or demo value.
+        policy = prompt[prompt.index("READY is not ACHIEVED"):prompt.index("- STOP with target=null")]
+        for token in ["Continue", "Bengaluru", "travel", "YouTube", "visual_"]:
+            self.assertNotIn(token, policy)
+
     def test_stop_conditions_preserve_redaction_and_injection_policy(self):
         prompt = " ".join(SYSTEM_PROMPT.split())
         for condition in ["already achieved", "unsafe", "required field is missing/incomplete/unavailable",
