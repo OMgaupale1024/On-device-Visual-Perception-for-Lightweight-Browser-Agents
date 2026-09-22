@@ -4,14 +4,15 @@ import unittest
 from pathlib import Path
 from fastapi.testclient import TestClient
 
-from app.ai_contract import ModelDecision, SYSTEM_PROMPT
+from app.ai_contract import REASON_MESSAGES, ModelDecision, SYSTEM_PROMPT
 from app.ai_input import prepare_ai_input
 from app.ai_planner import plan_ai
 from app.nvidia_provider import PlannerFailure
 from app.schemas import PlanResponse, SafeAgentContext
 from app.main import create_app
 
-REASON = "A suitable visual target is visible."
+CODE = "ADVANCE_GOAL"
+MESSAGE = REASON_MESSAGES[CODE]  # fixed server message; model text never reaches the wire
 
 
 def context():
@@ -24,7 +25,7 @@ def context():
 
 class Provider:
     def __init__(self, action):
-        self.output = json.dumps({**action, "reason": REASON})
+        self.output = json.dumps({**action, "reasonCode": CODE})
         self.calls = 0
 
     async def complete(self, _):
@@ -41,10 +42,11 @@ class ActionContractTests(unittest.TestCase):
                        {"action": "NAVIGATE", "url": "https://example.org/"},
                        {"action": "STOP", "target": None}]:
             with self.subTest(action=action["action"]):
-                decision = ModelDecision(**action, reason=REASON).model_dump()
-                wire = PlanResponse(**decision, observationId="obs_current").model_dump()
-                self.assertEqual(decision, {**action, "reason": REASON})
-                self.assertEqual(wire, {**decision, "schemaVersion": 1, "observationId": "obs_current"})
+                decision = ModelDecision(**action, reasonCode=CODE).model_dump()
+                self.assertEqual(decision, {**action, "reasonCode": CODE})
+                decision.pop("reasonCode")
+                wire = PlanResponse(**decision, reason=MESSAGE, observationId="obs_current").model_dump()
+                self.assertEqual(wire, {**action, "reason": MESSAGE, "schemaVersion": 1, "observationId": "obs_current"})
 
     def test_irrelevant_parameters_and_missing_parameters_are_rejected(self):
         invalid = [{"action": "STOP", "text": "x"}, {"action": "TYPE", "target": "visual_12"},
@@ -56,7 +58,7 @@ class ActionContractTests(unittest.TestCase):
         for action in invalid:
             with self.subTest(action=action):
                 with self.assertRaises(ValueError):
-                    ModelDecision(**action, reason=REASON)
+                    ModelDecision(**action, reasonCode=CODE)
 
     def test_navigation_schemes_malformed_urls_credentials_and_controls(self):
         for url in ["javascript:alert(1)", "data:text/plain,test", "chrome://settings", "about:blank",
@@ -65,16 +67,16 @@ class ActionContractTests(unittest.TestCase):
                     "https://example.org/\npath", "https://example.org/%0a"]:
             with self.subTest(url=url):
                 with self.assertRaises(ValueError):
-                    ModelDecision(action="NAVIGATE", url=url, reason=REASON)
+                    ModelDecision(action="NAVIGATE", url=url, reasonCode=CODE)
         for url, expected in [("HTTPS://Example.org:443", "https://example.org/"),
                               ("http://127.0.0.1:8137/search", "http://127.0.0.1:8137/search")]:
-            self.assertEqual(ModelDecision(action="NAVIGATE", url=url, reason=REASON).url, expected)
+            self.assertEqual(ModelDecision(action="NAVIGATE", url=url, reasonCode=CODE).url, expected)
 
     def test_type_rejects_empty_control_text_and_obvious_private_text(self):
         for text in ["", " ", "line\nline", "a" * 501, "person@example.org", "EMP-123456"]:
             with self.subTest(length=len(text)):
                 with self.assertRaises(ValueError):
-                    ModelDecision(action="TYPE", target="visual_12", text=text, reason=REASON)
+                    ModelDecision(action="TYPE", target="visual_12", text=text, reasonCode=CODE)
 
     def test_projection_has_safe_capabilities_and_origin_without_local_identity(self):
         projected = json.loads(prepare_ai_input(context()).content)
@@ -105,15 +107,17 @@ class ActionContractTests(unittest.TestCase):
                 response = client.post("/plan", json=context())
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.headers["X-EdgeSight-Planner"], "ai")
-            self.assertEqual(response.json(), {**action, "reason": REASON, "schemaVersion": 1,
+            self.assertEqual(response.json(), {**action, "reason": MESSAGE, "schemaVersion": 1,
                                                "observationId": context()["observation"]["id"]})
             self.assertEqual(provider.calls, 1)
 
     def test_rejected_output_has_fixed_diagnostic_without_model_text(self):
         for output, code in [
-            (json.dumps({"action": "STOP", "target": None, "reason": "private-output-canary"}), "INVALID_REASON"),
-            (json.dumps({"action": "STOP", "target": None, "reason": REASON, "selector": "private-output-canary"}), "INVALID_DECISION"),
-            (json.dumps({"action": "CLICK", "target": "visual_99", "reason": REASON}), "INVALID_TARGET"),
+            (json.dumps({"action": "STOP", "target": None, "reasonCode": "private-output-canary"}), "INVALID_REASON"),
+            # Free-text reason instead of a code: rejected, never forwarded.
+            (json.dumps({"action": "STOP", "target": None, "reason": "private-output-canary"}), "INVALID_DECISION"),
+            (json.dumps({"action": "STOP", "target": None, "reasonCode": CODE, "selector": "private-output-canary"}), "INVALID_DECISION"),
+            (json.dumps({"action": "CLICK", "target": "visual_99", "reasonCode": CODE}), "INVALID_TARGET"),
             ("private-output-canary", "INVALID_DECISION"),
         ]:
             provider = Provider({})

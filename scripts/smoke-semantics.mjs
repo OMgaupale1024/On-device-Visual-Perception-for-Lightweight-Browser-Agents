@@ -45,9 +45,11 @@ export const SCENARIOS = [
     context: () => context({ goal: 'Open https://www.youtube.com and search for calculus videos.',
       pageOrigin: 'https://start.invalid', items: ['Welcome', 'Start page'] }),
     pass: (plan) => !achieved(plan) },
-  // 6: unfinished with no usable target => non-success STOP semantics unchanged.
+  // 6: unfinished, visible page text but no usable target => non-success STOP. (An empty
+  // page is refused server-side regardless: no visible evidence, no success.)
   { name: 'no-target-unfinished', want: 'not GOAL_ACHIEVED',
-    context: () => { const input = plannerInput(); input.visualState.items = []; input.actionCandidates = [];
+    context: () => { const input = plannerInput(); input.actionCandidates = [];
+      input.visualState.items = [{ id: 'visual_1', text: 'Request form', bbox: { x: 10, y: 20, width: 160, height: 24 }, confidence: 0.95 }];
       return buildSafeAgentContext(input).context; },
     pass: (plan) => !achieved(plan) },
 ];

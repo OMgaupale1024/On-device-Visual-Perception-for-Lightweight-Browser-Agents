@@ -1,5 +1,37 @@
 # Session Handoff
 
+## Phase 13F — stable planner reason codes (2026-09-23)
+
+**Live semantics run (user):** PASS form-ready-submit, result-visible; FAIL generic-ready-send,
+search-typed-no-results, navigate-pending (all `INVALID_REASON`: the model paraphrased the
+required exact sentence); FAIL no-target-unfinished (GOAL_ACHIEVED with nothing to act on).
+
+**Change:**
+- `server/app/ai_contract.py`: `ModelDecision.reasonCode` (Literal `ReasonCode`: ADVANCE_GOAL,
+  GOAL_ACHIEVED, NO_VALID_TARGET, UNSAFE_TO_CONTINUE, INSUFFICIENT_CONTEXT) replaces the free
+  `reason`. `REASON_MESSAGES` maps each code to one fixed message; `SafeReason` is now that
+  outbound message set (drift-guarded by the extension). NO_VALID_TARGET and
+  UNSAFE_TO_CONTINUE reuse the old wording. Prompt policy rewritten per code: GOAL_ACHIEVED
+  only with the result visibly present; never for filled fields, typed text, ready state,
+  no candidate or uncertainty; advancing action => ADVANCE_GOAL; no valid action =>
+  NO_VALID_TARGET / INSUFFICIENT_CONTEXT; unsafe => UNSAFE_TO_CONTINUE. The prompt contains
+  no reason sentences at all now.
+- `server/app/ai_planner.py`: builds `PlanResponse.reason` from the code (model text never
+  forwarded; a free-text `reason` key is rejected as an extra property). Non-STOP => ADVANCE_GOAL
+  message. GOAL_ACHIEVED with zero visual elements => INSUFFICIENT_CONTEXT (no visible evidence).
+  INVALID_REASON now means an invalid `reasonCode`.
+- `extension/src/shared/outcome-contract.js`: classifies the two new messages
+  (INSUFFICIENT_CONTEXT => STOP_INCOMPLETE_CONTEXT; ADVANCE_GOAL on a STOP => STOP_NO_PROGRESS).
+  Old messages stay classified (non-success). Controller, verifier, grounding untouched.
+- `scripts/smoke-semantics.mjs`: scenario 6 now shows visible non-result text with no
+  candidate, so it tests the model; the empty-page case is refused server-side and unit-tested.
+
+**Tests:** server **81/81**, extension **385/385**; all six scenarios' contexts plus correct
+reasonCode answers pass the real server validation (mac venv). check / diff-check / secret
+scan (199 files, venv excluded) PASS. **`node scripts/smoke-semantics.mjs` was NOT run here — no
+NVIDIA key on this machine.** Restart the AI server and run it; acceptance is
+`PASS semantics: 6/6`. Do not start live Chrome testing until it is 6/6.
+
 ## Phase 13E — ready state vs achieved goal (2026-09-23)
 
 **Live bug:** travel goal, step 1 planner STOP with `The goal is already achieved.`; 13C

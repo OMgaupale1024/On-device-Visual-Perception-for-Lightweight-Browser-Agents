@@ -5,12 +5,14 @@ import assert from 'node:assert/strict';
 import { SCENARIOS, runSemantics } from '../../scripts/smoke-semantics.mjs';
 
 const ACHIEVED = 'The goal is already achieved.';
+// Wire answers as the server sends them: fixed messages mapped from the model's reasonCode.
+const ADVANCE = 'The next action advances the goal.';
 const GOOD = {
-  'form-ready-submit': { action: 'CLICK', target: 'visual_12', reason: 'Required fields are filled and Continue is visible.' },
-  'generic-ready-send': { action: 'CLICK', target: 'visual_3', reason: 'A suitable visual target is visible.' },
+  'form-ready-submit': { action: 'CLICK', target: 'visual_12', reason: ADVANCE },
+  'generic-ready-send': { action: 'CLICK', target: 'visual_3', reason: ADVANCE },
   'result-visible': { action: 'STOP', target: null, reason: ACHIEVED },
-  'search-typed-no-results': { action: 'PRESS_KEY', key: 'ENTER', reason: 'A suitable visual target is visible.' },
-  'navigate-pending': { action: 'NAVIGATE', url: 'https://www.youtube.com/', reason: 'A suitable visual target is visible.' },
+  'search-typed-no-results': { action: 'PRESS_KEY', key: 'ENTER', reason: ADVANCE },
+  'navigate-pending': { action: 'NAVIGATE', url: 'https://www.youtube.com/', reason: ADVANCE },
   'no-target-unfinished': { action: 'STOP', target: null, reason: 'No suitable visual target is available.' },
 };
 

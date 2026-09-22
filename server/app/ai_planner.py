@@ -2,7 +2,7 @@
 import asyncio
 from pydantic import ValidationError
 
-from .ai_contract import parse_decision
+from .ai_contract import REASON_MESSAGES, parse_decision
 from .ai_input import prepare_ai_input
 from .config import PROVIDER_TIMEOUT_SECONDS
 from .nvidia_provider import PlannerFailure, PlanningProvider
@@ -24,7 +24,7 @@ async def plan_ai(candidate: dict, provider: PlanningProvider) -> PlanResponse:
         decision = parse_decision(text)
     except ValidationError as error:
         # Inspect only schema locations; never emit input, reason wording, or errors.
-        reason_only = all(e["loc"] == ("reason",) for e in error.errors(include_input=False, include_url=False))
+        reason_only = all(e["loc"] == ("reasonCode",) for e in error.errors(include_input=False, include_url=False))
         raise PlannerFailure(502, failure_code="INVALID_REASON" if reason_only else "INVALID_DECISION") from None
     except Exception:
         raise PlannerFailure(502, failure_code="INVALID_DECISION") from None
@@ -41,7 +41,14 @@ async def plan_ai(candidate: dict, provider: PlanningProvider) -> PlanResponse:
             raise PlannerFailure(502, failure_code="INVALID_TASK_TEXT")
         if decision.action == "PRESS_KEY" and not prepared.focused_ids:
             raise PlannerFailure(502, failure_code="INVALID_FOCUS")
-        return PlanResponse(observationId=prepared.observation_id, **decision.model_dump())
+        # The code only matters for STOP. Success needs visible evidence, and with no
+        # visual elements there is none: such a claim fails closed to a non-success code.
+        code = decision.reasonCode if decision.action == "STOP" else "ADVANCE_GOAL"
+        if code == "GOAL_ACHIEVED" and not prepared.visual_ids:
+            code = "INSUFFICIENT_CONTEXT"
+        payload = decision.model_dump()
+        payload.pop("reasonCode", None)
+        return PlanResponse(observationId=prepared.observation_id, reason=REASON_MESSAGES[code], **payload)
     except PlannerFailure:
         raise
     except Exception:

@@ -81,6 +81,9 @@ const NON_SUCCESS_STOP_REASONS = [
   ['The request cannot be completed safely.', STOP_CODE.UNSAFE],
   ['Required fields are filled and Continue is visible.', STOP_CODE.NO_PROGRESS],
   ['A suitable visual target is visible.', STOP_CODE.NO_PROGRESS],
+  // AI reasonCode messages (server REASON_MESSAGES) added with the reasonCode contract
+  ['Required information is missing or unavailable.', STOP_CODE.INCOMPLETE_CONTEXT],
+  ['The next action advances the goal.', STOP_CODE.NO_PROGRESS],
   // deterministic mode — server/app/planner.py
   ['Goal is not supported by the deterministic travel planner.', STOP_CODE.UNSUPPORTED_GOAL],
   ['Required travel fields are missing, ambiguous or incomplete.', STOP_CODE.INCOMPLETE_CONTEXT],

@@ -182,6 +182,14 @@ results; action goals are achieved only when the result is visible; check-AND-ac
 only after the act; if one element's allowedActions clearly advances an unfinished goal,
 take it. Model behaviour is checked live by `node scripts/smoke-semantics.mjs` (6 scenarios).
 
+**Phase 13F (stable planner reason codes) DONE (automated; live 6/6 PENDING user):** the
+model no longer copies reason sentences (paraphrases failed as INVALID_REASON). It returns
+`reasonCode` in {ADVANCE_GOAL, GOAL_ACHIEVED, NO_VALID_TARGET, UNSAFE_TO_CONTINUE,
+INSUFFICIENT_CONTEXT}; the server maps it to ONE fixed message (`REASON_MESSAGES`) that stays
+the wire `reason`, so the extension controller/13A-13C paths are unchanged. Non-STOP actions
+always carry the ADVANCE_GOAL message; GOAL_ACHIEVED with zero visual elements becomes
+INSUFFICIENT_CONTEXT (no visible evidence). Prompt policy is explicit per code.
+
 Next phase (not started): final evaluation metrics + demo polish + submission cleanup.
 Do not start vault/TYPE_LOCAL_REF, TEE, Raspberry Pi, another browser, or a new
 perception engine without the user assigning it.

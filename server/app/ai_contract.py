@@ -4,24 +4,38 @@ from typing import Literal, get_args
 
 from .schemas import ActionPayload
 
-# Fixed, non-sensitive reason vocabulary. GOAL_ACHIEVED_REASON is the ONLY value
-# that asserts the goal was reached; every other value describes a pre-action state
-# or an inability to continue. The extension classifies terminal outcomes off this
-# distinction (extension/src/shared/outcome-contract.js), so a STOP carrying any
-# other reason must never be reported as success.
+# The model returns a machine-readable reasonCode, never free text: exact sentences were
+# too brittle (paraphrases failed as INVALID_REASON). The server maps each code to ONE
+# fixed message that becomes PlanResponse.reason, so no model wording reaches the browser.
+# GOAL_ACHIEVED_REASON is the ONLY message that asserts success; the extension classifies
+# terminal outcomes off these messages (extension/src/shared/outcome-contract.js).
+ReasonCode = Literal["ADVANCE_GOAL", "GOAL_ACHIEVED", "NO_VALID_TARGET",
+                     "UNSAFE_TO_CONTINUE", "INSUFFICIENT_CONTEXT"]
+
 GOAL_ACHIEVED_REASON = "The goal is already achieved."
 
+# Outbound message vocabulary; a literal so the extension's drift guard can read it.
 SafeReason = Literal[
+    "The next action advances the goal.",
     "The goal is already achieved.",
-    "Required fields are filled and Continue is visible.",
-    "A suitable visual target is visible.",
     "No suitable visual target is available.",
     "The request cannot be completed safely.",
+    "Required information is missing or unavailable.",
 ]
+
+REASON_MESSAGES = {
+    "ADVANCE_GOAL": "The next action advances the goal.",
+    "GOAL_ACHIEVED": GOAL_ACHIEVED_REASON,
+    "NO_VALID_TARGET": "No suitable visual target is available.",
+    "UNSAFE_TO_CONTINUE": "The request cannot be completed safely.",
+    "INSUFFICIENT_CONTEXT": "Required information is missing or unavailable.",
+}
+assert set(REASON_MESSAGES) == set(get_args(ReasonCode))
+assert set(REASON_MESSAGES.values()) == set(get_args(SafeReason))
 
 
 class ModelDecision(ActionPayload):
-    reason: SafeReason
+    reasonCode: ReasonCode
 
 
 SYSTEM_PROMPT = """You are the next-action planner of a privacy-preserving browser agent.
@@ -46,20 +60,18 @@ SCROLL moves the visible page to find content outside the current observation.
 NAVIGATE opens an http/https page required by the goal. Never include credentials.
 pageOrigin, when present, identifies the current site without private paths or queries.
 Decision policy:
-- READY is not ACHIEVED. Filled fields, typed text, a visible submit/search control, or being
-  on some other page are prerequisites, not results. When the goal asks to act (submit, send,
-  open, search, navigate, click, type, continue), it is achieved only when the RESULT of that
-  act is visible in the current observation (e.g. a confirmation, search results, the requested
-  site). A goal that asks to check AND act is achieved only after the act.
-- If the goal is unfinished and exactly one element's allowedActions clearly advances it,
-  choose that one action. Do not STOP merely because prerequisites are satisfied.
-- STOP with target=null if the observed goal is already achieved or proceeding would be unsafe.
-  These two cases are NOT the same and must not share a reason. When you STOP because
-  the goal is already achieved - with visible evidence of the result - the reason MUST be
-  exactly "The goal is already achieved."
-  When you STOP for any other cause - no usable target, missing information, ambiguity,
-  or an unsafe next step - you MUST NOT use that reason, because it is the only value
-  that reports success and it decides whether the run is shown to the user as complete.
+- GOAL_ACHIEVED only when the requested RESULT is visibly present in the current observation
+  (e.g. a confirmation, search results, the requested site). READY is not ACHIEVED: filled
+  fields, typed text, a visible submit/search control, being on some other page, having no
+  candidate, or being uncertain are never evidence that the goal is already achieved.
+  A goal that asks to check AND act is achieved only after the act.
+- Result not visible, and an action advances the goal (an element whose allowedActions
+  lists it, or NAVIGATE/SCROLL): choose that one action with ADVANCE_GOAL. Do not STOP
+  merely because prerequisites are satisfied.
+- Result not visible and no valid action: STOP with NO_VALID_TARGET when there is no valid
+  actionable target, or INSUFFICIENT_CONTEXT when required information is missing,
+  [WITHHELD], or targets are ambiguous. Never GOAL_ACHIEVED in these cases.
+- Proceeding would be unsafe: STOP with UNSAFE_TO_CONTINUE.
 - For a goal to submit/continue the current travel form, require all seven roles:
   name, email, phone, employee_id, password, destination, purpose, each with filled=true
   and no [WITHHELD] value. If these conditions hold and exactly one actionable=true
@@ -67,21 +79,17 @@ Decision policy:
   CLICK with that element's exact id. Do not choose STOP in this situation.
   Filled fields alone do not mean the form has been submitted or the goal achieved.
   For this form, STOP if a required field is missing/incomplete/unavailable or no valid actionable target exists.
-- For other goals, choose an appropriate safe action. Navigate when the required site
-  is not open; TYPE task text into a unique editable candidate, then use ENTER if needed.
-  Use SCROLL when needed to reveal content. STOP when the goal is visibly achieved,
-  required private information is unavailable, targets are ambiguous, or no safe action
-  can advance the goal. No actionable target alone does not rule out NAVIGATE or SCROLL.
-  Of those, only a visibly achieved goal takes the achieved reason; the rest do not.
+- For other goals: NAVIGATE when the required site is not open; TYPE task text into a
+  unique editable candidate, then use ENTER if needed; SCROLL to reveal content. No
+  actionable target alone does not rule out NAVIGATE or SCROLL.
 Never invent IDs or click non-actionable labels/fields such as Password or Email.
 Never output selectors, coordinates, code, JavaScript, commands or extra properties.
-Return strict JSON with action, reason, and only the parameters for that action:
+Return strict JSON with action, reasonCode, and only the parameters for that action:
 CLICK: target (visual id). TYPE: target (visual id), text (task text).
 PRESS_KEY: key="ENTER". SCROLL: direction="UP" or "DOWN", amount="SMALL", "MEDIUM" or "LARGE".
 NAVIGATE: url (absolute http/https URL). STOP: target=null.
-The reason MUST be copied verbatim as exactly one of these strings:
-""" + "\n".join(get_args(SafeReason)) + """
-Do not invent, paraphrase, translate or alter the reason text; do not provide private
+reasonCode is exactly one of: """ + ", ".join(get_args(ReasonCode)) + """.
+Every non-STOP action uses ADVANCE_GOAL. Output no reason text, explanation, private
 reasoning or step-by-step chain-of-thought."""
 
 

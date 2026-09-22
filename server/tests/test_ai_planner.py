@@ -9,7 +9,7 @@ from unittest.mock import patch
 import httpx
 from fastapi.testclient import TestClient
 
-from app.ai_contract import SYSTEM_PROMPT
+from app.ai_contract import REASON_MESSAGES, SYSTEM_PROMPT
 from app.ai_input import prepare_ai_input
 from app.ai_planner import plan_ai
 from app.config import MODEL, MODE_HEADER, planner_mode
@@ -18,7 +18,7 @@ from app.nvidia_provider import NvidiaProvider, PlannerFailure, PROVIDER_URL
 from app.schemas import SafeAgentContext
 
 SECRETS = ["Rahul Sharma", "rahul@example.com", "9876543210", "EMP1024", "secret123"]
-REASON = "Required fields are filled and Continue is visible."
+CODE = "ADVANCE_GOAL"
 ORIGIN = "chrome-extension://" + "a" * 32
 
 
@@ -27,7 +27,7 @@ def fixture():
 
 
 def decision(**changes):
-    return json.dumps({"action": "CLICK", "target": "visual_12", "reason": REASON, **changes})
+    return json.dumps({"action": "CLICK", "target": "visual_12", "reasonCode": CODE, **changes})
 
 
 def envelope(text=None):
@@ -59,21 +59,29 @@ class PromptPolicyTests(unittest.TestCase):
         self.assertNotRegex(prompt, r"visual_[0-9]+|obs_[a-zA-Z0-9_-]+")
 
     def test_ready_state_is_not_achieved_policy(self):
-        # Live regression: step-1 STOP "The goal is already achieved." on a filled, unsubmitted
-        # form. Success needs visible evidence of the RESULT; prerequisites are not results.
+        # Live regressions: step-1 STOP "achieved" on a filled, unsubmitted form, and
+        # GOAL_ACHIEVED when nothing could be done. Success needs visible evidence.
         prompt = " ".join(SYSTEM_PROMPT.split())
-        for rule in ["READY is not ACHIEVED",
-                     "Filled fields, typed text, a visible submit/search control, or being on some other page are prerequisites, not results",
-                     "it is achieved only when the RESULT of that act is visible in the current observation",
+        for rule in ["GOAL_ACHIEVED only when the requested RESULT is visibly present in the current observation",
+                     "READY is not ACHIEVED",
+                     "filled fields, typed text, a visible submit/search control, being on some other page, "
+                     "having no candidate, or being uncertain are never evidence that the goal is already achieved",
                      "A goal that asks to check AND act is achieved only after the act",
-                     "exactly one element's allowedActions clearly advances it, choose that one action",
+                     "choose that one action with ADVANCE_GOAL",
                      "Do not STOP merely because prerequisites are satisfied",
-                     "with visible evidence of the result"]:
+                     "STOP with NO_VALID_TARGET when there is no valid actionable target, or INSUFFICIENT_CONTEXT",
+                     "Never GOAL_ACHIEVED in these cases",
+                     "Proceeding would be unsafe: STOP with UNSAFE_TO_CONTINUE",
+                     "reasonCode is exactly one of: ADVANCE_GOAL, GOAL_ACHIEVED, NO_VALID_TARGET, "
+                     "UNSAFE_TO_CONTINUE, INSUFFICIENT_CONTEXT.",
+                     "Output no reason text"]:
             self.assertIn(rule, prompt)
-        # The generic policy names no page text, site or demo value.
-        policy = prompt[prompt.index("READY is not ACHIEVED"):prompt.index("- STOP with target=null")]
+        # The generic policy names no page text, site or demo value; no reason sentences remain.
+        policy = prompt[prompt.index("GOAL_ACHIEVED only when"):prompt.index("- For a goal to submit/continue")]
         for token in ["Continue", "Bengaluru", "travel", "YouTube", "visual_"]:
             self.assertNotIn(token, policy)
+        for sentence in REASON_MESSAGES.values():
+            self.assertNotIn(sentence, prompt)
 
     def test_stop_conditions_preserve_redaction_and_injection_policy(self):
         prompt = " ".join(SYSTEM_PROMPT.split())
@@ -150,11 +158,12 @@ class AIPlannerTests(unittest.IsolatedAsyncioTestCase):
     async def test_valid_click_exact_wire_contract(self):
         plan = await plan_ai(fixture(), FakeProvider())
         self.assertEqual(plan.model_dump(), {"schemaVersion": 1, "observationId": "obs_demo-abc",
-                                           "action": "CLICK", "target": "visual_12", "reason": REASON})
+                                           "action": "CLICK", "target": "visual_12",
+                                           "reason": REASON_MESSAGES["ADVANCE_GOAL"]})
 
     async def test_valid_stop(self):
         result = await plan_ai(fixture(), FakeProvider(decision(action="STOP", target=None,
-                                                              reason="No suitable visual target is available.")))
+                                                              reasonCode="NO_VALID_TARGET")))
         self.assertEqual(result.action, "STOP"); self.assertIsNone(result.target)
 
     async def test_all_supplied_ids_and_server_owned_observation_binding(self):
@@ -169,14 +178,16 @@ class AIPlannerTests(unittest.IsolatedAsyncioTestCase):
     async def test_malicious_and_malformed_outputs_rejected_without_repair(self):
         outputs = [
             decision(target="#continue"), decision(target="visual_999"),
-            json.dumps({"action": "CLICK", "x": 100, "y": 200, "reason": REASON}),
+            json.dumps({"action": "CLICK", "x": 100, "y": 200, "reasonCode": CODE}),
             decision(action="RUN_JS"), decision(javascript="document.querySelector('button')"),
             decision(observationId="obs_other"), decision(schemaVersion=1), decision(url="https://example.com"),
             decision(target=None), decision(action="STOP"), decision(target=12),
-            decision(reason="document.querySelector('button').click()"), decision(reason=SECRETS[0]),
-            decision(reason=""), decision(reason="x" * 201), decision(reason="An unapproved explanation."),
+            decision(reasonCode="document.querySelector('button').click()"), decision(reasonCode=SECRETS[0]),
+            decision(reasonCode=""), decision(reasonCode="x" * 201), decision(reasonCode="An unapproved explanation."),
+            decision(reasonCode="advance_goal"), decision(reason="Free text is never forwarded."),
+            json.dumps({"action": "CLICK", "target": "visual_12", "reason": "The goal is already achieved."}),
             "plain text", "{bad JSON", "", "null", "[]", "```json\n" + decision() + "\n```",
-            '{"action":"STOP","action":"CLICK","target":"visual_12","reason":' + json.dumps(REASON) + '}',
+            '{"action":"STOP","action":"CLICK","target":"visual_12","reasonCode":' + json.dumps(CODE) + '}',
         ]
         for index, output in enumerate(outputs):
             with self.subTest(case=index + 1):
@@ -211,7 +222,7 @@ class AIPlannerTests(unittest.IsolatedAsyncioTestCase):
         # No actionable candidate present → only STOP is acceptable; a CLICK is rejected.
         none_actionable = two_elements(); none_actionable["actionCandidates"] = []
         stop = await plan_ai(none_actionable, FakeProvider(decision(action="STOP", target=None,
-            reason="No suitable visual target is available.")))
+            reasonCode="NO_VALID_TARGET")))
         self.assertEqual(stop.action, "STOP")
         with self.assertRaises(PlannerFailure):
             await plan_ai(none_actionable, FakeProvider(decision(target="visual_12")))
@@ -247,6 +258,22 @@ class AIPlannerTests(unittest.IsolatedAsyncioTestCase):
         elements = {e["id"]: e for e in json.loads(prepare_ai_input(focused).content)["visualState"]["elements"]}
         self.assertEqual(elements["visual_9"]["allowedActions"], ["TYPE", "PRESS_KEY"])
         self.assertEqual(elements["visual_30"]["allowedActions"], [])
+
+    async def test_reason_code_maps_to_fixed_message_and_success_needs_visible_evidence(self):
+        async def run(data, **changes):
+            return await plan_ai(data, FakeProvider(decision(**changes)))
+        stop = dict(action="STOP", target=None)
+        for code, message in REASON_MESSAGES.items():
+            plan = await run(fixture(), **stop, reasonCode=code)
+            self.assertEqual(plan.reason, message)
+        # Non-STOP actions always carry the ADVANCE_GOAL message, whatever code was sent.
+        plan = await run(fixture(), reasonCode="GOAL_ACHIEVED")
+        self.assertEqual((plan.action, plan.reason), ("CLICK", REASON_MESSAGES["ADVANCE_GOAL"]))
+        # No visual elements => no visible evidence => a success claim fails closed.
+        empty = fixture(); empty["visualElements"] = []; empty["actionCandidates"] = []
+        plan = await run(empty, **stop, reasonCode="GOAL_ACHIEVED")
+        self.assertEqual(plan.reason, REASON_MESSAGES["INSUFFICIENT_CONTEXT"])
+        self.assertNotIn("reasonCode", plan.model_dump())
 
     async def test_provider_timeout_is_bounded(self):
         class HangingProvider:

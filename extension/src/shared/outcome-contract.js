@@ -7,7 +7,8 @@
 // carried both meanings at once.
 //
 // The planner reason vocabulary is server-owned and fixed:
-//   AI mode            server/app/ai_contract.py  -> SafeReason (pydantic Literal)
+//   AI mode            server/app/ai_contract.py  -> SafeReason (pydantic Literal); the
+//                      model emits only a reasonCode, which the server maps to one of these
 //   deterministic mode server/app/planner.py      -> fixed module constants
 // Both are server-authored constants validated before they reach the browser;
 // none is free model text. GOAL_ACHIEVED_REASON is the only value that asserts
@@ -37,9 +38,13 @@ const CLASSIFICATION = Object.freeze({
   // --- success: the only reason that reports an achieved goal ---
   [GOAL_ACHIEVED_REASON]: STOP_CODE.GOAL_ACHIEVED,
 
-  // --- AI SafeReason, non-success ---
-  'No suitable visual target is available.': STOP_CODE.NO_TARGET,
-  'The request cannot be completed safely.': STOP_CODE.UNSAFE,
+  // --- AI SafeReason, non-success (server REASON_MESSAGES) ---
+  'No suitable visual target is available.': STOP_CODE.NO_TARGET,          // NO_VALID_TARGET
+  'The request cannot be completed safely.': STOP_CODE.UNSAFE,             // UNSAFE_TO_CONTINUE
+  'Required information is missing or unavailable.': STOP_CODE.INCOMPLETE_CONTEXT, // INSUFFICIENT_CONTEXT
+  // ADVANCE_GOAL on a STOP contradicts itself: the planner stopped without acting.
+  'The next action advances the goal.': STOP_CODE.NO_PROGRESS,
+  // Pre-reasonCode server wording, still classified (non-success) for older servers.
   // These two describe a state BEFORE acting ("Continue is visible" means the
   // form is not submitted yet). A STOP carrying one is a stall, not a success.
   'Required fields are filled and Continue is visible.': STOP_CODE.NO_PROGRESS,

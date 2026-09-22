@@ -1425,3 +1425,26 @@ Extension **383/383**, server **80/80**, `npm run check`, `git diff --check`, `s
    STOP / GOAL_ACHIEVED -> result verification VERIFIED -> TASK COMPLETE.
 3. If step 1 is a non-success STOP instead, read `ACTION_FUSION ... clickable=N` in the
    service-worker console: `clickable=0` means Continue was not grounded (e.g. not in view).
+
+---
+
+## Phase 13F — stable planner reason codes (2026-09-23)
+
+| Check | Test | Result |
+|---|---|---|
+| each reasonCode -> its fixed message on the wire | server `test_reason_code_maps_to_fixed_message_and_success_needs_visible_evidence` | PASS |
+| non-STOP carries ADVANCE_GOAL message whatever code was sent | same | PASS |
+| GOAL_ACHIEVED with zero visual elements -> INSUFFICIENT_CONTEXT | same | PASS |
+| invalid code -> INVALID_REASON; free-text `reason` -> rejected, never forwarded | `test_rejected_output_has_fixed_diagnostic_without_model_text`, `test_malicious_and_malformed_outputs_rejected_without_repair` | PASS |
+| explicit per-code policy; no reason sentences or demo tokens in the policy | `test_ready_state_is_not_achieved_policy` | PASS |
+| every server message classified, exactly one success | extension drift guards (`outcome-contract.test.mjs`) | PASS |
+| new messages non-success | `agent-controller.test.mjs` 13A-2 list (+2) | PASS |
+| 13A/13B/13C unchanged | full extension suite | PASS |
+| scenario contexts + correct codes accepted by the real server | manual run of `prepare_ai_input` + `plan_ai` (mac venv) | PASS |
+
+Server **81/81**, extension **385/385**, check, diff-check, scan:secrets PASS.
+
+### Live: `node scripts/smoke-semantics.mjs` — PENDING (user, AI mode)
+
+Not runnable here (no NVIDIA key). Restart the server, run it, expect `PASS semantics: 6/6`.
+Only then run the travel RUN TASK in Chrome.
