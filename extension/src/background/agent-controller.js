@@ -11,6 +11,7 @@
 // so a stale plan can never act on a newer page.
 
 import { classifyStop } from '../shared/outcome-contract.js';
+import { ACTION_FIELDS } from '../shared/action-contract.js';
 
 export const AGENT_MAX_STEPS = 8;
 export const AGENT_SETTLE_MS = 750;
@@ -22,6 +23,36 @@ export const AGENT_STATE = Object.freeze({
   RUNNING: 'RUNNING', COMPLETED: 'COMPLETED', STOPPED: 'STOPPED',
   FAILED: 'FAILED', CANCELLED: 'CANCELLED',
 });
+
+// Phase 13B — the popup-safe run snapshot, derived ONLY from the events runAgent
+// already emits, so it cannot drift from the controller. Whitelisted fields only:
+// no target/page/OCR text, no plan reason, no URL, no exception body.
+export function initialAgentSnapshot(maxSteps = AGENT_MAX_STEPS) {
+  return { active: true, runId: null, state: AGENT_STATE.RUNNING, step: 0, maxSteps,
+    lastAction: null, outcomeCode: null };
+}
+
+const TERMINAL_EVENTS = ['AGENT_COMPLETED', 'AGENT_STOPPED', 'AGENT_FAILED'];
+
+export function reduceAgentSnapshot(snapshot, e) {
+  if (!snapshot || !e) return snapshot;
+  if (e.event === 'AGENT_RUN_STARTED') {
+    return { ...initialAgentSnapshot(e.maxSteps ?? snapshot.maxSteps), runId: e.runId };
+  }
+  // Events of any other run (or after this one ended) never mutate the snapshot.
+  if (!snapshot.active || e.runId !== snapshot.runId) return snapshot;
+  if (e.event === 'AGENT_STEP_STARTED') return { ...snapshot, step: e.step };
+  if (e.event === 'PLAN_READY') {
+    return { ...snapshot, lastAction: Object.hasOwn(ACTION_FIELDS, e.action) ? e.action : null };
+  }
+  if (TERMINAL_EVENTS.includes(e.event)) {
+    return { ...snapshot, active: false,
+      state: Object.hasOwn(AGENT_STATE, e.state) ? e.state : AGENT_STATE.FAILED,
+      step: e.step ?? snapshot.step,
+      outcomeCode: typeof e.reason === 'string' && /^[A-Z_]{1,64}$/.test(e.reason) ? e.reason : null };
+  }
+  return snapshot;
+}
 
 export function newRunId() {
   return 'run_' + crypto.randomUUID();

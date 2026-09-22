@@ -1188,3 +1188,73 @@ TASK STOPPED, which is correct behaviour, not a regression.
 Note: `TASK COMPLETE` currently reflects the **planner's** judgement that the goal was
 reached, not independent pixel verification. Wiring Phase 8 verification into the
 autonomous loop is a later phase and remains an open issue.
+
+---
+
+## Phase 13B — popup run-state rehydration (2026-09-23)
+
+Regression target: closing and reopening the popup during an autonomous run showed Idle,
+hid STOP TASK and re-enabled RUN TASK while the worker was still acting. The worker's run
+snapshot is now the source of truth; the popup queries it on every open.
+
+All in `extension/tests/agent-state.test.mjs` unless noted.
+
+| # | Requirement | Test | Result |
+|---|-------------|------|--------|
+| 1 | popup opens idle | `popup open, idle` — card hidden, STOP hidden, RUN enabled | PASS |
+| 2 | opens during run -> RUNNING | `popup reopen during a run` | PASS |
+| 3 | step / maxSteps restored | same — `2 / 8`; worker test `step 1`, `maxSteps 8` | PASS |
+| 4 | last safe action restored | same — `TYPE` (action only, no target text) | PASS |
+| 5 | STOP TASK available after reopen | same — STOP shown, RUN + ANALYZE disabled | PASS |
+| 6 | cancel after reopen cancels same run | worker test — `CANCEL_TASK{runId}` -> summary runId equal, CANCELLED, 0 clicks after | PASS |
+| 7 | reopen starts no duplicate run | popup sends only GET_VERIFICATION + GET_AGENT_STATE; worker rejects second RUN_TASK | PASS |
+| 8 | completed restores TASK COMPLETE | `popup reopen after COMPLETED/GOAL_ACHIEVED`; worker retains COMPLETED snapshot | PASS |
+| 9 | non-success STOP restores TASK STOPPED | `... STOPPED/STOP_NO_TARGET` | PASS |
+| 10 | failed restores TASK FAILED | `... FAILED/PLANNER_UNAVAILABLE` | PASS |
+| 11 | cancelled restores TASK CANCELLED | `... CANCELLED/CANCELLED` | PASS |
+| 12 | no page/OCR/PII/model text | worker test: exact key whitelist; no known PII, OCR `Continue`, goal, plan reason, URL, image; reducer drops target text, non-vocabulary actions, exception-like reasons | PASS |
+| 13 | manual mode unaffected | `verification-popup.test.mjs`, `background.test.mjs` (open now also sends read-only GET_AGENT_STATE) | PASS |
+| 14 | Phase 13A semantics green | `agent-outcome-popup.test.mjs`, `outcome-contract.test.mjs`, `agent-controller.test.mjs` | PASS |
+| - | stale runId | worker rejects `CANCEL_TASK` for an older run (`STALE_RUN`), run keeps going; popup ignores other-run AGENT_UPDATEs; reducer ignores other-run events | PASS |
+
+`npm test`: **353/353 PASS** (was 343; +10). `npm run check` PASS. `git diff --check` PASS.
+`npm run scan:secrets` PASS (193 text files) with the untracked local `server/.venv-mac/`
+excluded for the run via a session-only `core.excludesFile`; unexcluded, its only hit is an
+SPDX license identifier in pip's vendored `_spdx.py` (false positive, not repo content).
+Server code unchanged; server tests not run.
+
+### Mutation verification
+
+| Mutation | Result |
+|---|---|
+| Popup never sends GET_AGENT_STATE on open | **5 tests fail** |
+| Popup accepts AGENT_UPDATEs from any run | **1 test fails** |
+| Worker CANCEL_TASK ignores runId | **1 test fails** |
+| Reducer puts target text into lastAction | **2 tests fail** |
+| Terminal event does not release STOP/RUN controls | **1 test fails** |
+
+### MV3 service-worker limitation (honest scope)
+
+Run state lives only in service-worker memory (no `chrome.storage`; the retention test
+forbids it). While a run is active the worker is continuously making extension-API calls
+and a localhost fetch, which keeps it alive in practice. If Chrome terminates it anyway,
+the run itself stops (no code survives) and a reopened popup shows Idle — it does not
+learn the lost run's outcome. After a run ends and the popup is closed, the idle worker is
+suspended after ~30 s; reopening before that shows the final state, after that shows Idle.
+This phase guarantees rehydration only while the worker (and so the run/state) exists.
+
+### Live Phase 13B acceptance: PENDING (user)
+
+Cannot be automated here: opening/closing an extension action popup needs a human.
+
+1. Reload the unpacked extension. Start the server (AI or deterministic mode).
+2. On a page with a multi-step task (e.g. `demo/search.html` workflow), press RUN TASK.
+3. While it is running, close the popup (click the page). Reopen it within a step or two.
+   Expect: card shown, Status **RUNNING**, Step `N / 8` matching the current step,
+   Last decision shows the action type, **STOP TASK** visible, RUN TASK disabled.
+4. Press STOP TASK. Expect **TASK CANCELLED**, note "Stopped by user.", and no further
+   browser action afterwards (the run stops at its next cancellation check).
+5. Completed run: run a task to its end with the popup open, close the popup, reopen
+   within ~30 s. Expect the same final label (TASK COMPLETE / STOPPED / FAILED). After
+   the worker idles out, Idle is the expected, documented result.
+6. Manual path: ANALYZE / PLAN then EXECUTE behaves as before.

@@ -15,6 +15,7 @@ async function popup(initial = { status: 'WAITING' }) {
   const chrome = { runtime: { id: 'extension-test', onMessage: { addListener(fn) { listener = fn; } },
     sendMessage(message) {
       calls.push(message.type);
+      if (message.type === MSG.GET_AGENT_STATE) return Promise.resolve({ active: false, state: 'IDLE' });
       return message.type === MSG.GET_VERIFICATION ? Promise.resolve(initial) : new Promise((r) => { finish = r; });
     } } };
   const source = (await readFile(new URL('../src/popup/popup.js', import.meta.url), 'utf8')).replace("import { MSG } from '../shared/messages.js';", '');
@@ -43,7 +44,7 @@ test('popup shows dispatch, VERIFYING and VISUALLY VERIFIED with expected eviden
   assert.equal(el('verification-observation').textContent, 'obs_after');
   assert.equal(el('verification-privacy').textContent, 'SAFE');
   assert.equal(el('analyze').disabled, false);
-  assert.deepEqual(p.calls, [MSG.GET_VERIFICATION, MSG.EXECUTE_ACTION]);
+  assert.deepEqual(p.calls, [MSG.GET_VERIFICATION, MSG.GET_AGENT_STATE, MSG.EXECUTE_ACTION]);
 });
 test('popup failure has Analyze again and no invented evidence/privacy; external messages ignored', async () => {
   const p = await popup();
@@ -61,7 +62,8 @@ test('reopening popup reads retained safe result without planning or executing',
   const p = await popup({ status: 'VERIFIED', verificationObservationId: 'obs_after', privacy: 'SAFE' });
   assert.equal(p.elements.get('verification-status').textContent, 'VISUALLY VERIFIED');
   assert.equal(p.elements.get('verification-observation').textContent, 'obs_after');
-  assert.deepEqual(p.calls, [MSG.GET_VERIFICATION]);
+  // Read-only queries only: reopening never plans, executes, or starts/cancels a run.
+  assert.deepEqual(p.calls, [MSG.GET_VERIFICATION, MSG.GET_AGENT_STATE]);
 });
 
 test('Phase 9 popup displays supplied current-run timings, never quality percentages or missing values as zero', async () => {

@@ -1,5 +1,51 @@
 # Session Handoff
 
+## Phase 13B — popup run-state rehydration (2026-09-23)
+
+**Bug fixed: reopened popup looked idle during a live run.** The autonomous run lives in
+the service worker, but the popup only learned about it from the `RUN_TASK` response and
+live `AGENT_UPDATE` broadcasts. Closing the popup dropped both, so a reopened popup showed
+Idle, hid STOP TASK and re-enabled RUN TASK while automation was still acting.
+
+**Change (one run-state record, popup is a view):**
+- `agent-controller.js` — `initialAgentSnapshot()` + pure `reduceAgentSnapshot()`, derived
+  only from the events `runAgent` already emits. Whitelisted fields only:
+  `{ active, runId, state, step, maxSteps, lastAction, outcomeCode }`. `lastAction` must be
+  an `ACTION_FIELDS` key; `outcomeCode` must match `^[A-Z_]{1,64}$`. Events for another
+  run, or after the run ended, are ignored. No target/OCR/page text, plan reason, URL,
+  goal or exception body can enter it.
+- `service-worker.js` — the old `agentActive` boolean is replaced by `agentRun` (the
+  snapshot), reduced in the existing `agentEmit`. All concurrency guards now read
+  `agentRun?.active`. New `GET_AGENT_STATE` returns a copy (or `{active:false,state:'IDLE'}`).
+  `CANCEL_TASK` accepts an optional `runId`; a mismatching one is rejected (`STALE_RUN`)
+  and does not cancel the current run. A controller throw closes the record as FAILED.
+- `messages.js` — `GET_AGENT_STATE` added to the existing `MSG` contract.
+- `popup.js` — on open, queries `GET_AGENT_STATE` (read-only: never starts or cancels).
+  Active => card shown, RUNNING, `step / maxSteps`, last action, STOP TASK shown, RUN and
+  ANALYZE disabled. Terminal => Phase 13A labels via the existing `renderAgentEvent`.
+  STOP TASK sends the tracked `runId`; `AGENT_UPDATE`s for any other run are ignored.
+  Terminal events now release the controls (a reopened popup has no pending RUN_TASK).
+
+**MV3 limitation (documented, not solved).** State is in worker memory only; no
+`chrome.storage` (the network/retention test forbids it). During a run the worker makes
+continuous extension-API calls and a localhost fetch, which keep it alive in practice. If
+Chrome tears the worker down anyway, the run dies with it, and a reopened popup truthfully
+shows Idle — not the lost run's outcome. After a run ends and the popup is closed, the
+worker idles out (~30 s) and the retained terminal state is lost with it; reopening
+within that window shows the final state, later shows Idle.
+
+**Tests: 353/353 PASS** (was 343; +10 in `extension/tests/agent-state.test.mjs`: reducer
+x3, real service worker reopen/cancel-same-run/no-duplicate/stale-cancel/no-PII x1, popup
+x6). `verification-popup.test.mjs` now expects the read-only `GET_AGENT_STATE` on open.
+Mutation-verified: popup not querying state fails 5; popup ignoring runId fails 1; worker
+ignoring cancel runId fails 1; reducer leaking target text fails 2; terminal event not
+releasing controls fails 1. npm run check PASS, git diff --check PASS, scan:secrets PASS
+(193 files; untracked local `server/.venv-mac/` excluded for the run — its only hit is an
+SPDX license id in pip, a false positive). Server untouched; server tests not run.
+
+**Live acceptance: PENDING (user)** — see docs/TESTING.md "Phase 13B". Popup
+close/reopen needs a human on the extension action icon.
+
 ## Phase 13A — autonomous STOP / completion semantics (2026-09-23)
 
 **Bug fixed: false task completion.** `agent-controller.js` returned

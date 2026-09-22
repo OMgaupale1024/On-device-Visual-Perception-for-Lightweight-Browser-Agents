@@ -109,7 +109,9 @@ Unknown/transformed secrets remain a limitation. Empty controls need actual safe
 evidence to become candidates. Synthetic ENTER may be ignored by external sites.
 Only explicit NAVIGATE has a load-event wait; other transitions retain the existing
 short settle and fail closed if observation fails. Tab checks cannot be fully atomic.
-Worker restart drops tickets/run state safely. No private-value typing.
+Worker restart drops tickets/run state safely: a reopened popup then shows Idle, not
+the lost run's outcome; terminal state also lapses when the idle worker is suspended
+(~30 s). No persistence by design (no chrome.storage). No private-value typing.
 
 Phase 11C is DONE (live smoke, travel regression, and controlled multi-action workflow
 all user-verified; planner-latency fix confirmed at ~1s-class per call).
@@ -133,6 +135,14 @@ observe completion, so none of its STOP reasons reports success; only AI mode ca
 complete a run. Controller guards (max steps, cancellation, stale observation,
 planner/privacy fail-closed, duplicate detection) and all action behaviour are
 unchanged, as is the manual Analyze/Plan/Execute path.
+
+**Phase 13B (popup run-state rehydration) DONE:** the service worker's `agentRun`
+snapshot (reduced in `agent-controller.js` from the controller's own events; replaces the
+old `agentActive` flag) is the one run-state record. The popup queries `GET_AGENT_STATE`
+on every open and renders RUNNING/step/last action/STOP TASK or the Phase 13A terminal
+label; it never starts or cancels on open. `CANCEL_TASK` carries the runId and rejects a
+stale one. Snapshot is whitelisted: no page/OCR/PII/model text, URL or exception body.
+Live close/reopen/cancel acceptance is PENDING (user).
 
 Next phase (not started): final evaluation metrics + demo polish + submission cleanup.
 Do not start vault/TYPE_LOCAL_REF, TEE, Raspberry Pi, another browser, or a new

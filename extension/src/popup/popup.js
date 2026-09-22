@@ -331,6 +331,10 @@ const AGENT_OUTCOME = {
   LOOP_DETECTED: 'Stopped: repeated action with no progress.',
 };
 
+// Phase 13B: the background worker owns the run; the popup is only a view. This
+// is the run the popup is showing, so updates/cancels for any other run are ignored.
+let agentRunId = null;
+
 function appendAgentLog(text) {
   const row = document.createElement('div');
   row.className = 'row';
@@ -365,7 +369,27 @@ function renderAgentEvent(e) {
       : e.state === 'CANCELLED' ? 'TASK CANCELLED' : 'TASK STOPPED';
     byId('agent-status').textContent = label;
     byId('agent-note').textContent = AGENT_OUTCOME[e.reason] || 'Run ended without a confirmed result.';
+    // A reopened popup has no pending RUN_TASK response, so release controls here.
+    hide(stopBtn);
+    runBtn.disabled = false;
+    analyzeBtn.disabled = false;
+    setStatus('Done');
   }
+}
+
+// Render the worker's safe run snapshot on popup open. Never starts or cancels.
+function renderAgentSnapshot(s) {
+  if (!s?.runId) return; // no run since the worker started: normal idle UI
+  agentRunId = s.runId;
+  show(byId('agent-card'));
+  byId('agent-step').textContent = `${s.step} / ${s.maxSteps}`;
+  byId('agent-decision').textContent = s.lastAction || '–';
+  if (!s.active) { renderAgentEvent({ event: 'AGENT_' + s.state, state: s.state, reason: s.outcomeCode }); return; }
+  byId('agent-status').textContent = 'RUNNING';
+  show(stopBtn);
+  runBtn.disabled = true;
+  analyzeBtn.disabled = true;
+  setStatus('Running autonomous task…');
 }
 
 runBtn.addEventListener('click', async () => {
@@ -396,7 +420,7 @@ runBtn.addEventListener('click', async () => {
 stopBtn.addEventListener('click', async () => {
   stopBtn.disabled = true;
   byId('agent-note').textContent = 'Stopping after the current step…';
-  try { await chrome.runtime.sendMessage({ type: MSG.CANCEL_TASK }); } catch { /* ignore */ }
+  try { await chrome.runtime.sendMessage({ type: MSG.CANCEL_TASK, runId: agentRunId ?? undefined }); } catch { /* ignore */ }
   stopBtn.disabled = false;
 });
 
@@ -457,10 +481,17 @@ function renderVerification(result) {
 chrome.runtime.onMessage.addListener((message, sender) => {
   if (sender.id !== chrome.runtime.id) return false;
   if (message?.type === MSG.VERIFICATION_UPDATE) { renderVerification(message.verification); return false; }
-  if (message?.type === MSG.AGENT_UPDATE && message.update) { renderAgentEvent(message.update); return false; }
+  if (message?.type === MSG.AGENT_UPDATE && message.update) {
+    const update = message.update;
+    if (update.event === 'AGENT_RUN_STARTED') agentRunId = update.runId;
+    else if (agentRunId && update.runId !== agentRunId) return false; // stale run
+    renderAgentEvent(update);
+    return false;
+  }
   return false;
 });
 chrome.runtime.sendMessage({ type: MSG.GET_VERIFICATION }).then(renderVerification).catch(() => {});
+chrome.runtime.sendMessage({ type: MSG.GET_AGENT_STATE }).then(renderAgentSnapshot).catch(() => {});
 
 function renderMeasurements(values = {}, overrides = {}) {
   const m = { ...values };

@@ -7,7 +7,7 @@ import { verifyAfterClick } from '../verification/verify-after-click.js';
 import { MSG } from '../shared/messages.js';
 import { requestPlan } from '../transport/planner-client.js';
 import { ticketForPlan, executeTicket } from '../actions/execute-click.js';
-import { runAgent } from './agent-controller.js';
+import { runAgent, initialAgentSnapshot, reduceAgentSnapshot } from './agent-controller.js';
 import { logStage } from '../perception/diagnostics.js';
 import { navigateTab } from '../actions/execute-browser.js';
 
@@ -15,7 +15,11 @@ let busy = false;
 let executing = false;
 // Phase 11B: at most one autonomous run at a time. `agentCancel` is the current
 // run's cancellation token; flipping it prevents any pending plan from acting.
-let agentActive = false;
+// Phase 13B: `agentRun` is the ONE run-state record (null = no run since the worker
+// started). It is reduced from the controller's own events and is what a reopened
+// popup reads via GET_AGENT_STATE. In-memory only: if Chrome tears the worker down,
+// the run dies with it and a reopened popup truthfully sees no run.
+let agentRun = null;
 let agentCancel = null;
 // The one pending, single-use Phase 7 action. LOCAL ONLY; a new analysis or a
 // completed/attempted execution invalidates it. Lost if the worker is torn down,
@@ -44,8 +48,9 @@ function fromPopup(sender) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!fromPopup(sender)) return false;
   if (message?.type === MSG.GET_VERIFICATION) { sendResponse(verification); return false; }
+  if (message?.type === MSG.GET_AGENT_STATE) { sendResponse(agentRun ? { ...agentRun } : { active: false, state: 'IDLE' }); return false; }
   if (message?.type === MSG.ANALYZE_PAGE) {
-    if (busy || executing || agentActive) { sendResponse({ ok: false, error: 'Analysis already in progress.' }); return false; }
+    if (busy || executing || agentRun?.active) { sendResponse({ ok: false, error: 'Analysis already in progress.' }); return false; }
     busy = true;
     runAnalysis(message.goal).then(sendResponse).catch(() => sendResponse({
       ok: false,
@@ -54,7 +59,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message?.type === MSG.EXECUTE_ACTION) {
-    if (executing || busy || agentActive) { sendResponse({ status: 'BLOCKED', reason: 'ACTION_ALREADY_CONSUMED' }); return false; }
+    if (executing || busy || agentRun?.active) { sendResponse({ status: 'BLOCKED', reason: 'ACTION_ALREADY_CONSUMED' }); return false; }
     executing = true;
     const ticket = pendingAction;
     const executeStarted = performance.now();
@@ -79,8 +84,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message?.type === MSG.RUN_TASK) {
-    if (busy || executing || agentActive) { sendResponse({ ok: false, error: 'A task is already running.' }); return false; }
-    agentActive = true;
+    if (busy || executing || agentRun?.active) { sendResponse({ ok: false, error: 'A task is already running.' }); return false; }
+    agentRun = initialAgentSnapshot();
     const token = agentCancel = { cancelled: false, tabId: null, windowId: null };
     pendingAction = null;
     verification = { status: 'WAITING' };
@@ -92,10 +97,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       cancelled: () => token.cancelled,
     }).then((summary) => sendResponse({ ok: true, summary }))
       .catch(() => sendResponse({ ok: false, error: 'Autonomous run failed.' }))
-      .finally(() => { agentActive = false; });
+      // A controller that threw never emitted a terminal event; close the record.
+      .finally(() => { if (agentCancel === token && agentRun.active) agentRun = { ...agentRun, active: false, state: 'FAILED' }; });
     return true;
   }
   if (message?.type === MSG.CANCEL_TASK) {
+    // A cancel addressed to a run that is no longer current must not stop a newer one.
+    if (message.runId != null && message.runId !== agentRun?.runId) { sendResponse({ ok: false, reason: 'STALE_RUN' }); return false; }
     if (agentCancel) agentCancel.cancelled = true;
     sendResponse({ ok: true });
     return false;
@@ -107,6 +115,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // never target text, OCR, PII or screenshots. The popup update may carry the local,
 // already-guarded target text (same class of value manual mode renders).
 function agentEmit(event) {
+  agentRun = reduceAgentSnapshot(agentRun, event);
   logStage('agent-controller', event.event, `step=${event.step ?? '-'} action=${event.action ?? '-'} reason=${event.reason ?? '-'}`);
   chrome.runtime.sendMessage?.({ type: MSG.AGENT_UPDATE, update: event }).catch(() => {});
 }
