@@ -1,5 +1,58 @@
 # Session Handoff
 
+## Phase 13C — autonomous result verification (2026-09-23)
+
+**Gap closed:** TASK COMPLETE meant only "the planner says the goal is achieved".
+- BEFORE: TASK COMPLETE = planner-declared success.
+- AFTER: TASK COMPLETE = planner-declared success **and** local result verification
+  of the current fresh post-action observation. Either one alone => not COMPLETED.
+
+**Existing Phase 8 verifier, inspected:** `verifyAfterClick` (manual CLICK only) waits
+750 ms, takes ONE new local observation, then `verifyVisualResult(agentContext,
+{actionObservationId, dispatchedAt})` returns `{status: VERIFIED|NOT_VERIFIED, reason?,
+evidence?}`. Gates: builder-approved frozen context (`prepareAgentContextForTransport`),
+new observation id, capture after dispatch. Logs nothing page-derived. **Its evidence rule
+is hard-wired to "Travel Request Submitted"** (any other spec => INVALID_SPEC).
+
+**Decision:** reuse the gates and result contract, not the travel phrase (no travel-specific
+success check allowed). `verify-visual-result.js` now factors the two gates out and adds
+`verifyStateChange(context, lastAction)` plus `stateSignature(context)` (moved from the
+service worker, where it remains the loop-detection signal). Evidence rule: the fresh safe
+state fingerprint must differ from the one the last executed action saw. Reasons:
+NO_ACTION_TAKEN, STALE_OBSERVATION, PRIVACY_FAILED, NO_STATE_CHANGE, INVALID_SPEC.
+**Limit (honest):** this shows the action visibly changed the page; it is not semantic proof
+that the goal was met, and not universal verification.
+
+**Wiring:**
+- `agent-controller.js` (orchestration only): records `lastAction = {actionObservationId,
+  dispatchedAt, beforeSignature}` after each EXECUTED action. On a STOP that
+  `classifyStop` calls success, emits VERIFICATION_STARTED, calls injected
+  `verifyResult(op, lastAction)` with the CURRENT op, emits VERIFICATION_RESULT
+  `{status, reason, detail, ms}`, re-checks cancellation, then COMPLETED only if verified.
+  Missing/throwing verifier => VERIFIER_UNAVAILABLE. Non-success STOPs, planner and
+  privacy failures never reach the verifier.
+- `outcome-contract.js`: `VERIFY_CODE` + `verifiedOutcome()` (fail-closed; only
+  `status === 'VERIFIED'` is success).
+- `service-worker.js`: `verifyResult` = `verifyStateChange(op.context, lastAction)` on the
+  same approved context the planner received (no extra capture); safe log adds
+  `detail=`/`ms=` (fixed codes and numbers only).
+- `popup.js`: fixed texts for the three codes; one agent-log line
+  "Step N: result verification VERIFIED / NOT VERIFIED". No layout change. Phase 13B
+  snapshot/rehydration untouched (it already carries the terminal code).
+
+**Tests: 369/369 PASS** (was 353; +16 in `extension/tests/agent-verification.test.mjs`).
+Eight existing tests asserted planner-only completion; they now inject a verifier stub or use
+fixtures whose page visibly changes after the last action (`agent-controller`,
+`browser-actions`, `agent-integration`, `agent-state`, `browser-actions-integration`).
+Mutations (applied, observed, reverted): bypass verification fails 10; failure treated as
+COMPLETED fails 6; verify pre-action observation fails 6; verify every STOP fails 15;
+verifier skips freshness fails 1; verifier skips change check fails 2.
+npm run check PASS, git diff --check PASS, scan:secrets PASS (194 files; untracked
+`server/.venv-mac/` excluded for the run). Server untouched; server tests not run.
+
+**Live acceptance: PENDING (user)** — needs Chrome + AI mode (deterministic mode never
+claims GOAL_ACHIEVED). Steps in docs/TESTING.md "Phase 13C".
+
 ## Phase 13B — popup run-state rehydration (2026-09-23)
 
 **Bug fixed: reopened popup looked idle during a live run.** The autonomous run lives in

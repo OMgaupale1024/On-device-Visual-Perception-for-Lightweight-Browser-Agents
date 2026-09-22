@@ -10,7 +10,7 @@
 // always validated against its own observation (ticket carries the observationId),
 // so a stale plan can never act on a newer page.
 
-import { classifyStop } from '../shared/outcome-contract.js';
+import { classifyStop, verifiedOutcome } from '../shared/outcome-contract.js';
 import { ACTION_FIELDS } from '../shared/action-contract.js';
 
 export const AGENT_MAX_STEPS = 8;
@@ -66,8 +66,12 @@ export function newRunId() {
 //   settle(ms)        -> Promise (post-action page-settle delay before re-observe)
 //   emit(event)       -> void (safe audit / UI updates; never PII)
 //   cancelled()       -> boolean (true once the run is cancelled or superseded)
+//   verifyResult(op, lastAction) -> { status:'VERIFIED'|'NOT_VERIFIED', reason? }
+//     local result check of the CURRENT fresh observation (op) against the last
+//     executed action ({ actionObservationId, dispatchedAt, beforeSignature } or null).
+//     Missing or throwing => VERIFIER_UNAVAILABLE (fail closed, never COMPLETED).
 export async function runAgent(goal, {
-  observePlan, execute, settle = () => Promise.resolve(), emit = () => {}, cancelled = () => false,
+  observePlan, execute, verifyResult, settle = () => Promise.resolve(), emit = () => {}, cancelled = () => false,
   maxSteps = AGENT_MAX_STEPS, settleMs = AGENT_SETTLE_MS, duplicateLimit = AGENT_DUPLICATE_LIMIT,
 } = {}) {
   const runId = newRunId();
@@ -84,7 +88,7 @@ export async function runAgent(goal, {
     return summary;
   };
 
-  let lastKey = null, repeats = 1;
+  let lastKey = null, repeats = 1, lastAction = null;
   for (let step = 1; step <= maxSteps; step++) {
     if (cancelled()) return done(AGENT_STATE.CANCELLED, 'CANCELLED', step);
     emit({ event: 'AGENT_STEP_STARTED', runId, step });
@@ -119,12 +123,22 @@ export async function runAgent(goal, {
 
     // A STOP is terminal, but it is NOT automatically a success: the planner
     // stops both when the goal is achieved and when it cannot safely continue.
-    // classifyStop owns that distinction (fail-closed: unknown => not success),
-    // so only an explicitly achieved goal reaches COMPLETED.
+    // classifyStop owns that distinction (fail-closed: unknown => not success).
+    // Phase 13C: even an achieved-goal STOP is only the planner's claim; COMPLETED
+    // also needs the local verifier to find evidence in THIS fresh observation.
     if (plan.action === 'STOP') {
       stepTimings.push({ step, ms: Date.now() - stepStart, action: 'STOP' });
       const outcome = classifyStop(plan.reason);
-      return done(outcome.success ? AGENT_STATE.COMPLETED : AGENT_STATE.STOPPED, outcome.code, step);
+      if (!outcome.success) return done(AGENT_STATE.STOPPED, outcome.code, step);
+      emit({ event: 'VERIFICATION_STARTED', runId, step });
+      const verifyStart = Date.now();
+      let verification = null;
+      try { verification = await verifyResult(op, lastAction); } catch { /* unavailable */ }
+      const verdict = verifiedOutcome(verification);
+      emit({ event: 'VERIFICATION_RESULT', runId, step, status: verdict.success ? 'VERIFIED' : 'NOT_VERIFIED',
+        reason: verdict.code, detail: verdict.detail, ms: Date.now() - verifyStart });
+      if (cancelled()) return done(AGENT_STATE.CANCELLED, 'CANCELLED', step);
+      return done(verdict.success ? AGENT_STATE.COMPLETED : AGENT_STATE.STOPPED, verdict.code, step);
     }
 
     // Every action ticket already re-validated observation binding and parameters.
@@ -150,6 +164,8 @@ export async function runAgent(goal, {
     if (exec?.status !== 'EXECUTED') {
       return done(AGENT_STATE.FAILED, exec?.reason || 'ACTION_FAILED', step);
     }
+    // Reference for result verification: the pre-action observation and dispatch time.
+    lastAction = { actionObservationId: op.observationId, dispatchedAt: Date.now(), beforeSignature: op.signature };
     emit({ event: 'ACTION_EXECUTED', runId, step, action: plan.action, target: op.targetText });
     stepTimings.push({ step, ms: Date.now() - stepStart, action: plan.action });
 

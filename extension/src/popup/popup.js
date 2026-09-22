@@ -310,8 +310,12 @@ executeBtn.addEventListener('click', async () => {
 // model output and page text can never reach the UI; target text below is the
 // local, already-guarded OCR text.
 // Only GOAL_ACHIEVED reports success — every other entry must read as non-success.
+// Since Phase 13C GOAL_ACHIEVED means planner claim + local result verification.
 const AGENT_OUTCOME = {
-  GOAL_ACHIEVED: 'Task complete — the planner reported the goal achieved.',
+  GOAL_ACHIEVED: 'Task complete — the planner reported the goal achieved and a fresh local observation showed the result.',
+  VERIFICATION_FAILED: 'Stopped: the planner reported success, but local verification found no supporting evidence. Not confirmed.',
+  VERIFICATION_INCONCLUSIVE: 'Stopped: the planner reported success before any action was taken; nothing could be verified.',
+  VERIFIER_UNAVAILABLE: 'Stopped: result verification was unavailable. The goal was not confirmed.',
   STOP_NO_TARGET: 'Stopped: no suitable target was available. The goal was not confirmed.',
   STOP_UNSAFE: 'Stopped: the planner judged it unsafe to continue.',
   STOP_NO_PROGRESS: 'Stopped: the planner took no action and the goal was not confirmed.',
@@ -361,6 +365,10 @@ function renderAgentEvent(e) {
     return;
   }
   if (e.event === 'ACTION_EXECUTED') { appendAgentLog(`Step ${e.step}: ${e.action || 'CLICK'} dispatched`); return; }
+  if (e.event === 'VERIFICATION_RESULT') {
+    appendAgentLog(`Step ${e.step}: result verification ${e.status === 'VERIFIED' ? 'VERIFIED' : 'NOT VERIFIED'}`);
+    return;
+  }
   if (['AGENT_COMPLETED', 'AGENT_STOPPED', 'AGENT_FAILED', 'AGENT_CANCELLED'].includes(e.event)) {
     // Only AGENT_STATE.COMPLETED may read as success. Every other terminal
     // state is shown as stopped/failed/cancelled, never as TASK COMPLETE.

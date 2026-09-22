@@ -70,3 +70,28 @@ export function classifyStop(reason) {
   const code = CLASSIFICATION[reason];
   return { code, success: code === STOP_CODE.GOAL_ACHIEVED };
 }
+
+// Phase 13C — a GOAL_ACHIEVED STOP is only the planner's CLAIM. A run completes only
+// when local result verification of the current fresh observation also passes.
+// These codes say why a claimed success was not confirmed (all non-success).
+export const VERIFY_CODE = Object.freeze({
+  FAILED: 'VERIFICATION_FAILED',             // verifier ran; fresh state gave no supporting evidence
+  INCONCLUSIVE: 'VERIFICATION_INCONCLUSIVE', // no action was executed this run: nothing to verify
+  UNAVAILABLE: 'VERIFIER_UNAVAILABLE',       // verifier missing, threw, or returned no verdict
+});
+
+/**
+ * Combine a planner success claim with the local verifier's result.
+ * Fail-closed: only an explicit VERIFIED is success.
+ *
+ * @param {unknown} verification verifier result ({ status, reason? }) or null
+ * @returns {{ code: string, success: boolean, detail: string|null }}
+ *   detail is the verifier's own fixed reason code, for safe logging only.
+ */
+export function verifiedOutcome(verification) {
+  const detail = typeof verification?.reason === 'string' && /^[A-Z_]{1,64}$/.test(verification.reason)
+    ? verification.reason : null;
+  if (verification?.status === 'VERIFIED') return { code: STOP_CODE.GOAL_ACHIEVED, success: true, detail: null };
+  if (verification?.status !== 'NOT_VERIFIED') return { code: VERIFY_CODE.UNAVAILABLE, success: false, detail };
+  return { code: detail === 'NO_ACTION_TAKEN' ? VERIFY_CODE.INCONCLUSIVE : VERIFY_CODE.FAILED, success: false, detail };
+}

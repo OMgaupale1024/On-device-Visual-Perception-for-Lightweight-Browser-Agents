@@ -43,6 +43,8 @@ test('wired NAVIGATE -> TYPE -> ENTER -> SCROLL -> STOP uses fresh observations 
         return { ok: true, result: { data: { text: typed || 'Search videos', blocks: [{ paragraphs: [{ lines: [
           { text: known, confidence: 95, bbox: { x0: 10, y0: 10, x1: 100, y1: 30 } },
           { text: typed || 'Search videos', confidence: 95, bbox: { x0: 35, y0: 95, x1: 240, y1: 125 } },
+          // Scrolling reveals more content, so the final STOP's fresh state visibly changed.
+          ...(scrollY ? [{ text: 'More results', confidence: 95, bbox: { x0: 35, y0: 150, x1: 200, y1: 170 } }] : []),
         ] }] }] }, width: 300, height: 200, timing: { cold: false, initializationMs: 1, inferenceMs: 1, totalMs: 2 } } };
       } },
     permissions: { contains: async () => true },

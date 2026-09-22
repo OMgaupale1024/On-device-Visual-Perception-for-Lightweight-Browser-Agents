@@ -34,7 +34,8 @@ test('RUN_TASK: autonomous CLICK then re-observe STOP completes without manual s
         if (target !== 'ocr-host') return; // AGENT_UPDATE / verification broadcasts: ignore
         return { ok: true, result: { data: { text: known, blocks: [{ paragraphs: [{ lines: [
           { text: known, confidence: 90, bbox: { x0: 10, y0: 10, x1: 60, y1: 30 } },
-          { text: 'Continue', confidence: 95, bbox: { x0: 5, y0: 60, x1: 60, y1: 80 } },
+          // Each click visibly changes the page (Phase 13C verifies a fresh, changed state).
+          { text: ['Continue', 'Done'][clicks % 2], confidence: 95, bbox: { x0: 5, y0: 60, x1: 60, y1: 80 } },
         ] }] }] }, width: 200, height: 100,
         timing: { cold: false, initializationMs: 1, inferenceMs: 1, totalMs: 2 } } };
       },

@@ -4,6 +4,7 @@
 import { safeMeasurements, machineDuration } from '../metrics/metrics.js';
 import { observeLocal } from './local-observation.js';
 import { verifyAfterClick } from '../verification/verify-after-click.js';
+import { verifyStateChange, stateSignature } from '../verification/verify-visual-result.js';
 import { MSG } from '../shared/messages.js';
 import { requestPlan } from '../transport/planner-client.js';
 import { ticketForPlan, executeTicket } from '../actions/execute-click.js';
@@ -93,6 +94,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       observePlan: (goal) => observePlanForAgent(goal, token),
       execute: (ticket) => executeTicket(ticket, { ...executeDeps, cancelled: () => token.cancelled }),
       settle: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      // Phase 13C: verify against the SAME fresh, privacy-approved context the planner saw.
+      verifyResult: async (op, lastAction) => verifyStateChange(op.context, lastAction),
       emit: agentEmit,
       cancelled: () => token.cancelled,
     }).then((summary) => sendResponse({ ok: true, summary }))
@@ -116,7 +119,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // already-guarded target text (same class of value manual mode renders).
 function agentEmit(event) {
   agentRun = reduceAgentSnapshot(agentRun, event);
-  logStage('agent-controller', event.event, `step=${event.step ?? '-'} action=${event.action ?? '-'} reason=${event.reason ?? '-'}`);
+  logStage('agent-controller', event.event, `step=${event.step ?? '-'} action=${event.action ?? '-'} reason=${event.reason ?? '-'}` +
+    (event.detail ? ` detail=${event.detail}` : '') + (Number.isFinite(event.ms) ? ` ms=${Math.round(event.ms)}` : ''));
   chrome.runtime.sendMessage?.({ type: MSG.AGENT_UPDATE, update: event }).catch(() => {});
 }
 
@@ -182,12 +186,9 @@ async function observePlanForAgent(goal, token) {
   const plan = planner?.plan;
   const targetText = (plan?.action === 'CLICK' && ctx)
     ? (ctx.visualElements.find((v) => v.id === plan.target)?.text ?? null) : null;
-  // Cheap unchanged-observation proxy from already-safe context (no PII): visible
-  // element texts + approved candidates + safe field role/value pairs.
-  const signature = ctx ? JSON.stringify({
-    v: ctx.visualElements.map((v) => v.text), c: ctx.actionCandidates,
-    f: ctx.fields.map((f) => [f.role, f.value]),
-  }) : '';
+  // Cheap unchanged-observation proxy from already-safe context (no PII); the same
+  // fingerprint result verification compares against.
+  const signature = ctx ? stateSignature(ctx) : '';
   return { observeStatus, observeReason, observationId: ctx?.observation?.id,
-    planner, ticket, targetText, signature, measurements };
+    context: ctx, planner, ticket, targetText, signature, measurements };
 }

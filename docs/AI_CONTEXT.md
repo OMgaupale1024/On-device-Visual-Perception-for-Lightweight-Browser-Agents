@@ -52,7 +52,7 @@ the loop. Manual Analyze/Plan/Execute remains available.
 | PRESS_KEY | ENTER only; current focused approved editable control; fixed events and uncancelled native form submission |
 | SCROLL | UP/DOWN; SMALL/MEDIUM/LARGE; bounded distance computed locally |
 | NAVIGATE | Normalized absolute HTTP/S; no credentials/unsupported schemes; old document checked before same-tab update |
-| STOP | No action; null target retained on the wire for compatibility. Terminal outcome is classified from the reason (Phase 13A): only `The goal is already achieved.` completes the run |
+| STOP | No action; null target retained on the wire for compatibility. Terminal outcome is classified from the reason (Phase 13A): only `The goal is already achieved.` can complete the run, and only after local result verification passes (Phase 13C) |
 
 TYPE reclassifies field sensitivity before acting and rechecks structure after focus/
 beforeinput handlers. Local DOM identities never leave the browser. No model-supplied
@@ -143,6 +143,20 @@ on every open and renders RUNNING/step/last action/STOP TASK or the Phase 13A te
 label; it never starts or cancels on open. `CANCEL_TASK` carries the runId and rejects a
 stale one. Snapshot is whitelisted: no page/OCR/PII/model text, URL or exception body.
 Live close/reopen/cancel acceptance is PENDING (user).
+
+**Phase 13C (autonomous result verification) DONE (automated; live PENDING user):**
+BEFORE: TASK COMPLETE = planner-declared success. AFTER: TASK COMPLETE = planner-declared
+success (GOAL_ACHIEVED STOP) + local result verification of the SAME fresh post-action
+observation the planner saw. The Phase 8 verifier's generic gates are reused
+(`verify-visual-result.js`: builder-approved privacy context only, observation id must
+differ from the acting observation, capture must post-date dispatch). Its evidence rule
+is travel-only ("Travel Request Submitted"), so the autonomous loop uses a goal-agnostic
+rule instead: the safe state fingerprint (`stateSignature`: OCR texts, candidates, safe
+field role/value — also the loop-guard signal) must differ from the pre-action one.
+This is evidence the last action had a visible effect, NOT proof of goal semantics.
+Codes (all non-success, fail-closed, in `outcome-contract.js`): VERIFICATION_FAILED,
+VERIFICATION_INCONCLUSIVE (success claimed before any action), VERIFIER_UNAVAILABLE.
+Manual Phase 8 verification is unchanged.
 
 Next phase (not started): final evaluation metrics + demo polish + submission cleanup.
 Do not start vault/TYPE_LOCAL_REF, TEE, Raspberry Pi, another browser, or a new

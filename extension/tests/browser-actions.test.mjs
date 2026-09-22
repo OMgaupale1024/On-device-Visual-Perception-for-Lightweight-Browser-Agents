@@ -171,10 +171,13 @@ test('each new action settles then reobserves and plans fresh; STOP ends the exi
         ticket: { observationId, action }, signature: String(index) };
     }, execute: async ticket => { calls.push('execute ' + ticket.action); return { status: 'EXECUTED' }; },
     settle: async () => { calls.push('settle'); }, emit: e => events.push(e),
+    // Phase 13C: the achieved-goal STOP is verified against the fresh post-SCROLL observation.
+    verifyResult: async (op, last) => { calls.push(`verify ${op.observationId} after ${last.actionObservationId}`); return { status: 'VERIFIED' }; },
   });
   assert.equal(result.state, 'COMPLETED');
   assert.deepEqual(result.timings.map(t => t.action), actions);
-  assert.deepEqual(calls, actions.flatMap(a => a === 'STOP' ? ['observe STOP'] : ['observe ' + a, 'execute ' + a, 'settle']));
+  assert.deepEqual(calls, [...actions.flatMap(a => a === 'STOP' ? ['observe STOP'] : ['observe ' + a, 'execute ' + a, 'settle']),
+    'verify obs_5 after obs_4']);
   assert.deepEqual(events.filter(e => e.event === 'REOBSERVATION_READY').map(e => e.observationId), ['obs_2', 'obs_3', 'obs_4', 'obs_5']);
 });
 

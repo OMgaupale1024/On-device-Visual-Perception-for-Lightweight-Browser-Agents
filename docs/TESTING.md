@@ -1258,3 +1258,71 @@ Cannot be automated here: opening/closing an extension action popup needs a huma
    within ~30 s. Expect the same final label (TASK COMPLETE / STOPPED / FAILED). After
    the worker idles out, Idle is the expected, documented result.
 6. Manual path: ANALYZE / PLAN then EXECUTE behaves as before.
+
+---
+
+## Phase 13C — autonomous result verification (2026-09-23)
+
+BEFORE: TASK COMPLETE = planner-declared success. AFTER: TASK COMPLETE = planner-declared
+success + local verification of the current fresh post-action observation. The verifier
+reuses Phase 8's gates (approved privacy context, new observation, capture after dispatch)
+with a goal-agnostic evidence rule (safe state changed since the last executed action). It
+is evidence of a visible effect, not formal or universal goal verification.
+
+New tests in `extension/tests/agent-verification.test.mjs` unless noted.
+
+| # | Requirement | Test | Result |
+|---|-------------|------|--------|
+| 1 | CLICK -> reobserve -> GOAL_ACHIEVED -> verify PASS -> COMPLETED | `1/8/13` (controller); worker test success run (real verifier) | PASS |
+| 2 | GOAL_ACHIEVED + verify FAIL -> not COMPLETED | `2/14`; worker test unchanged-page run -> STOPPED / VERIFICATION_FAILED / NO_STATE_CHANGE | PASS |
+| 3 | verifier unavailable -> not COMPLETED | `3` — missing, throwing, no verdict -> VERIFIER_UNAVAILABLE, no exception text leaks | PASS |
+| 4 | non-success STOP -> verification not run | `4` | PASS |
+| 5 | planner unavailable -> not run | `5/6` | PASS |
+| 6 | privacy failure -> not run | `5/6` | PASS |
+| 7 | stale observation cannot complete | `7`; verifier unit: pre-action context, same id, pre-dispatch capture -> STALE_OBSERVATION | PASS |
+| 8 | verifier receives fresh post-action state | `1/8/13` — op obs_2 + context, lastAction obs_1 + pre-action signature | PASS |
+| 9 | no raw unsafe data | verifier accepts only the builder-approved frozen context (clone, planner envelope, raw object, null -> PRIVACY_FAILED); worker test: verification events/state free of PII, OCR text, goal, image | PASS |
+| 10 | manual Phase 8 verification works | `verification.test.mjs` (39), `verification-popup.test.mjs`, `verification-integration.test.mjs` unchanged and green | PASS |
+| 11 | Phase 13A mapping green | `outcome-contract.test.mjs`, `agent-outcome-popup.test.mjs`, controller 13A tests | PASS |
+| 12 | Phase 13B GET_AGENT_STATE green | `agent-state.test.mjs`; worker test reads state after both runs | PASS |
+| 13 | verified success snapshot -> COMPLETED | `1/8/13` (reducer), worker test | PASS |
+| 14 | failed verification snapshot never COMPLETED | `2/14`, worker test | PASS |
+| - | success claimed before any action | inconclusive test -> VERIFICATION_INCONCLUSIVE | PASS |
+| - | cancel during verification | -> CANCELLED | PASS |
+| - | popup | verification log line; all three codes -> TASK STOPPED, note never "complete" | PASS |
+
+Updated existing tests (they encoded planner-only completion): `agent-controller.test.mjs`
+(verifier stub; step-1 STOP now VERIFICATION_INCONCLUSIVE; 13A-1 preceded by an action),
+`browser-actions.test.mjs` (verifier sees obs_5 after obs_4), and three worker fixtures
+whose page now visibly changes after the last action.
+
+`npm test`: **369/369 PASS** (was 353; +16). `npm run check` PASS. `git diff --check` PASS.
+`npm run scan:secrets` PASS (194 files; untracked `server/.venv-mac/` excluded via a
+session-only `core.excludesFile`). Server unchanged; server tests not run.
+
+### Mutation verification
+
+| Mutation | Result |
+|---|---|
+| A. Bypass verification (13A behaviour: GOAL_ACHIEVED -> COMPLETED) | **10 tests fail** |
+| B. Verification failure treated as COMPLETED | **6 tests fail** |
+| C. Verifier given the pre-action observation | **6 tests fail** |
+| D. Verification run for every STOP regardless of reason | **15 tests fail** |
+| E. Verifier skips the freshness gate | **1 test fails** |
+| F. Verifier skips the state-change check | **2 tests fail** |
+
+### Live Phase 13C acceptance: PENDING (user)
+
+Not automatable here (extension popup + NVIDIA key). **AI mode required**: deterministic
+mode never claims GOAL_ACHIEVED, so it can only end TASK STOPPED.
+
+1. `PLANNER_MODE=ai` + `NVIDIA_API_KEY`; restart server; reload the unpacked extension.
+2. **Success.** `demo-page/index.html`, all seven fields filled. RUN TASK: "Check whether
+   this travel request is complete and submit it." Expect: CLICK Continue -> fresh
+   observation -> STOP `The goal is already achieved.` -> agent log
+   "result verification VERIFIED" -> **TASK COMPLETE**.
+3. **Inconclusive.** Reload the page, submit it manually so the success panel shows, then
+   RUN TASK with the same goal. If the planner claims success without acting, expect
+   "result verification NOT VERIFIED" -> **TASK STOPPED** ("before any action was taken").
+   If it instead chooses a non-success STOP, that is also correct (never TASK COMPLETE).
+4. Manual path: ANALYZE / PLAN -> EXECUTE still reaches VISUALLY VERIFIED as before.

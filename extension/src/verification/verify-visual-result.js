@@ -33,13 +33,25 @@ function adjacent(a, b) {
     Math.min(a.x + a.width, b.x + b.width) > Math.max(a.x, b.x);
 }
 
-export function verifyVisualResult(context, { actionObservationId, dispatchedAt }, spec = TRAVEL_SUBMISSION) {
-  const failed = (reason) => ({ status: 'NOT_VERIFIED', reason });
+const failed = (reason) => ({ status: 'NOT_VERIFIED', reason });
+
+// Shared evidence gate: only a builder-approved (privacy-guarded, frozen) context from
+// a NEW capture taken after the action was dispatched can be result evidence.
+function privacyFailure(context) {
   // This checks an existing local approval capability; it does not send anything.
-  try { prepareAgentContextForTransport(context); } catch { return failed('PRIVACY_FAILED'); }
+  try { prepareAgentContextForTransport(context); return null; } catch { return 'PRIVACY_FAILED'; }
+}
+function staleFailure(context, { actionObservationId, dispatchedAt }) {
+  return context.observation.id === actionObservationId || !Number.isFinite(dispatchedAt) ||
+    !(Date.parse(context.observation.capturedAt) > dispatchedAt) ? 'STALE_OBSERVATION' : null;
+}
+
+export function verifyVisualResult(context, { actionObservationId, dispatchedAt }, spec = TRAVEL_SUBMISSION) {
+  const privacy = privacyFailure(context);
+  if (privacy) return failed(privacy);
   if (spec.type !== TRAVEL_SUBMISSION.type || spec.expectedText !== TRAVEL_SUBMISSION.expectedText) return failed('INVALID_SPEC');
-  if (context.observation.id === actionObservationId || !Number.isFinite(dispatchedAt) ||
-      !(Date.parse(context.observation.capturedAt) > dispatchedAt)) return failed('STALE_OBSERVATION');
+  const stale = staleFailure(context, { actionObservationId, dispatchedAt });
+  if (stale) return failed(stale);
   const items = readingOrder(context.visualElements.filter((v) => v.source === 'visual' &&
     v.bbox.width > 0 && v.bbox.height > 0));
   // Full phrase and word boundaries, no edit-distance/fuzzy spelling or partial words.
@@ -58,4 +70,27 @@ export function verifyVisualResult(context, { actionObservationId, dispatchedAt 
     }
   }
   return failed('NO_VISUAL_MATCH');
+}
+
+// Safe-state fingerprint from already-guarded values only: visible OCR texts, approved
+// candidates, safe field role/value pairs. Also the controller's "unchanged page" signal.
+export function stateSignature(context) {
+  return JSON.stringify({ v: context.visualElements.map((v) => v.text), c: context.actionCandidates,
+    f: context.fields.map((f) => [f.role, f.value]) });
+}
+
+// Phase 13C — the autonomous loop's generic result check. Same gates as the manual
+// verifier; the evidence rule is goal-agnostic (no expected page text): the fresh,
+// privacy-approved state must differ from the state the last executed action saw.
+// It is evidence that the action had a visible effect, NOT proof of goal semantics.
+// `lastAction` is null when nothing was executed in this run: nothing to verify.
+export function verifyStateChange(context, lastAction) {
+  const privacy = privacyFailure(context);
+  if (privacy) return failed(privacy);
+  if (!lastAction) return failed('NO_ACTION_TAKEN');
+  const stale = staleFailure(context, lastAction);
+  if (stale) return failed(stale);
+  if (typeof lastAction.beforeSignature !== 'string') return failed('INVALID_SPEC');
+  if (stateSignature(context) === lastAction.beforeSignature) return failed('NO_STATE_CHANGE');
+  return { status: 'VERIFIED', evidence: { type: 'STATE_CHANGED', source: 'visual' } };
 }

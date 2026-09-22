@@ -18,6 +18,12 @@ function ok({ action = 'CLICK', target = 'visual_1', signature = 'sig', observat
     targetText: action === 'CLICK' ? 'Continue' : null, signature, measurements: {} };
 }
 
+// Phase 13C: a passing local verifier once an action was executed (mirrors the real
+// verifier's NO_ACTION_TAKEN when nothing ran). Verification-failure paths live in
+// agent-verification.test.mjs.
+const passingVerifier = async (_op, lastAction) => lastAction ? { status: 'VERIFIED' }
+  : { status: 'NOT_VERIFIED', reason: 'NO_ACTION_TAKEN' };
+
 // Drive runAgent with a scripted observePlan queue and an execute stub.
 function drive(steps, { execute = async () => ({ status: 'EXECUTED' }), cancelled = () => false, opts = {} } = {}) {
   const events = [];
@@ -29,7 +35,7 @@ function drive(steps, { execute = async () => ({ status: 'EXECUTED' }), cancelle
     if (s instanceof Error) throw s;
     return s;
   };
-  return runAgent('goal', { observePlan, execute, settle: async () => {}, cancelled,
+  return runAgent('goal', { observePlan, execute, verifyResult: passingVerifier, settle: async () => {}, cancelled,
     emit: (e) => events.push(e), ...opts }).then((r) => ({ ...r, events }));
 }
 
@@ -40,13 +46,15 @@ test('1: CLICK executes, re-observes, then an achieved-goal STOP completes the r
   const names = r.events.map((e) => e.event);
   assert.deepEqual(names, ['AGENT_RUN_STARTED', 'AGENT_STEP_STARTED', 'OBSERVATION_READY', 'PRIVACY_PASS',
     'PLAN_READY', 'ACTION_VALIDATED', 'ACTION_EXECUTED', 'AGENT_STEP_STARTED', 'REOBSERVATION_READY',
-    'PRIVACY_PASS', 'PLAN_READY', 'AGENT_COMPLETED']);
+    'PRIVACY_PASS', 'PLAN_READY', 'VERIFICATION_STARTED', 'VERIFICATION_RESULT', 'AGENT_COMPLETED']);
 });
 
 test('2: STOP on the first step executes no action', async () => {
   let executed = 0;
   const r = await drive([ok({ action: 'STOP' })], { execute: async () => { executed++; return { status: 'EXECUTED' }; } });
-  assert.equal(r.state, AGENT_STATE.COMPLETED);
+  // Phase 13C: an achieved-goal claim with no executed action has nothing to verify.
+  assert.equal(r.state, AGENT_STATE.STOPPED);
+  assert.equal(r.reason, 'VERIFICATION_INCONCLUSIVE');
   assert.equal(executed, 0);
 });
 
@@ -60,7 +68,8 @@ test('2: STOP on the first step executes no action', async () => {
 // ---------------------------------------------------------------------------
 
 test('13A-1: STOP with the achieved-goal reason is the ONLY success', async () => {
-  const r = await drive([ok({ action: 'STOP', reason: GOAL_ACHIEVED_REASON })]);
+  // Preceded by an action so Phase 13C verification has something to check.
+  const r = await drive([ok(), ok({ action: 'STOP', observationId: 'obs_2', reason: GOAL_ACHIEVED_REASON })]);
   assert.equal(r.state, AGENT_STATE.COMPLETED);
   assert.equal(r.reason, STOP_CODE.GOAL_ACHIEVED);
 });
