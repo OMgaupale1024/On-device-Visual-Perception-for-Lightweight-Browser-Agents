@@ -1,5 +1,44 @@
 # Session Handoff
 
+## Phase 13H — preserve semantic controls in action fusion (2026-09-23)
+
+**Live evidence (user):** `ACTION_FUSION buttons=1 controls=2 items=12 candidates=1 clickable=0
+typeable=1`, then `/plan` 502 `INVALID_TARGET`.
+
+**Traced root cause:** `controls=2` = the destination text input + the submit button (name /
+employee-id inputs are sensitive and filtered; email/tel/password/select are not supported
+controls). Grounding (`local-observation.js`) loops over OCR ITEMS and attaches each to a
+control, so a control with no OCR item can never become a candidate. Full-screen OCR (PSM 11)
+produced no item on the button (white text on the dark fill — the same failure mode the demo
+CSS comment records for the old gradient). The existing crop-OCR refinement (auto-invert for
+dark fills) could not help: `eligibleForRefine` only re-reads items that already matched.
+
+**Fix (generic, pixel-only):** `recoverUnreadControls` in `perception/pipeline.js`. The DOM
+decides which regions are clickable controls (visible, non-editable, not a sensitive field,
+not overlapping a sensitive region); each one with no OCR item gets one crop-OCR read of its
+own pixels via the existing `refineLocally`. A read that passes `visualTextIsSafe`, clears
+`REFINE_MIN_CONFIDENCE` and survives the outbound guard becomes a normal pixel item with the
+control's bbox, which the unchanged matcher then grounds (role/editable from DOM). Capped at
+`RECOVER_MAX_CONTROLS = 3`. Unreadable/unsafe => still no candidate (fail closed).
+Not done: using DOM label text for a control whose pixels read nothing — that would send DOM
+text off-device, a privacy change you asked not to make. If the live log still shows
+`recovered=0 clickable=0`, that is the decision point.
+
+Unchanged: planner prompt, reasonCode, model, timeout, verifier, outcome, controller,
+privacy/redaction, voice, execution validation (ticket still bound to observation, local
+geometry, CLICK-compatible, re-validated at click time).
+
+Tests: extension **393/393** (+7 `action-fusion.test.mjs`: recovery, no re-read when already
+read, fail-closed reads, hidden/sensitive regions skipped, nearby text not attached, cap, and
+the live shape through the real service worker for a button and a link — log
+`candidates=2 clickable=1 typeable=1 recovered=1`, plan bound to the observation, ticket
+executable). Mutations: disabling recovery fails 1; dropping the sensitive-overlap check fails 1.
+Server 81/81 (unchanged). check, diff-check, secret scan PASS (292 files incl. new local dirs).
+
+**Live PENDING (user):** reload the extension, reload the demo page, ANALYZE or RUN TASK; the
+service-worker log must show `clickable>=1` (expect `... recovered=1`). Then the travel goal:
+step 1 CLICK Continue -> step 2 STOP/GOAL_ACHIEVED -> result verification VERIFIED -> TASK COMPLETE.
+
 ## Phase 13G — planner terminal semantics refinement (2026-09-23)
 
 Live `smoke-semantics` (user, real model): PASS form-ready-submit, generic-ready-send,

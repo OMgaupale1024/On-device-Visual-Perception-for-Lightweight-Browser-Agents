@@ -1,9 +1,10 @@
 import { sanitizeVisual } from '../privacy/visual.js';
 import { visualTextIsSafe } from '../privacy/visual.js';
+import { overlapsSensitive } from '../privacy/overlap.js';
 import { checkOutbound } from '../privacy/guard.js';
 import { actionableVisualIds } from '../actions/geometry.js';
 import { inferLocally, refineLocally } from './bridge.js';
-import { REFINE_CONF_THRESHOLD, REFINE_MIN_CONFIDENCE, REFINE_MIN_GAIN } from './config.js';
+import { REFINE_CONF_THRESHOLD, REFINE_MIN_CONFIDENCE, REFINE_MIN_GAIN, RECOVER_MAX_CONTROLS } from './config.js';
 import { sanitizeError, logError } from './diagnostics.js';
 
 // Actionable controls whose full-screen OCR confidence is low are eligible for one
@@ -35,14 +36,47 @@ export function applyRefinements(items, eligibleIds, refinements, sensitiveValue
   });
 }
 
+// Full-screen OCR can miss a control's label entirely (light text on a dark fill), and
+// grounding is driven by OCR items, so such a control could never become a candidate.
+// DOM decides WHICH regions are clickable controls; this reads each one that has no OCR
+// item on it from its own PIXELS (same crop-OCR as refinement). A safe read becomes a
+// normal pixel item with the control's bbox. The label is never DOM text; a control whose
+// pixels read nothing safe stays unrecovered (fail closed).
+export async function recoverUnreadControls(image, value, sensitiveValues, regions, clickRegions,
+    { max = RECOVER_MAX_CONTROLS, minConfidence = REFINE_MIN_CONFIDENCE, refine = refineLocally } = {}) {
+  const items = value?.items || [];
+  const unread = (clickRegions || []).filter((r) => r && [r.x, r.y, r.width, r.height].every(Number.isFinite) &&
+    r.width > 0 && r.height > 0 && !overlapsSensitive(r, regions) &&
+    actionableVisualIds(items, [r]).length === 0).slice(0, max);
+  if (!unread.length) return value;
+  let next = Math.max(0, ...items.map((item) => Number(item.id.slice('visual_'.length)) || 0));
+  const requests = unread.map((bbox) => ({ id: `visual_${++next}`, bbox: { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height } }));
+  const reads = new Map((await refine(image, requests) || []).map((r) => [r?.id, r]));
+  const added = requests.flatMap(({ id, bbox }) => {
+    const read = reads.get(id);
+    const text = typeof read?.text === 'string' ? read.text.replace(/\s+/g, ' ').trim() : '';
+    if (!visualTextIsSafe(text, sensitiveValues) || typeof read.confidence !== 'number' ||
+        read.confidence < minConfidence) return [];
+    return [{ id, text, bbox, confidence: read.confidence }];
+  });
+  return added.length ? { ...value, items: [...items, ...added] } : value;
+}
+
 // Trusted-local entry. Only image bytes/dimensions go to inference. Geometry and
 // values stay here for POST-inference filtering; no raw result leaves this module.
-export async function perceiveLocalCapture(image, sensitiveValues, regions, controlRegions = []) {
+export async function perceiveLocalCapture(image, sensitiveValues, regions, controlRegions = [], clickRegions = []) {
   let result;
   try {
     result = await inferLocally(image);
     if (result.width !== image.width || result.height !== image.height) throw new Error('OCR dimensions changed.');
-    const sanitized = sanitizeVisual(result, sensitiveValues, regions);
+    let sanitized = sanitizeVisual(result, sensitiveValues, regions);
+    if (sanitized.privacy === 'SAFE' && clickRegions.length) {
+      const value = await recoverUnreadControls(image, sanitized.value, sensitiveValues, regions, clickRegions);
+      // Defence in depth: keep the already-SAFE value unless the recovered one also passes.
+      if (value !== sanitized.value && checkOutbound(value, sensitiveValues).safe) {
+        sanitized = { ...sanitized, status: 'Ready', value, recovered: value.items.length - (sanitized.value?.items?.length ?? 0) };
+      }
+    }
     // Optional bounded refinement for actionable low-confidence control labels.
     if (sanitized.status === 'Ready' && Array.isArray(controlRegions) && controlRegions.length &&
         Array.isArray(sanitized.value?.items) && sanitized.value.items.length) {

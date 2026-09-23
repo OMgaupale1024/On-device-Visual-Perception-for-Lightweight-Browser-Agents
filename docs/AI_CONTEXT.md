@@ -198,6 +198,16 @@ INVALID_TARGET). Prompt now has an explicit decision order: 1 RESULT visible -> 
 INSUFFICIENT_CONTEXT, never invent a target; form rules refine step 2 only. Server validation
 unchanged (strict). `smoke-semantics` summary now prints the PASS count (it printed failures).
 
+**Phase 13H (semantic controls survive fusion):** live `ACTION_FUSION buttons=1 controls=2
+items=12 candidates=1 clickable=0 typeable=1` -> planner INVALID_TARGET. Root cause: grounding
+is OCR-item-driven and full-screen OCR left the dark-filled submit button with no text item;
+crop-OCR refinement only re-read already-matched items. Now each visible, non-editable,
+non-sensitive DOM control with no OCR item gets one crop-OCR read of its own pixels
+(`recoverUnreadControls`, pipeline.js; capped at 3); a safe read (visualTextIsSafe,
+>= REFINE_MIN_CONFIDENCE, outbound guard) becomes a normal pixel item with the control bbox and
+grounds via the existing matcher. Label is pixel text, never DOM text (privacy unchanged);
+editable stays TYPE-only; unread/unsafe => no candidate. Log adds `recovered=N`.
+
 Next phase (not started): final evaluation metrics + demo polish + submission cleanup.
 Do not start vault/TYPE_LOCAL_REF, TEE, Raspberry Pi, another browser, or a new
 perception engine without the user assigning it.

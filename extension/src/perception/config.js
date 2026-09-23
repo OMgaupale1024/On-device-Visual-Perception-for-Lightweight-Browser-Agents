@@ -10,6 +10,11 @@ export const OCR_REFINE_MESSAGE = 'EDGESIGHT_LOCAL_OCR_REFINE';
 export const REFINE_CONF_THRESHOLD = 0.75;
 export const REFINE_MIN_CONFIDENCE = 0.6;
 export const REFINE_MIN_GAIN = 0.15;
+// A visible clickable DOM control with NO full-screen OCR text on it (e.g. light text
+// on a dark fill) gets one crop-OCR read of its own pixels.
+// ponytail: capped per observation to bound latency on link-heavy pages; raise if real
+// pages need more unread controls recovered.
+export const RECOVER_MAX_CONTROLS = 3;
 
 export function localOptions(base) {
   const url = new URL(base);

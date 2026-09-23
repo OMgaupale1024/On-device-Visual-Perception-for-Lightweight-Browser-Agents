@@ -110,7 +110,10 @@ export async function observeLocal(tab, goal, { signal } = {}) {
     before = after = null; // Only the known sensitive strings remain until OCR guarding.
     stage = 'PERCEPTION_FAILED';
     const perceptionStart = performance.now();
-    const perception = await perceiveLocalCapture({ dataUrl: rawScreenshot, width: visual.width, height: visual.height }, secrets, regions, controlRegions);
+    // Clickable (non-editable) safe DOM controls: any the full-screen OCR leaves unread are
+    // re-read from their own pixels, so DOM semantics decide interactivity.
+    const clickRegions = safeControls.filter((c) => !c.editable).map((c) => c.bbox);
+    const perception = await perceiveLocalCapture({ dataUrl: rawScreenshot, width: visual.width, height: visual.height }, secrets, regions, controlRegions, clickRegions);
     check();
     timings.perceptionMs = performance.now() - perceptionStart;
     stage = 'PRIVACY_FAILED';
@@ -145,7 +148,9 @@ export async function observeLocal(tab, goal, { signal } = {}) {
       `buttons=${obs.buttonRects?.length ?? 0} controls=${obs.controls ? safeControls.length : controlRegions.length} items=${perception.value?.items?.length ?? 0} candidates=${actionCandidates.length}` +
       // Candidate capability counts only: CLICK-capable (non-editable) vs TYPE-only (editable).
       ` clickable=${actionCandidates.filter((id) => candidateMetadata[id]?.editable !== true).length}` +
-      ` typeable=${actionCandidates.filter((id) => candidateMetadata[id]?.editable === true).length}`);
+      ` typeable=${actionCandidates.filter((id) => candidateMetadata[id]?.editable === true).length}` +
+      // Clickable controls whose label came from the per-control pixel re-read.
+      ` recovered=${perception.recovered ?? 0}`);
     let agent = { status: 'REVOKED' };
     if (perception.status !== 'UNSAFE') {
       try {

@@ -1461,3 +1461,34 @@ Only then run the travel RUN TASK in Chrome.
 
 Server 81/81, extension 386/386, check, diff-check, scan:secrets PASS.
 Live: restart AI server, `node scripts/smoke-semantics.mjs` => target `PASS semantics: 6/6` (PENDING user).
+
+---
+
+## Phase 13H — semantic controls survive action fusion (2026-09-23)
+
+| # | Requirement | Test (`action-fusion.test.mjs` unless noted) | Result |
+|---|---|---|---|
+| 1 | button + matching OCR -> CLICK candidate | `action-grounding` 4/6 (`recovered=0`); `1:` no re-read when already read | PASS |
+| 2 | button, no OCR item -> still CLICK candidate | `2:` pure recovery; live shape (button) `clickable=1 recovered=1` | PASS |
+| 3 | visible link -> CLICK candidate | live shape (link) | PASS |
+| 4 | editable input -> TYPE only | live shape; recovery reads only non-editable controls | PASS |
+| 5 | plain OCR text never CLICK | live shape (`Request form` not a candidate) | PASS |
+| 6 | nearby text outside the button does not attach | `6:`; live shape (`Terms apply`) | PASS |
+| 7 | hidden (zero-size) / sensitive-overlapping control not read | `7:` | PASS |
+| 8 | candidate keeps observation binding | live shape: plan.observationId == context observation, ticket executable | PASS |
+| - | unsafe / empty / low-confidence reads add nothing | `fail closed` | PASS |
+| - | bounded latency | cap test (3 per observation) | PASS |
+| 9/10 | privacy, planner, action, Phase 13 suites | full suite 393/393; server 81/81 | PASS |
+
+Mutations: recovery disabled => 1 fail; sensitive-overlap check removed => 1 fail.
+
+### Live Phase 13H acceptance: PENDING (user)
+
+1. Reload the unpacked extension and the controlled demo page.
+2. ANALYZE / PLAN or RUN TASK; the service-worker console must show
+   `ACTION_FUSION ... clickable=1 ... recovered=1` (was `clickable=0`).
+3. RUN TASK "Check whether this travel request is complete and submit it." ->
+   step 1 CLICK Continue -> fresh observation -> STOP / GOAL_ACHIEVED -> result verification
+   VERIFIED -> TASK COMPLETE.
+4. If it still reads `recovered=0 clickable=0`, the button's pixels did not read safely even
+   cropped; report it (next option is a privacy decision: a DOM-derived label).
