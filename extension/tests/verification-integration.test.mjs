@@ -101,7 +101,7 @@ test('real shared pipeline recaptures new pixels, OCR, dimensions, IDs and priva
   const fusionLogs = h.logs.filter((line) => line.includes('ACTION_FUSION'));
   assert.equal(fusionLogs.length, 2);
   for (const line of fusionLogs) {
-    assert.match(line, /^\[EdgeSight OCR\] service-worker ACTION_FUSION buttons=\d+ controls=\d+ items=\d+ candidates=\d+ clickable=\d+ typeable=\d+ recovered=\d+$/);
+    assert.match(line, /^\[EdgeSight OCR\] service-worker ACTION_FUSION buttons=\d+ controls=\d+ items=\d+ candidates=\d+ clickable=\d+ typeable=\d+ recovered=\d+ domFallback=\d+$/);
   }
   for (const value of canaries) {
     assert.ok(!JSON.stringify(result).includes(value)); assert.ok(!h.logs.join(' ').includes(value));

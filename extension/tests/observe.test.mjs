@@ -70,3 +70,14 @@ test('known sensitive values repeated in page text block without returning text 
     (error) => error.message === 'Sensitive data outside field regions.');
   assert.equal(globalThis.__edgeSightFields.elements.size, 0);
 });
+test('clickable controls carry their visible label locally; fields never read a value for it', () => {
+  fixture();
+  const button = { tagName: 'BUTTON', innerText: '  Go\n on ', getAttribute: () => '', closest: () => null,
+    style: { display: 'block', visibility: 'visible', opacity: '1' },
+    getBoundingClientRect: () => ({ left: 10, top: 400, right: 110, bottom: 430, width: 100, height: 30 }) };
+  const all = document.querySelectorAll;
+  document.querySelectorAll = (selector) => selector.startsWith('button') ? [button] : selector === 'a[href]' ? [] : all(selector);
+  const controls = observePage().controls;
+  assert.equal(controls.find((c) => c.role === 'button').label, 'Go on');
+  assert.ok(controls.filter((c) => c.role !== 'button').every((c) => c.label === ''));
+});

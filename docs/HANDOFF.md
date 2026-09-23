@@ -1,5 +1,26 @@
 # Session Handoff
 
+## Phase 13I — DOM-label fallback for unreadable semantic controls (2026-09-23)
+
+**Why 13H was not enough:** a DOM control with no full-screen OCR item could only become a
+candidate if its crop-OCR re-read succeeded; a failed/low-confidence/timed-out read still left
+`clickable=0` (13H named this as the privacy decision point). The user has now authorised a
+safe visible DOM label as the fallback.
+
+**Fix:** `observePage` records `label` for non-editable controls only (rendered `innerText`, or
+the shown value of a submit/button/reset input; editable fields, selects and other inputs get
+`''` and their value is never read). `recoverUnreadControls` uses it only when the pixel read
+fails; it must pass the same `visualTextIsSafe` guard, then the outbound guard and the final
+SafeAgentContext gate. Such items carry `confidence: null` (not a pixel read) and are not sent
+for a second crop read. DOM decides interactivity; OCR still labels when it can. Log adds
+numeric `domFallback=N`. Execution validation unchanged.
+
+Tests: extension **396/396** (+2 `action-fusion` unit, live shape gains a `fallback` pass —
+`recovered=0 domFallback=1 clickable=1`; +1 `observe` label test).
+
+**Live PENDING (user):** reload extension + demo; expect `clickable=1` with `recovered=1` or
+`domFallback=1`, then the travel goal to TASK COMPLETE.
+
 ## Phase 13H — preserve semantic controls in action fusion (2026-09-23)
 
 **Live evidence (user):** `ACTION_FUSION buttons=1 controls=2 items=12 candidates=1 clickable=0

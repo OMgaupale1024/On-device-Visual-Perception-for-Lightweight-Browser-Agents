@@ -116,7 +116,7 @@ test('4/6: live-shaped form grounds value as TYPE-only and the submit control as
     assert.notEqual(first.planner.status, 'READY');
     assert.equal(first.execution.available, false);
     // Safe diagnostic: capability counts only.
-    assert.ok(logs.some((l) => /ACTION_FUSION .*candidates=2 clickable=1 typeable=1 recovered=0$/.test(l)));
+    assert.ok(logs.some((l) => /ACTION_FUSION .*candidates=2 clickable=1 typeable=1 recovered=0 domFallback=0$/.test(l)));
     assert.ok(!logs.some((l) => /Bengaluru|Continue|Destination/.test(l)));
 
     await new Promise((r) => setImmediate(r));

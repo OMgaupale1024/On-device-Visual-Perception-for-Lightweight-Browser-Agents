@@ -1492,3 +1492,14 @@ Mutations: recovery disabled => 1 fail; sensitive-overlap check removed => 1 fai
    VERIFIED -> TASK COMPLETE.
 4. If it still reads `recovered=0 clickable=0`, the button's pixels did not read safely even
    cropped; report it (next option is a privacy decision: a DOM-derived label).
+
+---
+
+## Phase 13I — DOM-label fallback (2026-09-23)
+
+| Requirement | Test | Result |
+|---|---|---|
+| button, pixel read fails -> CLICK via safe DOM label | `action-fusion` `2b:`; live shape (`fallback`) `domFallback=1 clickable=1` | PASS |
+| unsafe / empty / missing DOM label -> no candidate | `action-fusion` `2c:` | PASS |
+| label only for clickable controls; field values never read | `observe` label test | PASS |
+| all other 13H rows, privacy, planner, action, Phase 13 | full suite 396/396 | PASS |

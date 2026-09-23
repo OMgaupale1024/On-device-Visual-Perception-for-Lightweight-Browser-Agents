@@ -40,8 +40,10 @@ export function applyRefinements(items, eligibleIds, refinements, sensitiveValue
 // grounding is driven by OCR items, so such a control could never become a candidate.
 // DOM decides WHICH regions are clickable controls; this reads each one that has no OCR
 // item on it from its own PIXELS (same crop-OCR as refinement). A safe read becomes a
-// normal pixel item with the control's bbox. The label is never DOM text; a control whose
-// pixels read nothing safe stays unrecovered (fail closed).
+// normal pixel item with the control's bbox. DOM semantics alone decide interactivity, so
+// when the pixel read fails the control falls back to its visible DOM label (region.label),
+// behind the same text guard, with confidence null (not a pixel read). A control with no
+// safe label from either source stays unrecovered (fail closed).
 export async function recoverUnreadControls(image, value, sensitiveValues, regions, clickRegions,
     { max = RECOVER_MAX_CONTROLS, minConfidence = REFINE_MIN_CONFIDENCE, refine = refineLocally } = {}) {
   const items = value?.items || [];
@@ -52,12 +54,14 @@ export async function recoverUnreadControls(image, value, sensitiveValues, regio
   let next = Math.max(0, ...items.map((item) => Number(item.id.slice('visual_'.length)) || 0));
   const requests = unread.map((bbox) => ({ id: `visual_${++next}`, bbox: { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height } }));
   const reads = new Map((await refine(image, requests) || []).map((r) => [r?.id, r]));
-  const added = requests.flatMap(({ id, bbox }) => {
+  const clean = (text) => typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+  const added = requests.flatMap(({ id, bbox }, i) => {
     const read = reads.get(id);
-    const text = typeof read?.text === 'string' ? read.text.replace(/\s+/g, ' ').trim() : '';
-    if (!visualTextIsSafe(text, sensitiveValues) || typeof read.confidence !== 'number' ||
-        read.confidence < minConfidence) return [];
-    return [{ id, text, bbox, confidence: read.confidence }];
+    const text = clean(read?.text);
+    if (visualTextIsSafe(text, sensitiveValues) && typeof read.confidence === 'number' &&
+        read.confidence >= minConfidence) return [{ id, text, bbox, confidence: read.confidence }];
+    const label = clean(unread[i].label);
+    return visualTextIsSafe(label, sensitiveValues) ? [{ id, text: label, bbox, confidence: null }] : [];
   });
   return added.length ? { ...value, items: [...items, ...added] } : value;
 }
@@ -70,17 +74,23 @@ export async function perceiveLocalCapture(image, sensitiveValues, regions, cont
     result = await inferLocally(image);
     if (result.width !== image.width || result.height !== image.height) throw new Error('OCR dimensions changed.');
     let sanitized = sanitizeVisual(result, sensitiveValues, regions);
+    let fallbackIds = new Set();
     if (sanitized.privacy === 'SAFE' && clickRegions.length) {
       const value = await recoverUnreadControls(image, sanitized.value, sensitiveValues, regions, clickRegions);
       // Defence in depth: keep the already-SAFE value unless the recovered one also passes.
       if (value !== sanitized.value && checkOutbound(value, sensitiveValues).safe) {
-        sanitized = { ...sanitized, status: 'Ready', value, recovered: value.items.length - (sanitized.value?.items?.length ?? 0) };
+        const added = value.items.slice(sanitized.value?.items?.length ?? 0);
+        fallbackIds = new Set(added.filter((item) => item.confidence === null).map((item) => item.id));
+        sanitized = { ...sanitized, status: 'Ready', value,
+          recovered: added.filter((item) => item.confidence !== null).length,
+          domFallback: fallbackIds.size };
       }
     }
     // Optional bounded refinement for actionable low-confidence control labels.
     if (sanitized.status === 'Ready' && Array.isArray(controlRegions) && controlRegions.length &&
         Array.isArray(sanitized.value?.items) && sanitized.value.items.length) {
-      const eligible = eligibleForRefine(sanitized.value.items, controlRegions);
+      // DOM-fallback labels were just proven unreadable from pixels; don't re-read them.
+      const eligible = eligibleForRefine(sanitized.value.items, controlRegions).filter((item) => !fallbackIds.has(item.id));
       if (eligible.length) {
         const refinements = await refineLocally(image, eligible.map((item) => ({ id: item.id, bbox: item.bbox })));
         const eligibleIds = new Set(eligible.map((item) => item.id));

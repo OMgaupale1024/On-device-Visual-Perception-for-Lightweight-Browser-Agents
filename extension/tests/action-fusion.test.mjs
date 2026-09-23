@@ -62,6 +62,26 @@ test('6: nearby OCR text outside the button does not attach to it; the button is
   assert.deepEqual(actionableVisualIds(out.items, [button]), ['visual_2']);
 });
 
+// Pixel re-read can still fail (dark fill, low confidence, timeout). DOM semantics then
+// decide interactivity alone: the control keeps its visible DOM label, behind the same
+// text guard, and confidence stays null so it is never mistaken for a pixel read.
+test('2b: unreadable pixels fall back to the safe visible DOM label', async () => {
+  const labelled = { ...button, label: 'Submit' };
+  for (const read of [{ text: '', confidence: null }, { text: 'Submit', confidence: 0.2 }]) {
+    const out = await recoverUnreadControls({}, value([]), [], [], [labelled], { refine: reader([read]) });
+    assert.deepEqual(out.items, [{ id: 'visual_1', text: 'Submit', bbox: button, confidence: null }]);
+    assert.deepEqual(actionableVisualIds(out.items, [button]), ['visual_1']);
+  }
+});
+
+test('2c: an unsafe, empty or missing DOM label never becomes a candidate', async () => {
+  for (const label of ['Rahul Sharma', 'someone@example.com', '  ', undefined, 7]) {
+    const base = value([]);
+    const out = await recoverUnreadControls({}, base, ['Rahul Sharma'], [], [{ ...button, label }], { refine: reader([]) });
+    assert.equal(out, base, String(label));
+  }
+});
+
 test('recovery is capped per observation', async () => {
   const calls = [];
   const many = Array.from({ length: 6 }, (_, i) => ({ x: 10, y: 10 + i * 40, width: 80, height: 30 }));
@@ -84,8 +104,8 @@ test('live shape: 1/2/3/4/5/8 — button and link recovered as CLICK candidates,
   };
   const input = { x: 20, y: 50, width: 200, height: 30 };
   const clickable = () => mode === 'link'
-    ? { controlId: 'control_2', fieldId: null, role: 'link', editable: false, supported: true, focused: false, signature: 'l', rect: button }
-    : { controlId: 'control_2', fieldId: null, role: 'button', editable: false, supported: true, focused: false, signature: 'b', rect: button };
+    ? { controlId: 'control_2', fieldId: null, role: 'link', editable: false, supported: true, focused: false, signature: 'l', label: 'Proceed', rect: button }
+    : { controlId: 'control_2', fieldId: null, role: 'button', editable: false, supported: true, focused: false, signature: 'b', label: 'Proceed', rect: button };
   globalThis.chrome = {
     runtime: { id: 'test', getURL: (p) => 'chrome-extension://test/' + p,
       onMessage: { addListener(fn) { listener = fn; } }, getContexts: async () => [{}],
@@ -93,7 +113,8 @@ test('live shape: 1/2/3/4/5/8 — button and link recovered as CLICK candidates,
         if (message.target !== 'ocr-host') return;
         if (message.type === 'EDGESIGHT_LOCAL_OCR_REFINE') {
           refineRequests.push(message.regions.map((r) => r.bbox));
-          return { ok: true, result: { refinements: message.regions.map((r) => ({ id: r.id, text: 'Proceed', confidence: 0.91 })) } };
+          return { ok: true, result: { refinements: mode === 'fallback' ? []
+            : message.regions.map((r) => ({ id: r.id, text: 'Proceed', confidence: 0.91 })) } };
         }
         return { ok: true, result: { width: 400, height: 200,
           timing: { cold: false, initializationMs: 1, inferenceMs: 1, totalMs: 2 },
@@ -131,8 +152,9 @@ test('live shape: 1/2/3/4/5/8 — button and link recovered as CLICK candidates,
     const sender = { id: 'test', url: 'chrome-extension://test/src/popup/popup.html' };
     const analyze = () => new Promise((resolve) => listener({ type: MSG.ANALYZE_PAGE, goal: 'Submit the request.' }, sender, resolve));
 
-    for (const role of ['button', 'link']) {
-      mode = role;
+    // 'fallback': the pixel re-read of the button returns nothing; its DOM label is used.
+    for (const [m, role] of [['button', 'button'], ['link', 'link'], ['fallback', 'button']]) {
+      mode = m;
       refineRequests.length = 0; logs.length = 0;
       const res = await analyze();
       const ctx = res.agentContext;
@@ -140,6 +162,7 @@ test('live shape: 1/2/3/4/5/8 — button and link recovered as CLICK candidates,
       // 2/3: the unread clickable control was re-read from its own pixels (only it: never the input).
       assert.deepEqual(refineRequests, [[button]], role);
       assert.deepEqual([byText('Proceed').role, byText('Proceed').editable, byText('Proceed').source], [role, false, 'visual']);
+      assert.equal(byText('Proceed').confidence, m === 'fallback' ? null : 0.91);
       assert.ok(ctx.actionCandidates.includes(byText('Proceed').id));
       // 4: the editable input stays TYPE-only.
       assert.deepEqual([byText('Bengaluru').role, byText('Bengaluru').editable], ['input', true]);
@@ -147,10 +170,11 @@ test('live shape: 1/2/3/4/5/8 — button and link recovered as CLICK candidates,
       assert.ok(!ctx.actionCandidates.includes(byText('Request form').id));
       assert.ok(!ctx.actionCandidates.includes(byText('Terms apply').id));
       // The live diagnostic now reads clickable=1 (numbers only, no text).
-      assert.ok(logs.some((l) => /ACTION_FUSION .*candidates=2 clickable=1 typeable=1 recovered=1$/.test(l)), role);
+      const counts = m === 'fallback' ? 'recovered=0 domFallback=1' : 'recovered=1 domFallback=0';
+      assert.ok(logs.some((l) => new RegExp(`ACTION_FUSION .*candidates=2 clickable=1 typeable=1 ${counts}$`).test(l)), m);
       assert.ok(!logs.some((l) => /Proceed|Bengaluru|Destination|Terms/.test(l)));
       // 8: the CLICK plan is bound to THIS observation and becomes a local executable ticket.
-      assert.equal(res.planner.status, 'READY', role);
+      assert.equal(res.planner.status, 'READY', m);
       assert.equal(res.planner.plan.target, byText('Proceed').id);
       assert.equal(res.planner.plan.observationId, ctx.observation.id);
       assert.equal(res.execution.available, true);

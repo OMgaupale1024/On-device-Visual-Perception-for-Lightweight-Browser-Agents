@@ -72,7 +72,12 @@ export function observePage() {
     const role = editable ? (el.tagName === 'TEXTAREA' ? 'textarea' : type === 'search' ? 'searchbox' : 'input') :
       el.tagName === 'A' ? 'link' : 'button';
     const rect = el.getBoundingClientRect();
-    return { controlId, fieldId: state.ids.get(el) || null, role, editable,
+    // Visible label of a clickable control (rendered text, or a button input's shown
+    // value) — a LOCAL fallback when OCR cannot read it; privacy-guarded before any use.
+    const label = editable || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' ? '' :
+      (el.tagName === 'INPUT' ? ['submit', 'button', 'reset'].includes(type) ? el.value : '' : el.innerText || '')
+        .replace(/\s+/g, ' ').trim().slice(0, 80);
+    return { controlId, fieldId: state.ids.get(el) || null, role, editable, label,
       supported: editable || buttons.includes(el) || el.tagName === 'A',
       focused: document.activeElement === el,
       signature: JSON.stringify(controlsState.inspect(el)),

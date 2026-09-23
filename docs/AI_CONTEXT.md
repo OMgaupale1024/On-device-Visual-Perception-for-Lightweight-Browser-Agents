@@ -208,6 +208,10 @@ non-sensitive DOM control with no OCR item gets one crop-OCR read of its own pix
 grounds via the existing matcher. Label is pixel text, never DOM text (privacy unchanged);
 editable stays TYPE-only; unread/unsafe => no candidate. Log adds `recovered=N`.
 
+**Phase 13I (DOM-label fallback):** when the 13H crop re-read fails, a clickable control keeps
+its visible DOM label (`observePage` `label`, non-editable only) behind `visualTextIsSafe` +
+outbound guard; `confidence: null`, not re-read; log `domFallback=N`. User-authorised.
+
 Next phase (not started): final evaluation metrics + demo polish + submission cleanup.
 Do not start vault/TYPE_LOCAL_REF, TEE, Raspberry Pi, another browser, or a new
 perception engine without the user assigning it.
